@@ -338,6 +338,9 @@ export function apply(ctx, config = {}) {
     // A visibility filter (or a connector deny) may still keep it out; say so
     // rather than letting the host report an unknown tool.
     if (!(visibility.allowFor(agent) ?? []).includes(name)) {
+      // Undo the load, or a tool the session cannot see would sit in its state
+      // (and be persisted) as if it had been loaded.
+      visibility.update(agent, (next) => { next.loaded.delete(name) })
       return `"${name}" is not available in this session. Use tools_ls to see what is.`
     }
     ctx.emit('tool-catalog/auto-loaded', { agent, name })

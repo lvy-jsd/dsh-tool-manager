@@ -52,3 +52,12 @@ test('rescue: a before-load veto stops the auto-load', async () => {
   assert.deepEqual(payload.names, ['hidden_tool'])
   assert.equal(catalog.stateOf(agent).loaded.has('hidden_tool'), false)
 })
+
+test('rescue: a tool a visibility filter keeps out is refused and not left loaded', async () => {
+  const { agent, catalog, preExecute } = coreHost(['hidden_tool', 'other_tool'])
+  catalog.registerVisibilityFilter({ name: 'no-hidden', filter: (_agent, names) => names.filter((n) => n !== 'hidden_tool') })
+  const decision = await preExecute('hidden_tool')
+  assert.equal(decision.kind, 'deny')
+  assert.match(decision.reason, /not available in this session/)
+  assert.equal(catalog.stateOf(agent).loaded.has('hidden_tool'), false)
+})
