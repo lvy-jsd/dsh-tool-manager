@@ -174,10 +174,10 @@ export function apply(ctx, config = {}) {
 
   // Rescue a direct call of a hidden tool (see rescueHiddenCall). Runs before
   // dispatch resolves the name, so loading here makes the call succeed.
-  ctx.effect(() => ctx.on('tools/pre-execute', (exec, next) => {
+  ctx.effect(() => ctx.on('tools/pre-execute', async (exec, next) => {
     const agent = exec?.agent
     if (!agent || pinnedSet().has(exec.name) || ENTRY_TOOLS.includes(exec.name)) return next()
-    const refusal = rescueHiddenCall(agent, exec.name)
+    const refusal = await rescueHiddenCall(agent, exec.name)
     if (refusal !== undefined) return { kind: 'deny', reason: refusal }
     return next()
   }), 'tool-manager.rescue-hidden-call()')
@@ -310,7 +310,7 @@ export function apply(ctx, config = {}) {
   //     has to go through the risk gate and its approval.
   // The cost is a few tokens when the model skips the directory; the benefit is
   // that forgetting to pin a protocol tool degrades instead of breaking.
-  function rescueHiddenCall(agent, name) {
+  async function rescueHiddenCall(agent, name) {
     // allowFor() is null for an agent this plugin does not track (and for one
     // whose context cannot restrict at all): nothing to rescue there.
     if (visibility.allowFor(agent) === null) return undefined
@@ -324,6 +324,12 @@ export function apply(ctx, config = {}) {
     if (!tool) return undefined
     if (tool.highRisk) {
       return `"${name}" is high risk and is not loaded. Load it first with tools_load(["${name}"]), which asks for approval.`
+    }
+    // An auto-load is still a load: a before-load veto must stop it too.
+    try {
+      await ctx.serial('tool-catalog/before-load', { agent, targets: [name], names: [name], rescue: true })
+    } catch (error) {
+      return `Load of "${name}" refused: ${error?.message ?? error}`
     }
     visibility.update(agent, (next) => {
       next.loaded.add(name)

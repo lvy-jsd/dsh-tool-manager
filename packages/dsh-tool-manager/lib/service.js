@@ -12,6 +12,8 @@
 //
 // Hooks are plain Cordis events on the host context:
 //   tool-catalog/before-load    (serial; throw to veto)   { agent, targets, names }
+//                               also fired by the auto-load of a directly called
+//                               hidden tool, with `rescue: true` in the payload
 //   tool-catalog/after-load     (emit)                    { agent, targets, added }
 //   tool-catalog/before-unload  (serial; throw to veto)   { agent, targets }
 //   tool-catalog/after-unload   (emit)                    { agent, targets, removed }
