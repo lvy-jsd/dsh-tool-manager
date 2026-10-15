@@ -415,8 +415,9 @@ export function apply(ctx, config = {}) {
 
   /**
    * Subscribe an agent to targets. Runs the before-load hook (which may veto) and
-   * returns the model-facing text; the panel calls this same path, so approvals
-   * and hooks apply identically.
+   * returns the model-facing text; the panel calls this same path, so hooks
+   * apply identically; risk-gate approval does not, since a panel click is
+   * itself the user's consent.
    */
   async function loadTargets(agent, targets, { forSubagents = false } = {}) {
     const cat = getCatalog(agent)

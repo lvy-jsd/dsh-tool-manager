@@ -32,6 +32,14 @@ Two sources, either is enough:
    `delete_file`, `delete_branch`, `create_or_update_file`, `push_files`,
    `delete_repository`) plus your `highRisk` config.
 
+Names in the list (and in `allow`) are matched by their short name too, so
+`merge_pull_request` also covers the MCP tool `mcp__github__merge_pull_request`.
+
+The list is also annotated into the catalog (`risk: 'high'`), so the core
+treats these tools as high risk everywhere: a group load skips them, and a
+direct call of a hidden one is refused with a `tools_load` instruction instead
+of being auto-loaded. Unloading the plugin removes the annotation.
+
 Set `defaultHighRisk: false` to use only your own list and catalog
 declarations.
 

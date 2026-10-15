@@ -432,7 +432,9 @@ Nothing in the core knows the panel exists.
   Sessions (per-agent loaded state, visible count, real schema tokens, load and
   unload), Configuration (effective lists plus the extension-point inventory).
 - Loading from the panel calls `toolCatalog.load`, so `before-load` hooks,
-  vetoes and the risk gate all apply — the UI cannot bypass them.
+  vetoes apply. The risk gate's approval prompt does not (it guards the
+  model's `tools_load`; a panel click is the user's consent), and with no gate
+  installed high-risk loads are still refused.
 
 Two host facts found while building it, worth keeping:
 

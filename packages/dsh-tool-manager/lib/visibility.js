@@ -175,9 +175,6 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
     states.set(agent, stateFromProviders(agent) ?? fallbackState(agent))
   }
 
-  /**
-   * Save a state change through every provider (fire and forget).
-   */
   /** Save a state change through every provider (fire and forget). */
   function broadcast(agent, state) {
     for (const { name, save } of providers) {

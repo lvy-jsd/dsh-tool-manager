@@ -34,8 +34,7 @@ missing. See [Extending](#extending) to write your own classifier.
 | [`dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | A "Tool manager" row in the ds-bot settings dialog that opens the panel. |
 | [`create-tool-manager-plugin`](packages/create-tool-manager-plugin) | Scaffold your own extension: `npm create tool-manager-plugin@latest my-ext -- --type classifier`. |
 
-Planned extension packages: `attribution-scan` (tool → plugin package from
-source). See [docs/DESIGN.md](docs/DESIGN.md).
+See [docs/DESIGN.md](docs/DESIGN.md) for the design.
 
 <a id="extending"></a>
 ## Extending

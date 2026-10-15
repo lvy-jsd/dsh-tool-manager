@@ -16,8 +16,10 @@ Optional — the core works without it. When the deployment has no web server
 | **Configuration** | the effective always-on list, config additions, and the high-risk list, plus every registered extension point (classifiers with priorities, visibility filters, risk gates, state providers, categories) | read-only in v1 |
 
 Loading from the panel goes through the **same path as `tools_load`**, so
-`tool-catalog/before-load` hooks, vetoes and the risk gate all apply. A
-high-risk tool still needs its approval.
+`tool-catalog/before-load` hooks and vetoes apply. The risk gate's approval
+prompt does not: it guards the model's `tools_load` call, and a click in the
+panel is itself the user's consent. Without any risk gate installed, high-risk
+loads are still refused.
 
 ## Install
 
