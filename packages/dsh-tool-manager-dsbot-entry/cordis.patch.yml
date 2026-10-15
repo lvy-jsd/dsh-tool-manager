@@ -1,0 +1,5 @@
+# dsh-tool-manager-dsbot-entry bundle patch: one loader entry.
+# Needs dsh-tool-manager-panel (it serves the data and the panel component).
+- insert:
+    - id: tool-manager-dsbot-entry
+      name: dsh-tool-manager-dsbot-entry

@@ -1,0 +1,129 @@
+// Test-only plugin for dsh-tool-manager end-to-end tests.
+//
+// - fake MCP-style tools plus `testkit_reconnect`, which unregisters them and
+//   registers them again with one extra tool (an MCP server reconnecting);
+// - adb_fake_* tools declared via package.json `dsh.toolCatalog`
+//   (adb_fake_two and adb_fake_danger are declared high risk);
+// - phone_fake_* tools for the classifier-rules defaults;
+// - a `tool-catalog/before-load` hook that vetoes the target "veto-me";
+// - `testkit_service_load` / `testkit_service_unload`, which go through the
+//   toolCatalog service methods the web panel uses;
+// - `testkit_capability_pack`, which declares a cap:<name> pack when the
+//   capability-bridge plugin is present;
+// - when the toolCatalog service exists, a visibility filter hiding phone_fake_swipe;
+// - with config simulatePresetLayer, tools that exist only in a preset layer.
+import { defineTool } from '@deepseek-ai/dsh-tools'
+import { simulatePresetLayer } from './preset.js'
+
+export const name = 'tm-testkit'
+export const inject = ['tools']
+
+const TEXT = { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: String(v) }] }
+
+function fakeTool(name) {
+  return defineTool({
+    name,
+    description: `Fake tool ${name} for dsh-tool-manager tests.`,
+    parameters: { text: { type: 'string' } },
+    output: TEXT,
+    async execute(args) { return `${name}:${args.text ?? ''}` },
+  })
+}
+
+export function apply(ctx, config = {}) {
+  if (config.simulatePresetLayer) simulatePresetLayer(ctx)
+
+  let disposers = []
+  let generation = 0
+  const registerFakes = () => {
+    const names = ['mcp__fake__ping', 'mcp__fake__echo']
+    if (generation > 0) names.push('mcp__fake__fresh')
+    disposers = names.map((n) => ctx.tools.register(fakeTool(n)))
+  }
+  registerFakes()
+  for (const n of ['adb_fake_one', 'adb_fake_two', 'adb_fake_danger', 'phone_fake_tap', 'phone_fake_swipe']) ctx.tools.register(fakeTool(n))
+
+  ctx.tools.register(defineTool({
+    name: 'testkit_reconnect',
+    description: 'Test helper: unregister the fake MCP tools and register them again (plus one new tool).',
+    parameters: {},
+    output: TEXT,
+    async execute() {
+      for (const dispose of disposers) await dispose()
+      generation += 1
+      registerFakes()
+      return `reconnected (generation ${generation})`
+    },
+  }))
+
+  // A "protocol tool" in the shape of the real incident: a plugin's own prompt
+  // tells the model to call it, so it must not be hidden behind tools_load.
+  ctx.tools.register(defineTool({
+    name: 'testkit_protocol_reply',
+    description: 'Test helper: a protocol tool a plugin prompt tells the model to call directly.',
+    parameters: { text: { type: 'string' } },
+    output: TEXT,
+    async execute(args) { return `protocol reply:${args.text ?? ''}` },
+  }))
+
+  // Exercises the service path a UI plugin uses: it must behave exactly like
+  // the entry tools (hooks, vetoes, risk gates).
+  ctx.inject(['toolCatalog'], (c) => {
+    ctx.tools.register(defineTool({
+      name: 'testkit_service_load',
+      description: 'Test helper: load targets through toolCatalog.load (the panel path).',
+      parameters: { targets: { type: 'array', items: { type: 'string' }, required: true } },
+      output: TEXT,
+      async execute(args, exec) {
+        return c.toolCatalog.load(exec.agent, args.targets ?? [])
+      },
+    }))
+    ctx.tools.register(defineTool({
+      name: 'testkit_service_unload',
+      description: 'Test helper: unload targets through toolCatalog.unload (the panel path).',
+      parameters: { targets: { type: 'array', items: { type: 'string' }, required: true } },
+      output: TEXT,
+      async execute(args, exec) {
+        return c.toolCatalog.unload(exec.agent, args.targets ?? [])
+      },
+    }))
+    ctx.tools.register(defineTool({
+      name: 'testkit_wire_tokens',
+      description: 'Test helper: schema tokens currently sent for this agent.',
+      parameters: {},
+      output: TEXT,
+      async execute(_args, exec) {
+        return String(c.toolCatalog.wireTokens(exec.agent))
+      },
+    }))
+  })
+
+  // Declare one capability pack through the bridge, when it is installed.
+  ctx.inject(['toolCatalog'], () => {
+    ctx.tools.register(defineTool({
+      name: 'testkit_capability_pack',
+      description: 'Test helper: declare a cap:test pack pointing at the phone group.',
+      parameters: {},
+      output: TEXT,
+      async execute() {
+        const bridge = ctx.get('toolCapabilityPacks')
+        if (!bridge) return 'no capability bridge installed'
+        bridge.registerPack('test', ['/uncategorized/phone'])
+        return 'pack declared'
+      },
+    }))
+  })
+
+  ctx.on('tool-catalog/before-load', ({ targets }) => {
+    if (targets.includes('veto-me')) throw new Error('vetoed by testkit hook')
+  })
+
+  ctx.inject(['toolCatalog'], (c) => {
+    c.effect(() => c.toolCatalog.registerVisibilityFilter({
+      name: 'testkit',
+      filter: (_agent, names) => names.filter((n) => n !== 'phone_fake_swipe'),
+    }), 'testkit.filter')
+  })
+}
+
+export default { name, inject, apply }

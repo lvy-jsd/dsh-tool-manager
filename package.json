@@ -1,0 +1,13 @@
+{
+  "name": "dsh-tool-manager-monorepo",
+  "private": true,
+  "license": "MIT",
+  "author": "lvy-jsd",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node --test test/unit/*.test.mjs && node test/e2e.mjs"
+  }
+}

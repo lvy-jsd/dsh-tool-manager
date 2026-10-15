@@ -1,0 +1,3 @@
+- insert:
+    - id: tm-testkit-devices
+      name: dsh-tm-testkit-devices

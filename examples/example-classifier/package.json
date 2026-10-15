@@ -1,0 +1,21 @@
+{
+  "name": "example-classifier",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example dsh-tool-manager extension: example-classifier.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "dsh-tool-manager": ">=0.2.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

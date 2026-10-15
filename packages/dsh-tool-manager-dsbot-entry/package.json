@@ -1,0 +1,48 @@
+{
+  "name": "dsh-tool-manager-dsbot-entry",
+  "version": "0.1.0",
+  "description": "Adds a \"Tool manager\" entry to the ds-bot settings dialog that opens the dsh-tool-manager panel, without changing ds-bot.",
+  "license": "MIT",
+  "author": "lvy-jsd",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-tool-manager",
+    "ds-bot"
+  ],
+  "peerDependencies": {
+    "dsh-tool-manager-panel": ">=0.1.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale",
+        "dsh-tool-manager-panel"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-manager.git",
+    "directory": "packages/dsh-tool-manager-dsbot-entry"
+  }
+}

@@ -1,0 +1,17 @@
+# dsh-tool-manager-risk-gate bundle patch: one loader entry.
+- insert:
+    - id: tool-manager-risk-gate
+      name: dsh-tool-manager-risk-gate
+      config:
+        # false disables the gate (high-risk loads are then refused outright).
+        enabled: true
+        # Add tools to the high-risk set, or set defaultHighRisk: false to use
+        # only your own list plus what the catalog declares.
+        highRisk: []
+        defaultHighRisk: true
+        # Per-session allowlist, for unattended sessions that cannot answer a
+        # prompt. Use the session id as the key.
+        # allow:
+        #   sess_abc123: true                 # every high-risk tool
+        #   sess_def456: [merge_pull_request] # only these
+        allow: {}

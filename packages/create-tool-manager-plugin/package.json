@@ -1,0 +1,33 @@
+{
+  "name": "create-tool-manager-plugin",
+  "version": "0.1.0",
+  "description": "Scaffold a dsh-tool-manager extension: classifier, visibility filter, hook listener or package.json declaration.",
+  "license": "MIT",
+  "author": "lvy-jsd",
+  "type": "module",
+  "main": "lib/cli.js",
+  "bin": {
+    "create-tool-manager-plugin": "./lib/index.js"
+  },
+  "exports": {
+    ".": "./lib/cli.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-tool-manager",
+    "scaffold",
+    "create"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-manager.git",
+    "directory": "packages/create-tool-manager-plugin"
+  }
+}

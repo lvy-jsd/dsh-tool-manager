@@ -1,0 +1,351 @@
+// End-to-end tests in a throwaway DSH_HOME. Never touches the real profile.
+//
+// Boots the shipped headless profile with the plugins under test, the test kit
+// (fake tools, a simulated MCP reconnect, a veto hook, a visibility filter and
+// a package.json tool declaration) and a scripted fake model, then asserts on
+// the exact tool list and tool results of every model request.
+//
+// Two profiles:
+//   core    dsh-tool-manager only (no classifier plugin)
+//   rules   dsh-tool-manager + dsh-tool-manager-classifier-rules with a user override
+//   preset  core + tools that exist only in a preset (ancestor) layer of the
+//           agent, which is how the DSH web profile registers most tools
+//   persist core + dsh-tool-manager-persist (T14b: state survives a restart)
+//   gate    core + dsh-tool-manager-risk-gate (high-risk loads ask)
+//   llm     core + dsh-tool-manager-classifier-llm: the small-model classifier
+//           asks the fake model and caches the answer
+//   cap     core + dsh-tool-manager-capability-bridge: tools_load("cap:<name>")
+//   attr-rules rules + scan + a declaration-free device package: renamed groups
+//           keep their category
+//   attr    core + dsh-tool-manager-attribution-scan: tools are grouped by the
+//           plugin package whose source defines them
+//
+// Usage: node test/e2e.mjs [path/to/dsh]   (default: ~/.local/bin/dsh)
+import { spawn, spawnSync } from 'node:child_process'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, readdirSync, existsSync } from 'node:fs'
+import { tmpdir, homedir } from 'node:os'
+import { join, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const packages = resolve(here, '..', 'packages')
+const dsh = process.argv[2] ?? join(homedir(), '.local/bin/dsh')
+const port = 18000 + Math.floor(Math.random() * 1000)
+const root = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'dsh-tm-e2e-'))
+const home = join(root, 'home')
+const work = join(root, 'work')
+mkdirSync(work, { recursive: true })
+const env = { ...process.env, DSH_HOME: home, FAKE_LLM_KEY: 'x', DSH_TELEMETRY_MODE: 'DISABLED' }
+
+// --- profiles ------------------------------------------------------------------
+// testkit-devices resolves @deepseek-ai/dsh-tools through the testkit's links.
+if (!existsSync(join(here, 'testkit-devices', 'node_modules'))) symlinkSync('../testkit/node_modules', join(here, 'testkit-devices', 'node_modules'))
+
+// A bundle is a package under packages/, or { name, dir } for a test package.
+function makeProfile(name, bundles, extraPatch = '') {
+  spawnSync(dsh, ['--profile', name, '--from-default-profile', 'headless', '--dump-config'], { env, stdio: 'ignore' })
+  const dir = join(home, 'profiles', name)
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({
+    name: `dsh-profile-${name}`, private: true, dependencies: {},
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', 'dsh-tm-testkit', ...bundles.map((b) => b.name ?? b)] } },
+  }, null, 2))
+  mkdirSync(join(dir, 'node_modules'), { recursive: true })
+  symlinkSync(join(here, 'testkit'), join(dir, 'node_modules', 'dsh-tm-testkit'))
+  for (const b of bundles) symlinkSync(b.dir ?? join(packages, b), join(dir, 'node_modules', b.name ?? b))
+  writeFileSync(join(dir, 'cordis.patch.yml'), `
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      fake:
+        apiKeyEnv: FAKE_LLM_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:${port}/v1
+        models:
+          - { id: fake-1, name: Fake 1, contextWindow: 131072, maxTokens: 4096, reasoningEfforts: false }
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config: { provider: fake, model: fake-1 }
+- id: tool-manager
+  name: dsh-tool-manager
+  config:
+    pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens]
+${extraPatch}`)
+}
+
+makeProfile('core', ['dsh-tool-manager'])
+makeProfile('rules', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rules'], `
+- id: tool-manager-classifier-rules
+  name: dsh-tool-manager-classifier-rules
+  config:
+    defaults: true
+    categories:
+      maps: { groups: [fake] }
+`)
+
+makeProfile('preset', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rules'], `
+- id: tm-testkit
+  name: dsh-tm-testkit
+  config: { simulatePresetLayer: true }
+`)
+
+makeProfile('persist', ['dsh-tool-manager', 'dsh-tool-manager-persist'])
+makeProfile('attr', ['dsh-tool-manager', 'dsh-tool-manager-attribution-scan'])
+const devices = { name: 'dsh-tm-testkit-devices', dir: join(here, 'testkit-devices') }
+makeProfile('attr-rules', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rules', 'dsh-tool-manager-attribution-scan', devices])
+// The fake model's route stands in for claude-code: an exempt route is never narrowed.
+makeProfile('exempt', ['dsh-tool-manager'], `
+- id: tool-manager
+  name: dsh-tool-manager
+  config:
+    pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens]
+    exemptProviders: [fake]
+`)
+
+makeProfile('gate', ['dsh-tool-manager', 'dsh-tool-manager-risk-gate'], `
+- id: tool-manager-risk-gate
+  name: dsh-tool-manager-risk-gate
+  config:
+    highRisk: []
+`)
+
+makeProfile('cap', ['dsh-tool-manager', 'dsh-tool-manager-capability-bridge'], `
+- id: tool-manager-capability-bridge
+  name: dsh-tool-manager-capability-bridge
+  config:
+    packs:
+      static: ['/uncategorized/fake']
+      # Two tools that each live in a group with an unlisted sibling. Loading
+      # this pack must add exactly these two, never the whole groups.
+      pair: ['mcp__fake__ping', 'phone_fake_tap']
+`)
+
+makeProfile('llm', ['dsh-tool-manager', 'dsh-tool-manager-classifier-llm'], `
+- id: tool-manager-classifier-llm
+  name: dsh-tool-manager-classifier-llm
+  config:
+    model: { provider: fake, model: fake-1 }
+    cacheFile: ${join(root, 'llm-cache.json')}
+`)
+
+
+// --- runner --------------------------------------------------------------------
+async function run(profile, label, script, args) {
+  const scriptPath = join(root, `${label}.script.json`)
+  const logPath = join(root, `${label}.log.jsonl`)
+  writeFileSync(scriptPath, JSON.stringify(script))
+  writeFileSync(logPath, '')
+  const llm = spawn(process.execPath, [join(here, 'fake-llm.mjs'), String(port), scriptPath, logPath], { stdio: 'ignore' })
+  await new Promise((r) => setTimeout(r, 400))
+  const result = spawnSync(dsh, ['--profile', profile, '--json', ...args], { env, cwd: work, encoding: 'utf8', timeout: 180_000 })
+  llm.kill()
+  if (result.status !== 0) throw new Error(`${label}: dsh exited ${result.status}\n${result.stderr}`)
+  return readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((d) => d.kind === 'turn')
+}
+const fakeTools = (turn, prefix = 'mcp__fake__') => turn.tools.filter((n) => n.startsWith(prefix)).sort()
+
+const call = (name, args = {}) => ({ tool_calls: [{ name, arguments: args }] })
+let failures = 0
+function check(label, ok, detail = '') {
+  if (!ok) failures += 1
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${ok ? '' : `\n      ${detail}`}`)
+}
+function expect(label, actual, wanted) {
+  check(label, JSON.stringify(actual) === JSON.stringify([...wanted].sort()), `got ${JSON.stringify(actual)} want ${JSON.stringify([...wanted].sort())}`)
+}
+function contains(label, text, ...needles) {
+  const missing = needles.filter((n) => !(n instanceof RegExp ? n.test(text) : text.includes(n)))
+  check(label, missing.length === 0, `missing ${missing.join(' | ')} in:\n${text}`)
+}
+
+// --- core profile: visibility (T4, T7, T14) + no-classifier placement ----------
+const P = 'mcp__fake__ping', E = 'mcp__fake__echo', F = 'mcp__fake__fresh'
+console.log('# core profile')
+const main = await run('core', 'core-main', [
+  call('tools_ls', { path: '/' }),                            // 0
+  call('tools_load', { targets: ['fake'] }),                  // 1
+  call('testkit_reconnect'),                                  // 2
+  call('tools_unload', { targets: ['fake'] }),                // 3
+  call('testkit_reconnect'),                                  // 4
+  call('tools_load', { targets: ['mcp__fake__ping'] }),       // 5
+  call('testkit_reconnect'),                                  // 6
+  call('subagent', { description: 'child one', prompt: 'hi', run_in_background: false }), // 7 -> child req 8
+  { text: 'child one done' },                                 // 8 (child)
+  call('tools_load', { targets: ['/uncategorized/fake'], forSubagents: true }), // 9
+  call('subagent', { description: 'child two', prompt: 'hi', run_in_background: false }), // 10 -> child req 11
+  { text: 'child two done' },                                 // 11 (child)
+  call('tools_ls', { path: '/uncategorized' }),               // 12
+  call('tools_load', { targets: ['veto-me'] }),               // 13
+  call('tools_load', { targets: ['adb_fake_two'] }),          // 14 declared high risk, no gate installed
+  call('testkit_service_load', { targets: ['/uncategorized/phone'] }), // 15 the panel path
+  { text: 'all done' },                                       // 16
+], ['run the scenario'])
+const m = main.map((t) => fakeTools(t))
+
+expect('T14a fresh session: first request hides unloaded tools', m[0], [])
+contains('no classifier: root lists only uncategorized and the declared category', main[1].lastContent, /uncategorized\//, /code\//)
+check('no classifier: no rule-based categories at root', !/device\/|maps\//.test(main[1].lastContent), main[1].lastContent)
+expect('load group: visible from the next step', m[2], [E, P])
+expect('T4 reconnect, group loaded: same names back + new tool joins', m[3], [E, F, P])
+expect('unload group: hidden again', m[4], [])
+expect('T4 reconnect, nothing loaded: old and new names stay hidden', m[5], [])
+expect('load by exact tool name', m[6], [P])
+expect('T4 reconnect, single tool loaded: it survives, others hidden', m[7], [P])
+expect('T7 child without handoff: starts from pinned only', m[8], [])
+expect('parent unaffected by child', m[9], [P])
+expect('T7 child after forSubagents handoff: gets the group', m[11], [E, F, P])
+contains('no classifier: fake and phone groups are uncategorized', main[13].lastContent, 'fake/', 'phone/')
+contains('hook: before-load listener can veto a load', main[14].lastContent, 'Load refused: vetoed by testkit hook')
+contains('no gate installed: high-risk load is refused, not silently allowed', main[15].lastContent, 'no risk gate is installed')
+// The testkit visibility filter still narrows the panel path.
+expect('toolCatalog.load (the panel path) exposes the group it loaded', fakeTools(main[16], 'phone_fake_'), ['phone_fake_tap'])
+
+// --- persist profile: T14b, loaded state survives a DSH restart ---------------
+console.log('# persist profile')
+const ps = await run('persist', 'persist-main', [
+  call('tools_load', { targets: ['/uncategorized/fake'] }),   // 0
+  { text: 'loaded' },                                          // 1
+], ['persist load'])
+expect('persist: group loaded in the first run', fakeTools(ps[1]), [E, P])
+const stateFiles = readdirSync(join(home, 'tool-manager', 'sessions'))
+check('persist: one state file written for the session', stateFiles.length === 1, `got ${stateFiles.join(', ')}`)
+const savedState = JSON.parse(readFileSync(join(home, 'tool-manager', 'sessions', stateFiles[0]), 'utf8'))
+check('persist: file records the subscribed group', savedState.groups?.includes('fake'), JSON.stringify(savedState))
+const sessionId = stateFiles[0].replace(/\.json$/, '')
+const resumed = await run('persist', 'persist-resume', [{ text: 'resumed' }], ['--session-id', decodeURIComponent(sessionId), 'continue'])
+expect('T14b resumed session: restored loads, nothing else exposed', fakeTools(resumed[0]), [E, P])
+
+// --- gate profile: high-risk loads need confirmation --------------------------
+console.log('# gate profile')
+const g = await run('gate', 'gate-main', [
+  call('tools_load', { targets: ['adb_fake_two'] }),          // 0 high risk, no approval channel
+  call('tools_load', { targets: ['adb_fake_one'] }),           // 1 not high risk: no prompt
+  { text: 'done' },                                            // 2
+], ['gate'])
+contains('gate: high-risk load denied with no approval channel', g[1].lastContent, /requires approval|approval/i)
+expect('gate: the denied high-risk tool stays hidden', fakeTools(g[1], 'adb_fake_'), [])
+expect('gate: ordinary tools still load without a prompt', fakeTools(g[2], 'adb_fake_'), ['adb_fake_one'])
+
+// --- exempt profile: a route whose tool list cannot be refreshed ---------------
+// Claude Code gets DSH tools once at session start through the MCP bridge, so a
+// session on that route must not be narrowed at all.
+console.log('# exempt profile')
+const ex = await run('exempt', 'exempt-main', [
+  call('mcp__fake__ping', { text: 'x' }),                      // 0 not pinned, not loaded
+  call('tools_ls', { path: '/' }),                             // 1 directory still works
+  { text: 'done' },                                            // 2
+], ['exempt'])
+expect('exempt route: first request offers every tool, unloaded included', fakeTools(ex[0]), ['mcp__fake__echo', 'mcp__fake__ping'])
+contains('exempt route: a non-pinned tool runs directly', ex[1].lastContent, 'mcp__fake__ping:x')
+contains('exempt route: the directory is still available', ex[2].lastContent, 'uncategorized/')
+
+// --- rescue profile: a direct call of a hidden tool ----------------------------
+// The real incident: a plugin's prompt tells the model to call a tool that this
+// plugin hid. It must not fail with "unknown tool".
+console.log('# rescue profile')
+const resc = await run('core', 'rescue-main', [
+  call('testkit_protocol_reply', { text: 'hello' }),           // 0 hidden, ordinary: auto-loads
+  call('adb_fake_two', {}),                                     // 1 hidden, declared high risk
+  call('testkit_protocol_reply', { text: 'again' }),            // 2 now loaded, still callable
+  call('no_such_tool_at_all', {}),                              // 3 genuinely unknown
+  { text: 'done' },                                             // 4
+], ['rescue'])
+contains('rescue: a hidden ordinary tool is auto-loaded and runs', resc[1].lastContent, 'protocol reply:hello')
+contains('rescue: a hidden high-risk tool gets the load instruction, not unknown', resc[2].lastContent, /adb_fake_two.*high risk.*tools_load/s)
+contains('rescue: the ordinary tool stays loaded for the next call', resc[3].lastContent, 'protocol reply:again')
+check('rescue: neither case reports an unknown tool', !/unknown tool/.test(resc[1].lastContent) && !/unknown tool/.test(resc[2].lastContent), `${resc[1].lastContent} | ${resc[2].lastContent}`)
+contains('rescue: a genuinely unknown tool still reports unknown', resc[4].lastContent, 'unknown tool')
+
+// --- cap profile: a capability pack loads as one target ------------------------
+console.log('# cap profile')
+const cap = await run('cap', 'cap-main', [
+  call('tools_load', { targets: ['cap:static'] }),             // 0 a pack from config
+  call('tools_unload', { targets: ['all'] }),                  // 1 start clean
+  call('tools_load', { targets: ['cap:pair'] }),               // 2 two tools from shared groups
+  call('tools_load', { targets: ['cap:nope'] }),               // 3 an unknown pack reports cleanly
+  { text: 'done' },                                            // 4
+], ['capability'])
+expect('cap: tools_load("cap:static") loads exactly the pack tools', fakeTools(cap[1]), [E, P])
+expect('cap: unload all clears the pack', fakeTools(cap[2]), [])
+// The pack names ping and phone_tap only: their group siblings (echo,
+// phone_fake_swipe) must stay hidden.
+expect('cap: a pack loads exactly its tools, not their group siblings', fakeTools(cap[3]), [P])
+expect('cap: the same applies to the other group in the pack', fakeTools(cap[3], 'phone_fake_'), ['phone_fake_tap'])
+contains('cap: an unknown pack is a normal miss, not a crash', cap[4].lastContent, /skipped cap:nope/)
+
+// --- llm profile: small-model classification, cached --------------------------
+console.log('# llm profile')
+const llmRun = await run('llm', 'llm-main', [
+  call('tools_ls', { path: '/' }),                            // 0 classifier runs after this build
+  call('tools_ls', { path: '/' }),                            // 1 the answer is cached by now
+  { text: 'done' },                                           // 2
+], ['classify'])
+contains('llm: the model answer places the fake group under maps', llmRun[2].lastContent, /maps\//)
+contains('llm: groups the model did not answer stay uncategorized', llmRun[2].lastContent, /uncategorized\//)
+const cacheRaw = JSON.parse(readFileSync(join(root, 'llm-cache.json'), 'utf8'))
+check('llm: answers are cached per group', Object.values(cacheRaw).includes('maps'), JSON.stringify(cacheRaw))
+const classifierCalls = readFileSync(join(root, 'llm-main.log.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.classifier === true)
+check('llm: one classification request per group, not per rebuild', classifierCalls.length > 0 && classifierCalls.length <= 8, `${classifierCalls.length} classifier call(s)`)
+
+// --- attr profile: group by the defining plugin package -------------------------
+console.log('# attr profile')
+const at = await run('attr', 'attr-main', [
+  call('tools_ls', { path: '/uncategorized' }),               // 0 the scan starts after this build
+  { ...call('tools_ls', { path: '/uncategorized' }), delayMs: 3000 }, // 1 scanned by now
+  call('tools_ls', { query: 'fake' }),                        // 2
+  { text: 'done' },                                           // 3
+], ['attribute'])
+contains('attr: before the scan, phone tools use the prefix fallback', at[1].lastContent, 'phone/')
+check('attr: after the scan, the prefix group is gone', !/\bphone\//.test(at[2].lastContent), at[2].lastContent)
+contains('attr: undeclared testkit tools group under their package', at[3].lastContent, '/tm-testkit/phone_fake_tap')
+contains('attr: a declared category still applies to the attributed group', at[3].lastContent, '/code/tm-testkit/adb_fake_one')
+contains('attr: MCP tools keep the per-server group', at[3].lastContent, '/uncategorized/fake/ping')
+
+// --- attr-rules profile: a renamed group keeps its category ---------------------
+// The scan renames phone/desktop/mcp groups after their package; the rules only
+// know the old names. Those tools must not fall into /uncategorized.
+console.log('# attr-rules profile')
+const ar = await run('attr-rules', 'attr-rules-main', [
+  call('tools_ls', { path: '/' }),                            // 0 the scan starts after this build
+  { ...call('tools_ls', { query: '_dev_' }), delayMs: 3000 }, // 1 scanned by now
+  call('tools_ls', { path: '/uncategorized' }),               // 2
+  { text: 'done' },                                           // 3
+], ['attribute with rules'])
+contains('attr-rules: the scan renamed the group after the package', ar[2].lastContent, '/tm-testkit-devices/phone_dev_tap')
+check('attr-rules: phone, desktop and connector tools stay out of /uncategorized', !/\/uncategorized\/tm-testkit-devices\//.test(ar[2].lastContent), ar[2].lastContent)
+contains('attr-rules: the renamed group inherits device', ar[2].lastContent, '/device/tm-testkit-devices/desktop_dev_click')
+check('attr-rules: /uncategorized lists no testkit-devices group', !/tm-testkit-devices\//.test(ar[3].lastContent), ar[3].lastContent)
+
+// --- rules profile: classifier plugin, declarations, overrides, search, filter --
+console.log('# rules profile')
+const r = await run('rules', 'rules-main', [
+  call('tools_ls', { path: '/' }),                            // 0
+  call('tools_ls', { path: '/device' }),                      // 1
+  call('tools_ls', { path: '/code/adb' }),                    // 2
+  call('tools_ls', { query: 'ping' }),                        // 3
+  call('tools_load', { targets: ['/device/phone', '/code/adb'] }), // 4
+  { text: 'done' },                                           // 5
+], ['classify'])
+
+contains('rules: user override places fake under maps', r[1].lastContent, /maps\/\s+2 tools/)
+contains('rules: default rules place phone under device', r[2].lastContent, 'phone/')
+contains('rules: package.json declaration beats the default adb -> device rule', r[3].lastContent, 'adb_fake_one', 'adb_fake_two')
+contains('rules: declared risk marks adb_fake_two high risk', r[3].lastContent, /!\s+adb_fake_two/)
+contains('search from root finds tools across directories with full paths', r[4].lastContent, '/maps/fake/ping')
+expect('group load skips declared high-risk tool', fakeTools(r[5], 'adb_fake_'), ['adb_fake_one'])
+expect('visibility filter narrows: phone_fake_swipe stays hidden', fakeTools(r[5], 'phone_fake_'), ['phone_fake_tap'])
+
+// --- preset profile: tools registered only in a preset layer ------------------
+console.log('# preset profile')
+const pr = await run('preset', 'preset-main', [
+  call('tools_ls', { query: 'preset_only' }),                 // 0
+  call('tools_load', { targets: ['preset_only_ping'] }),      // 1
+  { text: 'done' },                                           // 2
+], ['preset tools'])
+expect('preset-layer tools hidden until loaded', fakeTools(pr[0], 'preset_only_'), [])
+contains('preset-layer tools are listed in the directory', pr[1].lastContent, 'preset_only_ping', 'preset_only_echo')
+expect('preset-layer tool loadable by exact name', fakeTools(pr[2], 'preset_only_'), ['preset_only_ping'])
+
+console.log(failures === 0 ? '\nall passed' : `\n${failures} failed`)
+console.log(`artifacts: ${root}`)
+process.exit(failures === 0 ? 0 : 1)

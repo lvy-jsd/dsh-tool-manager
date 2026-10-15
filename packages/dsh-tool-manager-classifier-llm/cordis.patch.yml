@@ -1,0 +1,14 @@
+# dsh-tool-manager-classifier-llm bundle patch: one loader entry.
+- insert:
+    - id: tool-manager-classifier-llm
+      name: dsh-tool-manager-classifier-llm
+      config:
+        # false disables the classifier entirely.
+        enabled: true
+        # Which model classifies. Omit to keep every group uncategorized.
+        # model: { provider: deepseek-official, model: deepseek-flash }
+        # Answers are cached per group (name + tool names + description hashes).
+        # cacheFile: ~/.config/deepseek-harness/tool-manager/classifier-cache.json
+        # maxTokens: 16
+        # batchSize: 5
+        # priority: 50

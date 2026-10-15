@@ -1,0 +1,8 @@
+# example-classifier bundle patch: one loader entry.
+- insert:
+    - id: example-classifier
+      name: example-classifier
+      config:
+        prefix: acme_
+        group: acme
+        category: vendor

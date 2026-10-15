@@ -1,0 +1,14 @@
+# dsh-tool-manager-attribution-scan bundle patch: one loader entry.
+- insert:
+    - id: tool-manager-attribution-scan
+      name: dsh-tool-manager-attribution-scan
+      config:
+        # false disables the scan entirely.
+        enabled: true
+        # Below classifier-rules (100) and plugin declarations; above the core's
+        # structural fallback (mcp__<server>__ / shared prefix / misc).
+        # priority: 10
+        # Strip this prefix from package names to form group names (dsh-engram -> engram).
+        # stripPrefix: dsh-
+        # Packages never scanned (exact names or regex strings).
+        # exclude: []

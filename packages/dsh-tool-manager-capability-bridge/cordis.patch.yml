@@ -1,0 +1,14 @@
+# dsh-tool-manager-capability-bridge bundle patch: one loader entry.
+- insert:
+    - id: tool-manager-capability-bridge
+      name: dsh-tool-manager-capability-bridge
+      config:
+        # false disables the plugin.
+        enabled: true
+        # Target prefix. Change it only if "cap:" collides with a real name.
+        prefix: "cap:"
+        # Show a "capabilities" category in the directory.
+        listInDirectory: true
+        # Packs: a name -> the targets tools_load should expand it to.
+        # packs:
+        #   android-debug: ["/device/adb", "/device/gork-android", "adb_logcat"]

@@ -1,0 +1,9 @@
+# example-filter bundle patch: one loader entry.
+- insert:
+    - id: example-filter
+      name: example-filter
+      config:
+        # Hide these for any session whose id starts with the key.
+        hideFor: {}
+        # Hide these for every other session.
+        hide: []

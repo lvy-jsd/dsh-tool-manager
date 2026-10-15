@@ -1,0 +1,38 @@
+{
+  "name": "dsh-tool-manager-capability-bridge",
+  "version": "0.1.0",
+  "description": "Load a named bundle of tools in one call: teaches dsh-tool-manager the cap:<name> target form.",
+  "license": "MIT",
+  "author": "lvy-jsd",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-tool-manager",
+    "capability"
+  ],
+  "peerDependencies": {
+    "dsh-tool-manager": ">=0.2.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-manager.git",
+    "directory": "packages/dsh-tool-manager-capability-bridge"
+  }
+}

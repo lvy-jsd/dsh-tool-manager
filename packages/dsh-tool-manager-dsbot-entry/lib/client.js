@@ -1,0 +1,164 @@
+// dsh-tool-manager-dsbot-entry — browser half.
+//
+// ds-bot's settings dialog (.bt-settings) has a fixed page list and no slot for
+// other plugins. This module adds a "Tool manager" row to that list from the
+// outside, without changing ds-bot:
+//
+//   - A component in the host's always-mounted `shell.overlay` slot watches the
+//     document with a MutationObserver.
+//   - When a .bt-settings dialog with the expected nav appears, it inserts one
+//     row (styled with ds-bot's own .bt-settings-item class) above ds-bot's
+//     "Harness settings" row, and one host element over the page area.
+//   - Clicking the row renders dsh-tool-manager-panel's ToolManagerSection into
+//     that host through a React portal; clicking any other row closes it.
+//
+// If the expected DOM is not there (ds-bot changed, or is not installed), the
+// module does nothing. ds-bot keeps every node it rendered; this module only
+// adds and removes its own.
+window.__ModuleLoader__.load({
+  id: 'dsh-tool-manager-dsbot-entry',
+  factory: (require) => {
+    const React = require('react')
+    const { createPortal } = require('react-dom')
+    const h = React.createElement
+    const { useEffect, useRef, useState } = React
+
+    const ID = 'tool-manager-dsbot-entry'
+    const MARK = 'data-tool-manager-entry'
+
+    // ds-bot's theme variables mapped onto the host variables the panel uses,
+    // so the panel takes ds-bot's colors inside its dialog.
+    const CSS = `
+.bt-settings[data-tool-manager-open] .bt-settings-nav>.bt-thumb{opacity:0}
+.bt-settings[data-tool-manager-open] .bt-settings-item[aria-current=page]{background:none;color:var(--bt-ink-2)}
+.bt-settings-item[${MARK}][data-active]{background:var(--bt-active);color:var(--bt-ink)}
+.tm-dsbot-host{position:absolute;top:0;bottom:0;left:198px;right:0;z-index:2;overflow-y:auto;box-sizing:border-box;padding:16px 56px 24px 20px;background:var(--bt-main);scrollbar-width:thin;
+--dsw-alias-label-primary:var(--bt-ink);--dsw-alias-label-secondary:var(--bt-ink-2);--dsw-alias-label-tertiary:var(--bt-ink-3);
+--dsw-alias-border-l2:var(--bt-line-2);--dsw-alias-bg-layer-1:var(--bt-card);--dsw-alias-bg-layer-2:var(--bt-hover);
+--dsw-alias-interactive-bg-hover:var(--bt-hover);--dsw-alias-state-business-primary:var(--bt-accent);
+--dsw-alias-state-success-primary:var(--bt-green,#00c972);--dsw-alias-state-warn-primary:var(--bt-star,#ff9800);--dsw-alias-state-warn-label:var(--bt-star,#ff9800);
+--dsw-radius-md:10px;--dsw-radius-sm:8px}
+.tm-dsbot-host .tmp-section{max-width:none}
+.tm-dsbot-host .tmp-heading{font-size:15px;line-height:24px}
+.bt-settings-close{z-index:3}
+`
+    const CSS_ID = 'dsh-tool-manager-dsbot-entry/entry.css'
+    function ensureCss() {
+      if (document.querySelector(`style[data-plugin-css="${CSS_ID}"]`)) return
+      const tag = document.createElement('style')
+      tag.dataset.plugin = ID
+      tag.dataset.pluginCss = CSS_ID
+      tag.textContent = CSS
+      document.head.appendChild(tag)
+    }
+
+    // A small wrench icon sized like ds-bot's page icons.
+    const ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>'
+
+    /** Find the ds-bot settings dialog and its nav, or null when the DOM is not as expected. */
+    function findDialog() {
+      const dialog = document.querySelector('.bt-settings[role=dialog]')
+      const nav = dialog?.querySelector(':scope > nav.bt-settings-nav')
+      const main = dialog?.querySelector(':scope > .bt-settings-main')
+      return dialog && nav && main ? { dialog, nav, main } : null
+    }
+
+    function makeEntry(Section) {
+      return function DsbotEntry({ t }) {
+        const [mount, setMount] = useState(null) // { dialog, nav, row, host }
+        const [open, setOpen] = useState(false)
+        const label = useRef('')
+        label.current = typeof t === 'function' ? t('nav') : 'Tool manager'
+
+        // Watch for the dialog; attach once per dialog instance.
+        useEffect(() => {
+          ensureCss()
+          let current = null
+          const detach = () => {
+            current?.row.remove()
+            current?.host.remove()
+            current?.dialog.removeAttribute('data-tool-manager-open')
+            current?.nav.removeEventListener('click', current.onNavClick, true)
+            current = null
+          }
+          const sync = () => {
+            const found = findDialog()
+            if (current && (!found || found.dialog !== current.dialog || !current.dialog.isConnected)) {
+              detach()
+              setMount(null)
+              setOpen(false)
+            }
+            if (!found || current) return
+            const row = document.createElement('button')
+            row.type = 'button'
+            row.className = 'bt-settings-item'
+            row.setAttribute(MARK, '')
+            row.innerHTML = ICON
+            row.append(document.createTextNode(label.current))
+            const shell = found.nav.querySelector(':scope > .bt-settings-shell')
+            found.nav.insertBefore(row, shell ?? null)
+            const host = document.createElement('div')
+            host.className = 'tm-dsbot-host'
+            host.setAttribute(MARK, '')
+            host.hidden = true
+            found.dialog.insertBefore(host, found.main.nextSibling)
+            // Any ds-bot row closes the panel; ours toggles it open.
+            const onNavClick = (event) => {
+              const item = event.target.closest?.('.bt-settings-item')
+              if (!item) return
+              setOpen(item === row)
+            }
+            found.nav.addEventListener('click', onNavClick, true)
+            current = { ...found, row, host, onNavClick }
+            setMount(current)
+          }
+          const observer = new MutationObserver(sync)
+          observer.observe(document.body, { childList: true, subtree: true })
+          sync()
+          return () => { observer.disconnect(); detach() }
+        }, [])
+
+        // Keep the row label in the current language.
+        useEffect(() => {
+          if (!mount) return
+          const text = [...mount.row.childNodes].find((n) => n.nodeType === Node.TEXT_NODE)
+          if (text) text.textContent = label.current
+          mount.row.title = label.current
+        }, [mount, t])
+
+        useEffect(() => {
+          if (!mount) return
+          mount.host.hidden = !open
+          mount.row.toggleAttribute('data-active', open)
+          mount.dialog.toggleAttribute('data-tool-manager-open', open)
+        }, [mount, open])
+
+        if (!mount || !open) return null
+        return createPortal(h(Section, { t }), mount.host)
+      }
+    }
+
+    const inject = ['slots', 'locale']
+
+    function apply(ctx) {
+      const slots = ctx.get('slots')
+      if (slots === undefined) return
+      let panel
+      try {
+        panel = require('dsh-tool-manager-panel')
+      } catch {
+        return // the panel plugin is not loaded: nothing to show
+      }
+      if (typeof panel?.ToolManagerSection !== 'function') return
+      const Entry = makeEntry(panel.ToolManagerSection)
+      ctx.effect(() => slots.inject('shell.overlay', () => slots.register({
+        name: 'shell.overlay',
+        id: ID,
+        // The panel's dictionaries: same copy, same language switch.
+        locale: panel.NS,
+      }, Entry)), 'tool-manager-dsbot-entry: overlay')
+    }
+
+    return { name: ID, inject, apply }
+  },
+})

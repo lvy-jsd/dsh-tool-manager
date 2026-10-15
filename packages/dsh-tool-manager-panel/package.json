@@ -1,0 +1,49 @@
+{
+  "name": "dsh-tool-manager-panel",
+  "version": "0.1.0",
+  "description": "Web panel for dsh-tool-manager: browse the tool directory, see what each live session has loaded and what it costs, and load or unload from the UI.",
+  "license": "MIT",
+  "author": "lvy-jsd",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-tool-manager",
+    "panel",
+    "web"
+  ],
+  "peerDependencies": {
+    "dsh-tool-manager": ">=0.2.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-manager.git",
+    "directory": "packages/dsh-tool-manager-panel"
+  }
+}

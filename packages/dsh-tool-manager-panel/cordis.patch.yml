@@ -1,0 +1,7 @@
+# dsh-tool-manager-panel bundle patch: one loader entry.
+- insert:
+    - id: tool-manager-panel
+      name: dsh-tool-manager-panel
+      config:
+        # false disables the panel (routes and sidebar entry).
+        enabled: true

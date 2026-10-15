@@ -1,0 +1,11 @@
+# dsh-tool-manager-persist bundle patch: one loader entry.
+- insert:
+    - id: tool-manager-persist
+      name: dsh-tool-manager-persist
+      config:
+        # false disables the plugin entirely.
+        enabled: true
+        # Defaults to <DSH_HOME>/tool-manager/sessions.
+        # dir: /path/to/sessions
+        # false = restore saved state but never write it (read-only sessions).
+        write: true

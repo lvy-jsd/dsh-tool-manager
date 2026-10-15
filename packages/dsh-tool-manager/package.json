@@ -1,0 +1,39 @@
+{
+  "name": "dsh-tool-manager",
+  "version": "0.2.0",
+  "description": "Browse every DeepSeek Harness tool as a directory (category -> group -> tool) and load tools on demand per agent. Provides the toolCatalog service for classifier, metadata, hook and visibility extensions.",
+  "license": "MIT",
+  "author": "lvy-jsd",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "tools",
+    "mcp",
+    "lazy-loading"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-manager.git",
+    "directory": "packages/dsh-tool-manager"
+  }
+}
