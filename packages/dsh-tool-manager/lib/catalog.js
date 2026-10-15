@@ -69,7 +69,11 @@ export function summary(text, max = 80) {
 
 /** Rough token cost of one schema as the model receives it. */
 export function estimateTokens(schema) {
-  return Math.ceil(JSON.stringify(schema).length / 4)
+  const text = JSON.stringify(schema)
+  // CJK and other wide characters cost roughly one token each, not a quarter.
+  let wide = 0
+  for (const ch of text) if (ch.codePointAt(0) > 0x2e7f) wide += 1
+  return Math.ceil((text.length - wide) / 4 + wide)
 }
 
 /** Merge every annotation that applies to `name`; later annotations win per field. */

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCatalog, resolveTarget, UNCATEGORIZED } from '../../packages/dsh-tool-manager/lib/catalog.js'
+import { buildCatalog, resolveTarget, estimateTokens, UNCATEGORIZED } from '../../packages/dsh-tool-manager/lib/catalog.js'
 import { createRegistries, packageNameOf } from '../../packages/dsh-tool-manager/lib/service.js'
 import {
   rulesClassifier, groupCategoriesFrom, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, USER_PRIORITY, DEFAULT_PRIORITY,
@@ -131,4 +131,12 @@ test('group and category lookup ignores case; names keep theirs', () => {
     assert.equal(node.group.name, 'GitHub')
   }
   assert.equal(resolveTarget(cat, 'UNCATEGORIZED').kind, 'category')
+})
+
+test('token estimate counts wide characters as about one token each', () => {
+  const ascii = { name: 'x', description: 'a'.repeat(400) }
+  assert.equal(estimateTokens(ascii), Math.ceil(JSON.stringify(ascii).length / 4))
+  const cjk = { name: 'x', description: '查'.repeat(400) }
+  const overhead = JSON.stringify({ name: 'x', description: '' }).length
+  assert.equal(estimateTokens(cjk), Math.ceil(overhead / 4 + 400))
 })
