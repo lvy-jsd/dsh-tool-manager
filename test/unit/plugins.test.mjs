@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply as applyPersist, defaultDir, name as persistName } from '../../packages/dsh-tool-manager-persist/lib/index.js'
 import { apply as applyGate, DEFAULT_HIGH_RISK, name as gateName } from '../../packages/dsh-tool-manager-risk-gate/lib/index.js'
+import { createRegistries } from '../../packages/dsh-tool-manager/lib/service.js'
+import { buildCatalog } from '../../packages/dsh-tool-manager/lib/catalog.js'
+import { createVisibilityController } from '../../packages/dsh-tool-manager/lib/visibility.js'
 
 /** Minimal Cordis-like context: effects, events, inject, provide. */
 function makeCtx(services = {}) {
@@ -127,6 +130,7 @@ function gateCtx(config, resolve) {
   const { ctx, listeners } = makeCtx()
   ctx.toolCatalog = {
     registerRiskGate: (g) => { provider = g; return () => { provider = null } },
+    annotate: () => () => {},
     get: () => CATALOG,
     resolve: resolve ?? ((raw) => (raw.startsWith('/') ? { kind: 'group', group: { name: 'g', tools: [...CATALOG.tools.values()] } } : { kind: 'tool', tool: CATALOG.tools.get(raw) })),
   }
@@ -211,9 +215,47 @@ test('risk gate: other tools are never touched', async () => {
 test('risk gate: enabled:false registers nothing', () => {
   const { ctx } = makeCtx()
   let registered = false
-  ctx.toolCatalog = { registerRiskGate: () => { registered = true }, get: () => CATALOG, resolve: () => ({ kind: 'missing' }) }
+  ctx.toolCatalog = { registerRiskGate: () => { registered = true }, annotate: () => { registered = true }, get: () => CATALOG, resolve: () => ({ kind: 'missing' }) }
   applyGate(ctx, { enabled: false })
   assert.equal(registered, false)
+})
+
+// The gate's list must reach the core catalog: the core skips high-risk tools
+// in group loads and refuses to auto-load them on a direct call, but it only
+// knows what the catalog says.
+function gateWithRealCatalog(config) {
+  const registries = createRegistries(() => {})
+  const { ctx } = makeCtx()
+  ctx.toolCatalog = {
+    registerRiskGate: () => () => {},
+    annotate: registries.annotate,
+    get: () => CATALOG,
+    resolve: () => ({ kind: 'missing' }),
+  }
+  applyGate(ctx, config)
+  const schemas = ['mcp__github__merge_pull_request', 'mcp__github__get_me'].map((n) => ({ name: n, description: '' }))
+  return buildCatalog(schemas, { annotations: registries.annotations })
+}
+
+test('risk gate: its list is annotated into the catalog, MCP names included', () => {
+  const catalog = gateWithRealCatalog({})
+  assert.equal(catalog.tools.get('mcp__github__merge_pull_request').highRisk, true)
+  assert.equal(catalog.tools.get('mcp__github__get_me').highRisk, false)
+  // defaultHighRisk:false leaves nothing to annotate.
+  assert.equal(gateWithRealCatalog({ defaultHighRisk: false }).tools.get('mcp__github__merge_pull_request').highRisk, false)
+})
+
+test('risk gate: a group load leaves the annotated tool out', () => {
+  const catalog = gateWithRealCatalog({})
+  const group = catalog.tools.get('mcp__github__get_me').group
+  const a = agent('s1')
+  const vis = createVisibilityController(
+    { tools: { schemas: () => [...catalog.tools.keys()].map((n) => ({ name: n })) } },
+    { pinned: () => new Set(), getCatalog: () => catalog },
+  )
+  vis.mount({ agents: { list: () => [a], get: () => undefined }, on: () => () => {} })
+  vis.update(a, (next) => { next.groups.add(group) })
+  assert.deepEqual(vis.allowFor(a), ['mcp__github__get_me'])
 })
 
 test('persist and risk-gate export the expected plugin names', () => {

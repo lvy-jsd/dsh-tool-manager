@@ -74,6 +74,14 @@ export function apply(ctx, config = {}) {
 
   ctx.effect(() => ctx.toolCatalog.registerRiskGate({ name }), 'tool-manager-risk-gate.gate()')
 
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  if (extraHighRisk.size) {
+    // Tell the core, so group loads skip these tools and a direct call of a
+    // hidden one is refused instead of auto-loaded (rescueHiddenCall).
+    const pattern = new RegExp(`(^|__)(${[...extraHighRisk].map(escape).join('|')})$`)
+    ctx.effect(() => ctx.toolCatalog.annotate(pattern, { risk: 'high' }), 'tool-manager-risk-gate.annotate()')
+  }
+
   ctx.effect(() => ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.name !== 'tools_load') return next()
     const agent = exec.agent
