@@ -121,3 +121,14 @@ test('a renamed group inherits the category of the structural group its tools ca
   const named = { name: 'named', priority: 100, categorize: (g) => ({ 'zap-plugin': 'media', zap: 'device' })[g.name] }
   assert.equal(category(buildCatalog(tools, { classifiers: [named, rename] }), 'zap_one'), 'media')
 })
+
+test('group and category lookup ignores case; names keep theirs', () => {
+  const cat = buildCatalog([{ name: 'mcp__GitHub__get_me', description: '' }, { name: 'mcp__GitHub__list_issues', description: '' }])
+  assert.equal(group(cat, 'mcp__GitHub__get_me'), 'GitHub')
+  for (const target of ['github', 'GitHub', '/uncategorized/github', '/Uncategorized/GitHub']) {
+    const node = resolveTarget(cat, target)
+    assert.equal(node.kind, 'group', target)
+    assert.equal(node.group.name, 'GitHub')
+  }
+  assert.equal(resolveTarget(cat, 'UNCATEGORIZED').kind, 'category')
+})

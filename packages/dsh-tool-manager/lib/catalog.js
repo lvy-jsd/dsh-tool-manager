@@ -204,6 +204,11 @@ export function buildCatalog(schemas, { classifiers = [], annotations = [], cate
  * undefined to pass. A plugin can therefore add a target vocabulary without the
  * core knowing anything about it.
  */
+// Path segments are lowercased, but names keep their original case (an MCP
+// server called "GitHub"), so lookups must not depend on it. The names stay as
+// they are because persisted state stores them.
+const findCI = (map, key) => map.get(key) ?? [...map.values()].find((v) => v.name.toLowerCase() === key)
+
 export function resolveTarget(catalog, raw, resolvers = []) {
   const target = String(raw ?? '').trim()
   for (const { prefix, resolve } of resolvers) {
@@ -235,14 +240,16 @@ export function resolveTarget(catalog, raw, resolvers = []) {
   const parts = target.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean).map((p) => p.toLowerCase())
   if (parts.length === 1) {
     const [only] = parts
-    if (catalog.categories.has(only)) return { kind: 'category', category: catalog.categories.get(only) }
-    if (catalog.groups.has(only)) return { kind: 'group', group: catalog.groups.get(only) }
+    const category = findCI(catalog.categories, only)
+    if (category) return { kind: 'category', category }
+    const group = findCI(catalog.groups, only)
+    if (group) return { kind: 'group', group }
     const byShort = [...catalog.tools.values()].filter((t) => t.short.toLowerCase() === only)
     if (byShort.length === 1) return { kind: 'tool', tool: byShort[0] }
     return { kind: 'missing', target }
   }
   const [cat, grp, tool] = parts
-  const category = catalog.categories.get(cat)
+  const category = findCI(catalog.categories, cat)
   if (!category) return { kind: 'missing', target }
   const group = category.groups.find((g) => g.name.toLowerCase() === grp)
   if (!group) return { kind: 'missing', target }
