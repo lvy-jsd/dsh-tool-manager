@@ -258,6 +258,17 @@ test('risk gate: a group load leaves the annotated tool out', () => {
   assert.deepEqual(vis.allowFor(a), ['mcp__github__get_me'])
 })
 
+test('risk gate: bare names in the list and the allowlist match MCP-prefixed tools', async () => {
+  const full = 'mcp__github__merge_pull_request'
+  const asked = gateCtx({}, () => ({ kind: 'tool', tool: { name: full, highRisk: false } }))
+  assert.equal((await runGate(asked.listeners, { name: 'tools_load', agent: agent('s1'), arguments: { targets: [full] } })).kind, 'ask')
+
+  const allowed = gateCtx({ allow: { s1: ['merge_pull_request'] } }, () => ({ kind: 'tool', tool: { name: full, highRisk: false } }))
+  assert.deepEqual(await runGate(allowed.listeners, { name: 'tools_load', agent: agent('s1'), arguments: { targets: [full] } }), { kind: 'allow' })
+  assert.equal(allowed.api.allowedFor('s1', full), true)
+  assert.equal(allowed.api.allowedFor('s2', full), false)
+})
+
 test('persist and risk-gate export the expected plugin names', () => {
   assert.equal(persistName, 'tool-manager-persist')
   assert.equal(gateName, 'tool-manager-risk-gate')

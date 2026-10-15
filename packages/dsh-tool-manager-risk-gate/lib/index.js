@@ -33,6 +33,9 @@ export const DEFAULT_HIGH_RISK = [
   'delete_repository',
 ]
 
+/** `mcp__server__tool` -> `tool`; other names unchanged. */
+const shortOf = (name) => (name.startsWith('mcp__') ? name.split('__').pop() : name)
+
 /**
  * Read an `allow` entry. `true` or "*" allows every high-risk tool in that
  * session; a list allows only the named tools. Anything else allows none.
@@ -55,7 +58,7 @@ export function apply(ctx, config = {}) {
     const risky = []
     for (const toolName of names) {
       const tool = catalog?.tools?.get(toolName)
-      if (tool?.highRisk || extraHighRisk.has(toolName)) risky.push(toolName)
+      if (tool?.highRisk || extraHighRisk.has(toolName) || extraHighRisk.has(shortOf(toolName))) risky.push(toolName)
     }
     return risky
   }
@@ -94,7 +97,7 @@ export function apply(ctx, config = {}) {
     const risky = riskyAmong(catalog, targetsOf(agent, exec.arguments))
     if (risky.length === 0) return next()
     // A per-session allowlist entry naming these tools skips the prompt.
-    if (risky.every((toolName) => preApproved.includes(toolName))) return next()
+    if (risky.every((toolName) => preApproved.includes(toolName) || preApproved.includes(shortOf(toolName)))) return next()
     logger.info?.(`tool-manager-risk-gate: confirming load of ${risky.join(', ')}`)
     return {
       kind: 'ask',
@@ -111,7 +114,7 @@ export function apply(ctx, config = {}) {
     /** Whether this session may load the given tool without a prompt. */
     allowedFor: (sessionId, toolName) => {
       const spec = allowedTools(allow[String(sessionId)])
-      return spec === '*' || spec.includes(toolName)
+      return spec === '*' || spec.includes(toolName) || spec.includes(shortOf(toolName))
     },
   }
 }
