@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // create-tool-manager-plugin: generate a working dsh-tool-manager extension.
 //
-//   npm create tool-manager-plugin@latest my-ext -- --type classifier
+//   npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier
 //   node packages/create-tool-manager-plugin/lib/cli.js my-ext --type filter
 //
 // Types map to the four extension points:
@@ -54,7 +54,7 @@ const PACKAGE_JSON = (name: string, type: string): string => `${JSON.stringify({
   main: 'lib/index.js',
   exports: { '.': './lib/index.js', './package.json': './package.json' },
   scripts: { test: 'node --test test/*.test.mjs' },
-  peerDependencies: { 'dsh-tool-manager': '>=0.2.0' },
+  peerDependencies: { '@lvy-jsd/dsh-tool-manager': '>=0.2.0' },
   ...(type === 'declaration' ? { dsh: { bundle: { patch: './cordis.patch.yml' }, toolCatalog: { match: '^my_', category: 'vendor' } } } : { dsh: { bundle: { patch: './cordis.patch.yml' } } }),
 }, null, 2)}\n`
 
@@ -174,7 +174,7 @@ A [\`dsh-tool-manager\`](https://github.com/lvy-jsd/dsh-tool-manager) **${type}*
 ## Install
 
 \`\`\`sh
-dsh plugin --profile web add dsh-tool-manager ${name}
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager ${name}
 \`\`\`
 
 Then restart DSH, or let live reload pick it up.
