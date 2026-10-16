@@ -425,8 +425,10 @@ Nothing in the core knows the panel exists.
   `GET /tool-manager/events` (SSE) behind the same loopback + same-origin fence
   `dsh-mcp-connector` uses. (v1 also served a static page at
   `/tool-manager/ui/`; removed in §11.13.)
-- **Browser half** is a hand-written `window.__ModuleLoader__.load({...})`
-  registration — no bundler. v1 put a `sidebar.panellist` row and an iframe in
+- **Browser half** is a `window.__ModuleLoader__.load({...})` registration,
+  written in TypeScript and compiled by `tsc` into a classic script (DSH
+  concatenates client bundles, so the output carries no `export` and no
+  `"use strict"`) — no bundler. v1 put a `sidebar.panellist` row and an iframe in
   the main sidebar; since §11.13 it is a native `settings.section`.
 - **Views**: Directory (tree, per-node counts and tokens, search, load),
   Sessions (per-agent loaded state, visible count, real schema tokens, load and

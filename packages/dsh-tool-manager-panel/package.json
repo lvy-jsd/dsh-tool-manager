@@ -6,17 +6,31 @@
   "author": "lvy-jsd",
   "type": "module",
   "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client.d.ts",
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "!lib/.tsbuildinfo",
+    "!lib/.client.tsbuildinfo",
+    "src",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "build": "tsc -b . tsconfig.client.json",
+    "prepack": "tsc -b . tsconfig.client.json"
+  },
   "keywords": [
     "dsh",
     "deepseek-harness",

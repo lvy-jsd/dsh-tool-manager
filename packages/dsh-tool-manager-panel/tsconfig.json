@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/.tsbuildinfo",
+    "types": ["node"]
+  },
+  "references": [
+    { "path": "../dsh-tool-manager" }
+  ],
+  "include": ["src"],
+  "exclude": ["src/client.ts"]
+}

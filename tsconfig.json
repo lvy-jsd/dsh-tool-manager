@@ -8,6 +8,8 @@
     { "path": "packages/dsh-tool-manager-capability-bridge" },
     { "path": "packages/dsh-tool-manager-attribution-scan" },
     { "path": "packages/dsh-tool-manager-classifier-llm" },
-    { "path": "packages/create-tool-manager-plugin" }
+    { "path": "packages/create-tool-manager-plugin" },
+    { "path": "packages/dsh-tool-manager-panel" },
+    { "path": "packages/dsh-tool-manager-panel/tsconfig.client.json" }
   ]
 }

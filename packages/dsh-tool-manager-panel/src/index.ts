@@ -6,18 +6,65 @@
 //   POST /tool-manager/api      JSON-RPC with a method whitelist
 //   GET  /tool-manager/events   SSE: catalog rebuilt, agent state changed
 //
-// The browser half (lib/client.js) renders the panel natively as a section of
+// The browser half (src/client.ts) renders the panel natively as a section of
 // the Settings page and talks to these routes. When the deployment has no web
 // server (headless), this plugin mounts nothing and stays harmless.
+
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
+import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry } from 'dsh-tool-manager'
+
+/** The part of the host's webServer service (dsh-host-webserver WebRoute) this plugin uses. */
+export interface WebServer {
+  register(route: {
+    kind: 'exact' | 'prefix'
+    path: string
+    handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+  }): () => void
+}
+
+/** A context that has injected `webServer`. */
+export interface WebContext extends Pick<HostContext, 'effect'>, Partial<Pick<HostContext, 'get' | 'on'>> {
+  webServer: WebServer
+}
+
+/** One directory node as the browser receives it. */
+export interface NodeJson {
+  kind: 'root' | 'category' | 'group' | 'tool' | 'missing'
+  path: string
+  name?: string
+  short?: string
+  description?: string
+  summary?: string
+  toolCount?: number
+  tokens?: number
+  highRisk?: boolean
+  category?: string
+  group?: string
+  children?: NodeJson[]
+}
+
+/** Parameters of the API methods (untrusted JSON from the browser). */
+export interface ApiParams {
+  path?: string
+  query?: string
+  sessionId?: unknown
+  targets?: string[]
+  forSubagents?: boolean
+}
+
+interface SseClient {
+  res: ServerResponse
+  send(event: string, data: unknown): unknown
+}
 
 export const name = 'tool-manager-panel'
 export const inject = ['toolCatalog']
 
 const PREFIX = '/tool-manager'
 
-const header = (headers, key) => (Array.isArray(headers?.[key]) ? headers[key][0] : headers?.[key])
+const header = (headers: IncomingHttpHeaders | undefined, key: string): string | undefined => (Array.isArray(headers?.[key]) ? headers[key][0] : headers?.[key])
 
-function parseAuthority(host) {
+function parseAuthority(host: unknown): { hostname: string, host: string } | undefined {
   if (typeof host !== 'string' || host.length === 0) return undefined
   try {
     const url = new URL(`http://${host}`)
@@ -27,14 +74,14 @@ function parseAuthority(host) {
   }
 }
 
-const isLoopback = (hostname) =>
+const isLoopback = (hostname: string) =>
   hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.endsWith('.localhost')
 
 /**
  * Browser trust fence: loopback (or a declared trusted host), not cross-site,
  * and same-origin when an Origin header is present.
  */
-export function isTrustedWebRequest(request, trustedHosts = []) {
+export function isTrustedWebRequest(request: { headers?: IncomingHttpHeaders }, trustedHosts: unknown[] = []): boolean {
   const host = header(request.headers, 'host')
   if (host === undefined) return false
   const hostUrl = parseAuthority(host)
@@ -54,7 +101,7 @@ export function isTrustedWebRequest(request, trustedHosts = []) {
   }
 }
 
-function writeJson(res, status, value) {
+function writeJson(res: ServerResponse, status: number, value: unknown): void {
   const body = JSON.stringify(value)
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -66,8 +113,8 @@ function writeJson(res, status, value) {
   res.end(body)
 }
 
-async function readJsonBody(req) {
-  const chunks = []
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
   let length = 0
   for await (const chunk of req) {
     length += chunk.length
@@ -83,7 +130,7 @@ async function readJsonBody(req) {
  * shape — `{ kind, path, name, description?, toolCount, tokens, highRisk?,
  * children?, tool? }` — so the UI can render any depth with one loop.
  */
-function nodeJson(service, path) {
+function nodeJson(service: ToolCatalogService, path: string): NodeJson {
   const cat = service.get()
   const node = service.resolve(path)
   if (node.kind === 'missing') return { kind: 'missing', path }
@@ -137,9 +184,9 @@ function nodeJson(service, path) {
   return { kind: 'tool', path, ...toolJson(node.tool) }
 }
 
-const sum = (tools) => tools.reduce((total, t) => total + t.tokens, 0)
+const sum = (tools: ToolEntry[]) => tools.reduce((total, t) => total + t.tokens, 0)
 
-const toolJson = (tool) => ({
+const toolJson = (tool: ToolEntry) => ({
   name: tool.name,
   short: tool.short,
   summary: tool.summary,
@@ -151,7 +198,7 @@ const toolJson = (tool) => ({
 })
 
 /** Find a live agent by session id. */
-function findAgent(catalog, sessionId) {
+function findAgent(catalog: ToolCatalogService, sessionId: unknown): Agent | null {
   const wanted = String(sessionId ?? '')
   for (const entry of catalog.agents()) if (entry.id === wanted) return entry.agent
   return null
@@ -161,10 +208,10 @@ function findAgent(catalog, sessionId) {
  * The JSON-RPC facade behind POST /tool-manager/api. Every method reads from the
  * toolCatalog service, so the panel sees exactly what the model sees.
  */
-export function createApi(catalog) {
+export function createApi(catalog: ToolCatalogService) {
   return {
     /** One directory node (or the root) for the Directory view. */
-    tree({ path } = {}) {
+    tree({ path }: ApiParams = {}) {
       return { root: nodeJson(catalog, path ?? '/') }
     },
     /** Live agents with loaded state and real token usage. */
@@ -189,14 +236,14 @@ export function createApi(catalog) {
       return { sessions: rows }
     },
     /** Load for one agent through the core, so hooks and risk gates apply. */
-    async load({ sessionId, targets, forSubagents } = {}) {
+    async load({ sessionId, targets, forSubagents }: ApiParams = {}) {
       const agent = findAgent(catalog, sessionId)
       if (!agent) return { ok: false, message: `no live session ${sessionId}` }
       const message = await catalog.load(agent, targets ?? [], { forSubagents: forSubagents === true })
       return { ok: true, message }
     },
     /** Unload for one agent through the core. */
-    async unload({ sessionId, targets } = {}) {
+    async unload({ sessionId, targets }: ApiParams = {}) {
       const agent = findAgent(catalog, sessionId)
       if (!agent) return { ok: false, message: `no live session ${sessionId}` }
       const message = await catalog.unload(agent, targets ?? [])
@@ -211,14 +258,14 @@ export function createApi(catalog) {
       return catalog.extensions()
     },
     /** Cross-directory search: the same matching as tools_ls(query), as data. */
-    search({ query, path } = {}) {
+    search({ query, path }: ApiParams = {}) {
       return { results: catalog.find(query ?? '', path ?? '/') }
     },
   }
 }
 
 /** Push an event to every open panel, dropping clients that error. */
-function broadcast(clients, event, data) {
+function broadcast(clients: Set<SseClient>, event: string, data: unknown): void {
   for (const client of clients) {
     try {
       client.send(event, data)
@@ -233,16 +280,16 @@ function broadcast(clients, event, data) {
  * `webServer` (and, when present, `webRuntime` for the trusted-host list).
  * Returns a disposer that unmounts all of them.
  */
-export function mountWebRoutes(wctx, catalog, { logger } = {}) {
+export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { logger }: { logger?: Logger } = {}): Disposer {
   const api = createApi(catalog)
   // `webRuntime` is optional: read it through get() so a context that injected
   // only `webServer` does not throw on service access.
   const trustedHosts = () => {
-    const runtime = typeof wctx.get === 'function' ? wctx.get('webRuntime') : undefined
+    const runtime = (typeof wctx.get === 'function' ? wctx.get('webRuntime') : undefined) as { trustedHosts?: unknown[] } | undefined
     return runtime?.trustedHosts ?? []
   }
-  const fence = (request) => isTrustedWebRequest(request, trustedHosts())
-  const clients = new Set()
+  const fence = (request: IncomingMessage) => isTrustedWebRequest(request, trustedHosts())
+  const clients = new Set<SseClient>()
 
   const apiDisposer = wctx.webServer.register({
     kind: 'prefix',
@@ -251,15 +298,16 @@ export function mountWebRoutes(wctx, catalog, { logger } = {}) {
       if (!fence(req)) return writeJson(res, 403, { ok: false, message: 'forbidden' })
       if (req.method !== 'POST') {
         res.writeHead(405, { allow: 'POST' })
-        return res.end()
+        res.end()
+        return
       }
       try {
-        const body = await readJsonBody(req)
+        const body = await readJsonBody(req) as { method?: unknown, params?: ApiParams } | null
         const dispatch = API_WHITELIST.get(body?.method)
         if (!dispatch) return writeJson(res, 400, { ok: false, message: `unknown method "${body?.method ?? ''}"` })
         writeJson(res, 200, { ok: true, ...(await dispatch(api, body?.params ?? {})) })
       } catch (error) {
-        logger?.warn?.(`tool-manager-panel api error: ${error?.message ?? error}`)
+        logger?.warn?.(`tool-manager-panel api error: ${(error as Error | undefined)?.message ?? error}`)
         writeJson(res, 400, { ok: false, message: error instanceof Error ? error.message : String(error) })
       }
     },
@@ -272,7 +320,8 @@ export function mountWebRoutes(wctx, catalog, { logger } = {}) {
       if (!fence(req)) return writeJson(res, 403, { ok: false, message: 'forbidden' })
       if (req.method !== 'GET') {
         res.writeHead(405, { allow: 'GET' })
-        return res.end()
+        res.end()
+        return
       }
       res.writeHead(200, {
         'content-type': 'text/event-stream',
@@ -280,7 +329,7 @@ export function mountWebRoutes(wctx, catalog, { logger } = {}) {
         connection: 'keep-alive',
         'x-content-type-options': 'nosniff',
       })
-      const client = { res, send: (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`) }
+      const client: SseClient = { res, send: (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`) }
       clients.add(client)
       client.send('ready', { at: Date.now() })
       const ping = setInterval(() => client.send('ping', { at: Date.now() }), 25_000)
@@ -292,7 +341,7 @@ export function mountWebRoutes(wctx, catalog, { logger } = {}) {
   })
 
   // Keep open panels current: rebuilds and per-session state changes.
-  const stops = [
+  const stops: (Disposer | undefined)[] = [
     wctx.on?.('tool-catalog/after-rebuild', () => broadcast(clients, 'catalog', { at: Date.now() })),
     wctx.on?.('tool-catalog/state-changed', ({ agent, state }) => broadcast(clients, 'state', { sessionId: String(agent?.id ?? ''), state })),
   ]
@@ -306,7 +355,10 @@ export function mountWebRoutes(wctx, catalog, { logger } = {}) {
   }
 }
 
-const API_WHITELIST = new Map([
+type PanelApi = ReturnType<typeof createApi>
+
+// Keyed by the untrusted `method` field, so lookups take any value.
+const API_WHITELIST = new Map<unknown, (api: PanelApi, params: ApiParams) => object | Promise<object>>([
   ['tree', (api, params) => api.tree(params)],
   ['sessions', (api) => api.sessions()],
   ['load', (api, params) => api.load(params)],
@@ -316,7 +368,7 @@ const API_WHITELIST = new Map([
   ['search', (api, params) => api.search(params)],
 ])
 
-export function apply(ctx, config = {}) {
+export function apply(ctx: ExtensionContext & { inject(deps: string[], fn: (wctx: WebContext) => void): void }, config: { enabled?: boolean } = {}) {
   const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-panel') : ctx.logger) ?? console
   if (config.enabled === false) return
   ctx.inject(['webServer'], (wctx) => {

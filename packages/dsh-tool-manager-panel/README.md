@@ -46,7 +46,7 @@ variables.
 
 Two halves:
 
-- **Server half** (`lib/index.js`) mounts two same-origin routes under a
+- **Server half** (`src/index.ts`) mounts two same-origin routes under a
   loopback + same-origin trust fence (the same shape `dsh-mcp-connector` uses):
 
   | Route | Purpose |
@@ -54,13 +54,14 @@ Two halves:
   | `POST /tool-manager/api` | JSON-RPC with a method whitelist (`tree`, `sessions`, `load`, `unload`, `config`, `extensions`, `search`) |
   | `GET /tool-manager/events` | SSE: catalog rebuilt, per-session state changed |
 
-- **Browser half** (`lib/client.js`) is a small hand-written
-  `window.__ModuleLoader__.load({...})` registration — no bundler. It registers
+- **Browser half** (`src/client.ts`) is a small
+  `window.__ModuleLoader__.load({...})` registration, compiled by `tsc` into a
+  classic script (`lib/client.js`) — no bundler. It registers
   one `settings.section` slot and renders the panel natively with React (no
   iframe). Copy lives in two dictionaries registered with the host `locale`
   service; styles use only `--dsw-alias-*` variables, so any DSH theme applies.
 
-To add a language, add a dictionary next to `en` and `zh` in `lib/client.js`
+To add a language, add a dictionary next to `en` and `zh` in `src/client.ts`
 and register it under the same namespace (`tool-manager.panel`).
 
 ## Writing your own panel

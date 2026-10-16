@@ -1,7 +1,8 @@
 // dsh-tool-manager-panel — browser half.
 //
-// Hand-written, no build step. Registers one native section in the Settings
-// page sidebar ("Tool manager" / "工具管理") and renders it with React, styled
+// A classic script, not a module: tsc only strips the types (see
+// tsconfig.client.json), with no bundler. Registers one native section in the
+// Settings page sidebar ("Tool manager" / "工具管理") and renders it with React, styled
 // only with the host's theme variables (--dsw-alias-*), so it follows every DSH
 // theme, light and dark. All data comes from the server half's same-origin
 // JSON API (/tool-manager/api) and its event stream (/tool-manager/events).
@@ -9,19 +10,89 @@
 // Copy is registered with the host locale service in English and Chinese and
 // switches with the DSH interface language. Category names are translated;
 // group and tool names are identifiers and stay as they are.
-window.__ModuleLoader__.load({
+
+// The host surface this file touches, described by use: the host's own types
+// for these are merge-extensible maps that other packages augment, which a
+// standalone build cannot see.
+interface ModuleLoader {
+  load(registration: { id: string, factory: (require: (specifier: string) => unknown) => Record<string, unknown> }): void
+}
+type Translate = (key: string) => string
+interface PanelSlots {
+  inject(name: string, fn: () => () => void): () => void
+  register(spec: Record<string, unknown>, component: import('react').ComponentType<{ t?: Translate }>): () => void
+}
+interface PanelLocale {
+  register(namespace: string, dictionaries: Record<string, Record<string, string>>): void
+  bind(namespace: string): Translate
+}
+interface ClientContext {
+  get(name: string): unknown
+  effect(fn: () => void | (() => void), label?: string): void
+}
+
+;(window as unknown as { __ModuleLoader__: ModuleLoader }).__ModuleLoader__.load({
   id: 'dsh-tool-manager-panel',
   factory: (require) => {
-    const React = require('react')
+    const React = require('react') as typeof import('react')
+    type ReactNode = import('react').ReactNode
     const h = React.createElement
     const { useCallback, useEffect, useRef, useState } = React
+
+    // JSON shapes of the server half's API (see index.ts).
+    interface NodeJson {
+      kind: 'root' | 'category' | 'group' | 'tool' | 'missing'
+      path: string
+      name?: string
+      description?: string
+      summary?: string
+      toolCount?: number
+      tokens?: number
+      highRisk?: boolean
+      children?: NodeJson[]
+    }
+    interface FoundTool {
+      name: string
+      short: string
+      path: string
+      category: string
+      group: string
+      summary: string
+      tokens: number
+      highRisk: boolean
+    }
+    interface SessionRow {
+      id: string
+      parentId: string | null
+      exempt: boolean
+      visible: number | null
+      wireTokens: number
+      loadedTools: string[]
+      groups: string[]
+    }
+    interface ConfigJson {
+      pinned?: string[]
+      entryTools?: string[]
+      extraPinned?: string[]
+      unpinned?: string[]
+      highRisk?: string[]
+    }
+    interface ExtensionsJson {
+      classifiers?: { name: string, priority: number }[]
+      filters?: string[]
+      riskGates?: string[]
+      stateProviders?: string[]
+      categories?: string[]
+    }
+    type Load = (targets: string[]) => Promise<void>
+    type Unload = (sessionId: string, targets: string[]) => Promise<void>
 
     const ID = 'tool-manager'
     const NS = 'tool-manager.panel'
     const API = '/tool-manager/api'
     const EVENTS = '/tool-manager/events'
 
-    const en = {
+    const en: Record<string, string> = {
       nav: 'Tool manager',
       title: 'Tool manager',
       intro: 'Browse the tool directory, see what each session has loaded and what it costs, and check the configuration.',
@@ -88,7 +159,7 @@ window.__ModuleLoader__.load({
       'category.uncategorized': 'Uncategorized',
       'category.capabilities': 'Capability packs',
     }
-    const zh = {
+    const zh: Record<string, string> = {
       nav: '工具管理',
       title: '工具管理',
       intro: '浏览工具目录，查看每个会话加载了哪些工具、占用多少 token，并检查配置。',
@@ -214,66 +285,66 @@ window.__ModuleLoader__.load({
       document.head.appendChild(tag)
     }
 
-    async function api(method, params) {
+    async function api<R>(method: string, params?: object): Promise<R & { message?: string }> {
       const res = await fetch(API, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ method, params: params ?? {} }),
       })
-      const body = await res.json()
+      const body = await res.json() as R & { ok?: boolean, message?: string }
       if (!body.ok) throw new Error(body.message || `HTTP ${res.status}`)
       return body
     }
 
     /** `t` with {placeholders}; falls back to the key so a missing entry is visible, not blank. */
-    const format = (t, key, vars) => {
-      let text = t(key)
+    const format = (t: Translate, key: string, vars?: Record<string, unknown>): string => {
+      let text: unknown = t(key)
       if (typeof text !== 'string' || text === '') text = key
-      for (const [k, v] of Object.entries(vars ?? {})) text = text.split(`{${k}}`).join(String(v))
-      return text
+      for (const [k, v] of Object.entries(vars ?? {})) text = (text as string).split(`{${k}}`).join(String(v))
+      return text as string
     }
-    const tokNumber = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n ?? 0))
+    const tokNumber = (n: number | undefined): string => (n !== undefined && n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n ?? 0))
     // Category descriptions come from the server in English; a translation, when
     // the active dictionary has one, replaces it. English falls through as-is.
-    const categoryDescription = (t, name, fallback) => {
+    const categoryDescription = (t: Translate, name: string | undefined, fallback: string | undefined): string | undefined => {
       const key = `categoryDesc.${name}`
       const text = t(key)
       return typeof text === 'string' && text && text !== key ? text : fallback
     }
-    const categoryLabel = (t, name) => {
+    const categoryLabel = (t: Translate, name: string | undefined): string | undefined => {
       const key = `category.${name}`
       const text = t(key)
       return typeof text === 'string' && text && text !== key ? text : name
     }
 
-    const Chip = ({ tone, title, children }) => h('span', { className: 'tmp-chip', 'data-tone': tone, title }, children)
-    const Button = ({ ghost, onClick, children, title }) =>
+    const Chip = ({ tone, title, children }: { tone?: string, title?: string, children?: ReactNode }) => h('span', { className: 'tmp-chip', 'data-tone': tone, title }, children)
+    const Button = ({ ghost, onClick, children, title }: { ghost?: boolean, onClick?: () => void, children?: ReactNode, title?: string }) =>
       h('button', { type: 'button', className: 'tmp-btn', 'data-ghost': ghost === true, onClick, title }, children)
 
-    function Directory({ t, path, setPath, load, version }) {
-      const [root, setRoot] = useState(null)
-      const [results, setResults] = useState(null)
+    function Directory({ t, path, setPath, load, version }: { t: Translate, path: string, setPath: (path: string) => void, load: Load, version: number }) {
+      const [root, setRoot] = useState<NodeJson | null>(null)
+      const [results, setResults] = useState<FoundTool[] | null>(null)
       const [query, setQuery] = useState('')
-      const [error, setError] = useState(null)
+      const [error, setError] = useState<string | null>(null)
 
       useEffect(() => {
         let live = true
         setResults(null)
-        api('tree', { path })
+        api<{ root: NodeJson }>('tree', { path })
           .then((body) => { if (live) { setRoot(body.root); setError(null) } })
-          .catch((e) => { if (live) setError(e.message) })
+          .catch((e: Error) => { if (live) setError(e.message) })
         return () => { live = false }
       }, [path, version])
 
-      const search = (event) => {
+      const search = (event: import('react').KeyboardEvent<HTMLInputElement>) => {
         if (event.key !== 'Enter') return
         const q = query.trim()
         if (!q) { setResults(null); return }
-        api('search', { query: q }).then((body) => setResults(body.results)).catch((e) => setError(e.message))
+        api<{ results: FoundTool[] }>('search', { query: q }).then((body) => setResults(body.results)).catch((e: Error) => setError(e.message))
       }
 
       const parts = path.split('/').filter(Boolean)
-      const crumbs = [h(Button, { key: 'root', ghost: true, onClick: () => setPath('/') }, t('root'))]
+      const crumbs: ReactNode[] = [h(Button, { key: 'root', ghost: true, onClick: () => setPath('/') }, t('root'))]
       parts.forEach((part, i) => {
         const target = `/${parts.slice(0, i + 1).join('/')}`
         crumbs.push(h('span', { key: `s${i}`, className: 'tmp-muted' }, '/'))
@@ -282,7 +353,7 @@ window.__ModuleLoader__.load({
       const bar = h('div', { className: 'tmp-bar' }, ...crumbs, h('span', { className: 'tmp-grow' }),
         h('input', {
           className: 'tmp-input', type: 'search', value: query, placeholder: t('search'),
-          onChange: (e) => setQuery(e.target.value), onKeyDown: search,
+          onChange: (e: import('react').ChangeEvent<HTMLInputElement>) => setQuery(e.target.value), onKeyDown: search,
         }))
 
       if (error) return h('div', null, bar, h('div', { className: 'tmp-empty' }, format(t, 'error', { message: error })))
@@ -309,19 +380,19 @@ window.__ModuleLoader__.load({
           const description = node.kind === 'category' ? categoryDescription(t, node.name, node.description) : node.description || node.summary
           return h('div', {
             key: node.path ?? node.name, className: 'tmp-row', 'data-nav': !isTool,
-            onClick: isTool ? undefined : (e) => { if (e.target.tagName !== 'BUTTON') setPath(node.path) },
+            onClick: isTool ? undefined : (e: import('react').MouseEvent) => { if ((e.target as HTMLElement).tagName !== 'BUTTON') setPath(node.path) },
           },
           h('span', { className: 'tmp-name' }, label + (isTool ? '' : '/')),
           h(Chip, null, isTool ? t('tool') : format(t, 'tools', { n: node.toolCount ?? 0 })),
           h(Chip, null, format(t, 'tokens', { n: tokNumber(node.tokens) })),
           node.highRisk ? h(Chip, { tone: 'warn' }, t('highRisk')) : null,
           h('span', { className: 'tmp-desc', title: description }, description || ''),
-          h(Button, { onClick: () => load([isTool ? node.name : node.path]) }, t('load')),
+          h(Button, { onClick: () => load([isTool ? node.name! : node.path]) }, t('load')),
           )
         })))
     }
 
-    function Sessions({ t, sessions, selected, setSelected, unload }) {
+    function Sessions({ t, sessions, selected, setSelected, unload }: { t: Translate, sessions: SessionRow[] | null, selected: string | null, setSelected: (id: string) => void, unload: Unload }) {
       if (!sessions) return h('div', { className: 'tmp-empty' }, t('loading'))
       if (sessions.length === 0) return h('div', { className: 'tmp-empty' }, t('noSessions'))
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, sessions.map((s) =>
@@ -352,19 +423,19 @@ window.__ModuleLoader__.load({
         )))
     }
 
-    function Config({ t }) {
-      const [data, setData] = useState(null)
-      const [error, setError] = useState(null)
+    function Config({ t }: { t: Translate }) {
+      const [data, setData] = useState<{ config: ConfigJson, ext: ExtensionsJson } | null>(null)
+      const [error, setError] = useState<string | null>(null)
       useEffect(() => {
-        Promise.all([api('config'), api('extensions')])
+        Promise.all([api<{ config: ConfigJson }>('config'), api<ExtensionsJson>('extensions')])
           .then(([c, e]) => setData({ config: c.config, ext: e }))
-          .catch((e) => setError(e.message))
+          .catch((e: Error) => setError(e.message))
       }, [])
       if (error) return h('div', { className: 'tmp-empty' }, format(t, 'error', { message: error }))
       if (!data) return h('div', { className: 'tmp-empty' }, t('loading'))
       const { config, ext } = data
-      const list = (xs) => (xs && xs.length ? xs.join(', ') : t('none'))
-      const row = (k, v, key) => h('tr', { key: key ?? k }, h('th', null, k), h('td', null, v))
+      const list = (xs: string[] | undefined) => (xs && xs.length ? xs.join(', ') : t('none'))
+      const row = (k: string, v: ReactNode, key?: string) => h('tr', { key: key ?? k }, h('th', null, k), h('td', null, v))
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
         h('div', { className: 'tmp-card' }, h('h3', null, t('config.title')),
           h('table', { className: 'tmp-table' }, h('tbody', null,
@@ -384,27 +455,27 @@ window.__ModuleLoader__.load({
           ))))
     }
 
-    function ToolManagerSection({ t }) {
+    function ToolManagerSection({ t }: { t: Translate }) {
       ensureCss()
       const [tab, setTab] = useState('directory')
       const [path, setPath] = useState('/')
-      const [sessions, setSessions] = useState(null)
-      const [selected, setSelected] = useState(null)
+      const [sessions, setSessions] = useState<SessionRow[] | null>(null)
+      const [selected, setSelected] = useState<string | null>(null)
       const [version, setVersion] = useState(0)
-      const [flash, setFlash] = useState(null)
+      const [flash, setFlash] = useState<{ message: string, detail?: string } | null>(null)
       const [offline, setOffline] = useState(false)
       const timer = useRef(0)
 
       // The core's load/unload text is written for the model (English); the panel
       // shows its own localized line and keeps that text as the tooltip.
-      const say = useCallback((message, detail) => {
+      const say = useCallback((message: string, detail?: string) => {
         setFlash({ message, detail })
         clearTimeout(timer.current)
         timer.current = setTimeout(() => setFlash(null), 6000)
       }, [])
 
       const refreshSessions = useCallback(() => {
-        api('sessions')
+        api<{ sessions: SessionRow[] }>('sessions')
           .then((body) => { setSessions(body.sessions); setOffline(false) })
           .catch(() => setOffline(true))
       }, [])
@@ -412,7 +483,7 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         refreshSessions()
         const interval = setInterval(refreshSessions, 15000)
-        let events
+        let events: EventSource | undefined
         try {
           events = new EventSource(EVENTS)
           events.addEventListener('state', refreshSessions)
@@ -424,23 +495,23 @@ window.__ModuleLoader__.load({
       }, [refreshSessions])
 
       const target = selected ?? sessions?.[0]?.id ?? null
-      const load = async (targets) => {
+      const load: Load = async (targets) => {
         if (!target) return say(t('noSession'))
         try {
-          const body = await api('load', { sessionId: target, targets })
+          const body = await api<object>('load', { sessionId: target, targets })
           say(format(t, 'loaded', { targets: targets.join(', ') }), body.message)
           refreshSessions()
         } catch (e) {
-          say(format(t, 'loadFailed', { message: e.message }))
+          say(format(t, 'loadFailed', { message: (e as Error).message }))
         }
       }
-      const unload = async (sessionId, targets) => {
+      const unload: Unload = async (sessionId, targets) => {
         try {
-          const body = await api('unload', { sessionId, targets })
+          const body = await api<object>('unload', { sessionId, targets })
           say(format(t, 'unloaded', { targets: targets.join(', ') }), body.message)
           refreshSessions()
         } catch (e) {
-          say(format(t, 'unloadFailed', { message: e.message }))
+          say(format(t, 'unloadFailed', { message: (e as Error).message }))
         }
       }
 
@@ -466,15 +537,15 @@ window.__ModuleLoader__.load({
 
     const inject = ['slots', 'locale']
 
-    function apply(ctx) {
-      const slots = ctx.get('slots')
-      const locale = ctx.get('locale')
+    function apply(ctx: ClientContext) {
+      const slots = ctx.get('slots') as PanelSlots | undefined
+      const locale = ctx.get('locale') as PanelLocale | undefined
       if (slots === undefined) return
       if (locale) ctx.effect(() => locale.register(NS, { en, zh }), 'tool-manager-panel: dictionaries')
-      const bound = locale ? locale.bind(NS) : (key) => en[key] ?? key
+      const bound: Translate = locale ? locale.bind(NS) : (key) => en[key] ?? key
       // The host passes `t` for a slot registered with `locale`; fall back to
       // our own binding so the section renders either way.
-      const Section = (props) => h(ToolManagerSection, { ...props, t: props.t ?? bound })
+      const Section = (props: { t?: Translate }) => h(ToolManagerSection, { ...props, t: props.t ?? bound })
       ctx.effect(() => slots.inject('settings.section', () => slots.register({
         name: 'settings.section',
         id: ID,
