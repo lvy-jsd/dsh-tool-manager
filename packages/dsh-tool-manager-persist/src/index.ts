@@ -16,36 +16,46 @@
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import type { Agent, ExtensionContext, SerializedState } from 'dsh-tool-manager'
+
+export interface PersistConfig {
+  enabled?: boolean
+  /** Directory for the per-session files (default <DSH_HOME>/tool-manager/sessions). */
+  dir?: string
+  /** Set false to restore saved state without writing new state. */
+  write?: boolean
+}
 
 export const name = 'tool-manager-persist'
 export const inject = ['toolCatalog']
 
-export function defaultDir() {
+export function defaultDir(): string {
   const dshHome = process.env.DSH_HOME || join(homedir(), '.config', 'deepseek-harness')
   return join(dshHome, 'tool-manager', 'sessions')
 }
 
-const fileNameOf = (dir, agent) => (agent?.id ? join(dir, encodeURIComponent(agent.id)) + '.json' : null)
+const fileNameOf = (dir: string, agent: Agent | undefined): string | null => (agent?.id ? join(dir, encodeURIComponent(String(agent.id))) + '.json' : null)
 
-export function apply(ctx, config = {}) {
+export function apply(ctx: ExtensionContext, config: PersistConfig = {}) {
   const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-persist') : ctx.logger) ?? console
   if (config.enabled === false) return
   const dir = config.dir ?? defaultDir()
   const write = config.write !== false
 
-  function load(agent) {
+  function load(agent: Agent): Partial<SerializedState> | null {
     const file = fileNameOf(dir, agent)
     if (!file) return null
     try {
       return JSON.parse(readFileSync(file, 'utf8'))
-    } catch (error) {
+    } catch (caught) {
+      const error = caught as NodeJS.ErrnoException
       // ENOENT is the normal case (a session that never loaded anything).
       if (error.code !== 'ENOENT') logger.warn?.(`tool-manager-persist: reading ${file} failed: ${error.message}`)
       return null
     }
   }
 
-  function save(agent, state) {
+  function save(agent: Agent, state: SerializedState): void {
     const file = fileNameOf(dir, agent)
     if (!file || !write) return
     const empty = Object.values(state ?? {}).every((list) => !list?.length)
@@ -57,7 +67,8 @@ export function apply(ctx, config = {}) {
       }
       mkdirSync(dir, { recursive: true })
       writeFileSync(file, JSON.stringify(state, null, 2))
-    } catch (error) {
+    } catch (caught) {
+      const error = caught as Error
       logger.warn?.(`tool-manager-persist: writing ${file} failed: ${error.message}`)
     }
   }
@@ -67,7 +78,7 @@ export function apply(ctx, config = {}) {
   return {
     dir,
     /** Delete the saved state of one session (used when a session is closed). */
-    clear(agent) {
+    clear(agent: Agent): void {
       const file = fileNameOf(dir, agent)
       if (file) rmSync(file, { force: true })
     },

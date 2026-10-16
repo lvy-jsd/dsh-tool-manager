@@ -1,5 +1,6 @@
 node_modules/
 # build output of TypeScript packages
 packages/dsh-tool-manager/lib/
+packages/dsh-tool-manager-persist/lib/
 packages/dsh-tool-manager-risk-gate/lib/
 *.tsbuildinfo
