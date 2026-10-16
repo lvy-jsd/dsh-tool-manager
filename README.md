@@ -10,13 +10,13 @@ model's context. Built as a small core plus replaceable extension plugins.
 
 ```sh
 # 1. install the core plus the rule-based classifier (optional but recommended)
-dsh plugin --profile web add dsh-tool-manager dsh-tool-manager-classifier-rules
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager @lvy-jsd/dsh-tool-manager-classifier-rules
 
 # 2. restart DSH, then ask the agent: "what tools do you have?"
 #    it answers with tools_ls("/") — a directory, not 200 tool schemas
 
 # 3. want the UI? add the panel, then open Settings → "Tool manager"
-dsh plugin --profile web add dsh-tool-manager-panel
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 ```
 
 On a fresh install every group is `uncategorized` until a classifier is
@@ -25,16 +25,16 @@ missing. See [Extending](#extending) to write your own classifier.
 
 | Package | What it does |
 |---|---|
-| [`dsh-tool-manager`](packages/dsh-tool-manager) | Core: directory, `tools_ls` / `tools_load` / `tools_unload`, per-agent allowlist, the `toolCatalog` extension service. Without extensions every group is `uncategorized`. |
-| [`dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | Places groups into categories from built-in rules and your config overrides. |
-| [`dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | Confirms loading high-risk tools through the DSH approval channel, with a per-session allowlist. |
-| [`dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | Keeps loaded tools across a DSH restart, one state file per session. |
-| [`dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | Web panel: browse the tree, see each live session's loaded tools and token cost, load/unload from the UI. |
-| [`dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | Places groups with a small model, one request per group, cached by a hash of the group and its tool descriptions. |
-| [`dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | Load a named bundle of tools in one call: `tools_load(["cap:android-debug"])`. |
-| [`dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | Group tools by the plugin package whose source defines them. |
-| [`dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | A "Tool manager" row in the ds-bot settings dialog that opens the panel. |
-| [`create-tool-manager-plugin`](packages/create-tool-manager-plugin) | Scaffold your own extension: `npm create tool-manager-plugin@latest my-ext -- --type classifier`. |
+| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | Core: directory, `tools_ls` / `tools_load` / `tools_unload`, per-agent allowlist, the `toolCatalog` extension service. Without extensions every group is `uncategorized`. |
+| [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | Places groups into categories from built-in rules and your config overrides. |
+| [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | Confirms loading high-risk tools through the DSH approval channel, with a per-session allowlist. |
+| [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | Keeps loaded tools across a DSH restart, one state file per session. |
+| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | Web panel: browse the tree, see each live session's loaded tools and token cost, load/unload from the UI. |
+| [`@lvy-jsd/dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | Places groups with a small model, one request per group, cached by a hash of the group and its tool descriptions. |
+| [`@lvy-jsd/dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | Load a named bundle of tools in one call: `tools_load(["cap:android-debug"])`. |
+| [`@lvy-jsd/dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | Group tools by the plugin package whose source defines them. |
+| [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | A "Tool manager" row in the ds-bot settings dialog that opens the panel. |
+| [`@lvy-jsd/create-tool-manager-plugin`](packages/create-tool-manager-plugin) | Scaffold your own extension: `npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier`. |
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the design.
 
@@ -60,7 +60,7 @@ Hooks are plain events: `tool-catalog/before-load` (throw to veto),
 Start from a generated package — it comes with a passing test:
 
 ```sh
-npm create tool-manager-plugin@latest my-ext -- --type classifier
+npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier
 cd my-ext && npm test
 ```
 

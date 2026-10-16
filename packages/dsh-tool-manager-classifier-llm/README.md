@@ -1,4 +1,4 @@
-# dsh-tool-manager-classifier-llm
+# @lvy-jsd/dsh-tool-manager-classifier-llm
 
 Small-model classifier for [`dsh-tool-manager`](../dsh-tool-manager): it asks a
 model once per tool group and caches the answer.
@@ -39,7 +39,7 @@ treated as an empty cache, never a crash.
 
 ```yaml
 - id: tool-manager-classifier-llm
-  name: dsh-tool-manager-classifier-llm
+  name: '@lvy-jsd/dsh-tool-manager-classifier-llm'
   config:
     enabled: true
     # Which model classifies. Omit it and every group stays uncategorized.

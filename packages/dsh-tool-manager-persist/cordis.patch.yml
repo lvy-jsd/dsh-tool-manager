@@ -1,4 +1,4 @@
-# dsh-tool-manager-persist bundle patch: one loader entry.
+# @lvy-jsd/dsh-tool-manager-persist bundle patch: one loader entry.
 - insert:
     - id: tool-manager-persist
       name: '@lvy-jsd/dsh-tool-manager-persist'

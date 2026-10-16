@@ -1,4 +1,4 @@
-# dsh-tool-manager-persist
+# @lvy-jsd/dsh-tool-manager-persist
 
 Keep loaded tools across a DSH restart for
 [`dsh-tool-manager`](../dsh-tool-manager).
@@ -13,7 +13,7 @@ written on every load/unload, read back when the session is adopted again
 
 ```yaml
 - id: tool-manager-persist
-  name: dsh-tool-manager-persist
+  name: '@lvy-jsd/dsh-tool-manager-persist'
   config:
     enabled: true                                   # false disables the plugin
     dir: ~/.config/deepseek-harness/tool-manager/sessions   # default

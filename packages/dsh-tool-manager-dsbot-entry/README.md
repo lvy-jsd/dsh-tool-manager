@@ -1,4 +1,4 @@
-# dsh-tool-manager-dsbot-entry
+# @lvy-jsd/dsh-tool-manager-dsbot-entry
 
 Adds a **Tool manager** row (工具管理 in Chinese) to the
 [ds-bot](https://www.npmjs.com/package/ds-bot) settings dialog. Clicking it
@@ -11,10 +11,10 @@ page (and the panel's section in it) is one step further away
 
 ## Install
 
-Needs `dsh-tool-manager-panel` (it serves the data and the panel component).
+Needs `@lvy-jsd/dsh-tool-manager-panel` (it serves the data and the panel component).
 
 ```sh
-dsh plugin --profile web add dsh-tool-manager-panel dsh-tool-manager-dsbot-entry
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel @lvy-jsd/dsh-tool-manager-dsbot-entry
 ```
 
 ## How it works, and why it is safe to break

@@ -1,4 +1,4 @@
-# dsh-tool-manager-risk-gate
+# @lvy-jsd/dsh-tool-manager-risk-gate
 
 Confirm loading high-risk tools for [`dsh-tool-manager`](../dsh-tool-manager).
 
@@ -47,7 +47,7 @@ declarations.
 
 ```yaml
 - id: tool-manager-risk-gate
-  name: dsh-tool-manager-risk-gate
+  name: '@lvy-jsd/dsh-tool-manager-risk-gate'
   config:
     enabled: true
     highRisk: [my_dangerous_tool]

@@ -1,4 +1,4 @@
-# dsh-tool-manager-classifier-rules
+# @lvy-jsd/dsh-tool-manager-classifier-rules
 
 Rule-based classifier for [`dsh-tool-manager`](../dsh-tool-manager).
 
@@ -13,7 +13,7 @@ It registers up to two classifiers on the `toolCatalog` service:
 
 ```yaml
 - id: tool-manager-classifier-rules
-  name: dsh-tool-manager-classifier-rules
+  name: '@lvy-jsd/dsh-tool-manager-classifier-rules'
   config:
     defaults: true            # set false to use only your own rules
     groupRules:               # regex over tool names -> group, first match wins

@@ -1,4 +1,4 @@
-# dsh-tool-manager bundle patch: one loader entry.
+# @lvy-jsd/dsh-tool-manager bundle patch: one loader entry.
 - insert:
     - id: tool-manager
       name: '@lvy-jsd/dsh-tool-manager'
@@ -12,5 +12,5 @@
         exemptProviders: [claude-code]
         # Tools excluded from group loads; must be loaded on their own.
         # Loading high-risk tools also needs a risk gate plugin
-        # (dsh-tool-manager-risk-gate) to confirm them.
+        # (@lvy-jsd/dsh-tool-manager-risk-gate) to confirm them.
         highRisk: []

@@ -1,4 +1,4 @@
-# dsh-tool-manager-capability-bridge bundle patch: one loader entry.
+# @lvy-jsd/dsh-tool-manager-capability-bridge bundle patch: one loader entry.
 - insert:
     - id: tool-manager-capability-bridge
       name: '@lvy-jsd/dsh-tool-manager-capability-bridge'

@@ -1,4 +1,4 @@
-# dsh-tool-manager-attribution-scan
+# @lvy-jsd/dsh-tool-manager-attribution-scan
 
 Groups tools by the plugin package that defines them, so a plugin's tools show
 up together in the `tools_ls` directory even when their names share no prefix.
@@ -31,7 +31,7 @@ Add the package to your DSH profile and enable its bundle patch:
 
 ```yaml
 - id: tool-manager-attribution-scan
-  name: dsh-tool-manager-attribution-scan
+  name: '@lvy-jsd/dsh-tool-manager-attribution-scan'
   config:
     enabled: true
     # priority: 10

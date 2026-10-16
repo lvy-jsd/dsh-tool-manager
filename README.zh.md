@@ -10,13 +10,13 @@
 
 ```sh
 # 1. 安装核心包和基于规则的分类器（可选，但推荐）
-dsh plugin --profile web add dsh-tool-manager dsh-tool-manager-classifier-rules
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager @lvy-jsd/dsh-tool-manager-classifier-rules
 
 # 2. 重启 DSH，然后问 Agent："你有哪些工具？"
 #    它会用 tools_ls("/") 回答 —— 是一个目录，不是 200 个工具 schema
 
 # 3. 想要界面？装上面板，然后打开 设置 →"工具管理"
-dsh plugin --profile web add dsh-tool-manager-panel
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 ```
 
 全新安装后，所有分组都归在 `uncategorized` 下，直到装上分类器 ——
@@ -25,16 +25,16 @@ dsh plugin --profile web add dsh-tool-manager-panel
 
 | 包 | 作用 |
 |---|---|
-| [`dsh-tool-manager`](packages/dsh-tool-manager) | 核心：目录、`tools_ls` / `tools_load` / `tools_unload`、按 Agent 的可见白名单、`toolCatalog` 扩展服务。没有扩展时所有分组都在 `uncategorized` 下。 |
-| [`dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | 按内置规则和你的配置覆盖，把分组放进分类。 |
-| [`dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | 通过 DSH 的审批通道确认高危工具的加载，并支持按会话的白名单。 |
-| [`dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | DSH 重启后保留已加载的工具，每个会话一个状态文件。 |
-| [`dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | 网页面板：浏览目录树、查看每个活动会话已加载的工具和 token 开销，并在界面上加载 / 卸载。 |
-| [`dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | 用小模型给分组分类，每个分组一次请求，按分组及其工具描述的哈希缓存结果。 |
-| [`dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | 一次调用加载一组具名工具：`tools_load(["cap:android-debug"])`。 |
-| [`dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | 按定义这些工具的源码所属的插件包来分组。 |
-| [`dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | 在 ds-bot 的设置弹窗里加一行"工具管理"，点开显示面板。 |
-| [`create-tool-manager-plugin`](packages/create-tool-manager-plugin) | 生成你自己的扩展：`npm create tool-manager-plugin@latest my-ext -- --type classifier`。 |
+| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | 核心：目录、`tools_ls` / `tools_load` / `tools_unload`、按 Agent 的可见白名单、`toolCatalog` 扩展服务。没有扩展时所有分组都在 `uncategorized` 下。 |
+| [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | 按内置规则和你的配置覆盖，把分组放进分类。 |
+| [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | 通过 DSH 的审批通道确认高危工具的加载，并支持按会话的白名单。 |
+| [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | DSH 重启后保留已加载的工具，每个会话一个状态文件。 |
+| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | 网页面板：浏览目录树、查看每个活动会话已加载的工具和 token 开销，并在界面上加载 / 卸载。 |
+| [`@lvy-jsd/dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | 用小模型给分组分类，每个分组一次请求，按分组及其工具描述的哈希缓存结果。 |
+| [`@lvy-jsd/dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | 一次调用加载一组具名工具：`tools_load(["cap:android-debug"])`。 |
+| [`@lvy-jsd/dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | 按定义这些工具的源码所属的插件包来分组。 |
+| [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | 在 ds-bot 的设置弹窗里加一行"工具管理"，点开显示面板。 |
+| [`@lvy-jsd/create-tool-manager-plugin`](packages/create-tool-manager-plugin) | 生成你自己的扩展：`npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier`。 |
 
 设计说明见 [docs/DESIGN.md](docs/DESIGN.md)。
 
@@ -59,7 +59,7 @@ dsh plugin --profile web add dsh-tool-manager-panel
 从一个生成出来的包开始 —— 它自带一个能跑通的测试：
 
 ```sh
-npm create tool-manager-plugin@latest my-ext -- --type classifier
+npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier
 cd my-ext && npm test
 ```
 

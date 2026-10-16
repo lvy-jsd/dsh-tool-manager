@@ -1,4 +1,4 @@
-# dsh-tool-manager-capability-bridge
+# @lvy-jsd/dsh-tool-manager-capability-bridge
 
 Load a named bundle of tools in one call for
 [`dsh-tool-manager`](../dsh-tool-manager).
@@ -28,7 +28,7 @@ approval, because the alias expands to the tool's own name.
 
 ```yaml
 - id: tool-manager-capability-bridge
-  name: dsh-tool-manager-capability-bridge
+  name: '@lvy-jsd/dsh-tool-manager-capability-bridge'
   config:
     enabled: true
     prefix: "cap:"          # change only if it collides with a real name

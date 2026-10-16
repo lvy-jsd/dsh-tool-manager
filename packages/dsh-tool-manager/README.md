@@ -1,4 +1,4 @@
-# dsh-tool-manager
+# @lvy-jsd/dsh-tool-manager
 
 Browse every DeepSeek Harness tool as a directory and load tools on demand.
 
@@ -48,7 +48,7 @@ built-in rules and config overrides, or write your own classifier.
 
 ```yaml
 - id: tool-manager
-  name: dsh-tool-manager
+  name: '@lvy-jsd/dsh-tool-manager'
   config:
     pinned: []      # extra always-on tools (core DSH tools are built in)
     unpin: []       # built-in always-on tools to move into the directory

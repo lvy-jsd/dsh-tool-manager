@@ -1,4 +1,4 @@
-# dsh-tool-manager-panel
+# @lvy-jsd/dsh-tool-manager-panel
 
 Web panel for [`dsh-tool-manager`](../dsh-tool-manager): browse the tool
 directory, see what each live session has loaded and what it costs, and load or
@@ -24,7 +24,7 @@ loads are still refused.
 ## Install
 
 ```sh
-dsh plugin --profile web add dsh-tool-manager dsh-tool-manager-classifier-rules dsh-tool-manager-panel
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager @lvy-jsd/dsh-tool-manager-classifier-rules @lvy-jsd/dsh-tool-manager-panel
 ```
 
 Then restart DSH (or let live reload pick it up). Open **Settings**: a **Tool
@@ -37,7 +37,7 @@ variables.
 
 ```yaml
 - id: tool-manager-panel
-  name: dsh-tool-manager-panel
+  name: '@lvy-jsd/dsh-tool-manager-panel'
   config:
     enabled: true   # false disables the routes (the settings section then reports the service offline)
 ```

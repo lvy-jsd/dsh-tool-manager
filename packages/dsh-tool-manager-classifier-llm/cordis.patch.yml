@@ -1,4 +1,4 @@
-# dsh-tool-manager-classifier-llm bundle patch: one loader entry.
+# @lvy-jsd/dsh-tool-manager-classifier-llm bundle patch: one loader entry.
 - insert:
     - id: tool-manager-classifier-llm
       name: '@lvy-jsd/dsh-tool-manager-classifier-llm'

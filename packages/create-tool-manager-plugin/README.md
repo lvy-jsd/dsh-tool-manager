@@ -1,9 +1,9 @@
-# create-tool-manager-plugin
+# @lvy-jsd/create-tool-manager-plugin
 
 Scaffold a [`dsh-tool-manager`](../dsh-tool-manager) extension.
 
 ```sh
-npm create tool-manager-plugin@latest my-ext -- --type classifier
+npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier
 # or, from a checkout:
 node packages/create-tool-manager-plugin/lib/index.js my-ext --type classifier
 ```
@@ -40,7 +40,7 @@ command refuses and exits non-zero.
 ## Install what you generated
 
 ```sh
-dsh plugin --profile web add dsh-tool-manager my-ext
+dsh plugin --profile web add @lvy-jsd/dsh-tool-manager my-ext
 ```
 
 Then restart DSH, or let live reload pick it up.
