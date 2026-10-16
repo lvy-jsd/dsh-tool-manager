@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "tsc -p .",
-    "prepare": "tsc -p ."
+    "prepack": "tsc -b ."
   },
   "keywords": [
     "dsh",
