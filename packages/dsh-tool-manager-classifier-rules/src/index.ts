@@ -7,6 +7,28 @@
 //                      plugin declarations beat it.
 // Without this plugin the core puts every group under `uncategorized`.
 
+import type { Classifier, Disposer, ExtensionContext } from 'dsh-tool-manager'
+
+/** Tools whose name matches `match` (a regular expression) go to `group`. */
+export interface GroupRule {
+  match: string
+  group: string
+}
+
+export interface RulesConfig {
+  /** Set false to drop the built-in rules. */
+  defaults?: boolean
+  groupRules?: GroupRule[]
+  categories?: Record<string, { description?: string, groups?: string[] }>
+}
+
+export interface RulesClassifierOptions {
+  name: string
+  priority: number
+  groupRules?: GroupRule[]
+  groupCategories?: Record<string, string>
+}
+
 export const name = 'tool-manager-classifier-rules'
 export const inject = ['toolCatalog']
 
@@ -14,7 +36,7 @@ export const USER_PRIORITY = 1000
 export const DEFAULT_PRIORITY = 100
 
 // Verb-named DSH tools that no name prefix can group.
-export const DEFAULT_GROUP_RULES = [
+export const DEFAULT_GROUP_RULES: GroupRule[] = [
   { match: '^(create|list|update|stop|message)_bots?$', group: 'bots' },
   { match: '^((create|delete|update)_group|post_to_group|read_group_chat|read_own_chat|group_relay)$', group: 'groups' },
   { match: '^(spawn_teammate|send_message|open_session|team_task_\\w+|agent_\\w+)$', group: 'team' },
@@ -29,7 +51,7 @@ export const DEFAULT_GROUP_RULES = [
 ]
 
 // Group -> category for groups common on DSH hosts.
-export const DEFAULT_GROUP_CATEGORIES = {
+export const DEFAULT_GROUP_CATEGORIES: Record<string, string> = {
   adb: 'device', phone: 'device', desktop: 'device', gork: 'device',
   'phone-control': 'device', 'desktop-eyes': 'device',
   'gork-android': 'device', 'gork-nixos-phone': 'device',
@@ -46,7 +68,7 @@ export const DEFAULT_GROUP_CATEGORIES = {
 }
 
 /** Build a classifier from rule tables. Pure; exported for tests and reuse. */
-export function rulesClassifier({ name, priority, groupRules = [], groupCategories = {} }) {
+export function rulesClassifier({ name, priority, groupRules = [], groupCategories = {} }: RulesClassifierOptions): Classifier {
   const compiled = groupRules.map((r) => ({ re: new RegExp(r.match), group: String(r.group) }))
   return {
     name,
@@ -62,17 +84,17 @@ export function rulesClassifier({ name, priority, groupRules = [], groupCategori
 }
 
 /** Invert config `categories: { cat: { groups: [...] } }` into group -> category. */
-export function groupCategoriesFrom(categories = {}) {
-  const out = {}
+export function groupCategoriesFrom(categories: RulesConfig['categories'] = {}): Record<string, string> {
+  const out: Record<string, string> = {}
   for (const [category, spec] of Object.entries(categories)) for (const group of spec?.groups ?? []) out[group] = category
   return out
 }
 
-export function apply(ctx, config = {}) {
+export function apply(ctx: ExtensionContext, config: RulesConfig = {}) {
   const catalog = ctx.toolCatalog
 
   ctx.effect(() => {
-    const disposers = []
+    const disposers: Disposer[] = []
     if (config.defaults !== false) {
       disposers.push(catalog.registerClassifier(rulesClassifier({
         name: 'rules:defaults',
