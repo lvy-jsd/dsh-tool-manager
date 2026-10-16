@@ -312,3 +312,8 @@ export interface ToolCatalogService {
   /** Schema tokens actually sent for an agent: pinned tools plus its loaded set. */
   wireTokens(agent: Agent): number
 }
+
+/** What an extension plugin uses of its context after `inject: ['toolCatalog']`. */
+export interface ExtensionContext extends Pick<HostContext, 'logger' | 'effect' | 'on'> {
+  toolCatalog: ToolCatalogService
+}

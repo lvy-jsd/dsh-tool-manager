@@ -71,12 +71,13 @@ is in the core README and [docs/DESIGN.md](docs/DESIGN.md) §11.
 
 The core package is written in TypeScript (`src/`) and compiled to `lib/`
 (JavaScript plus `.d.ts` type declarations); `lib/` is build output and not
-committed. The other packages are still plain JavaScript.
+committed. Packages migrate one at a time; `tsconfig.json` at the root lists
+the ones already in TypeScript, the rest are still plain JavaScript.
 
 ```sh
 npm install                        # also links your local DSH host packages (scripts/link-host.mjs)
 npm run build                      # src/*.ts -> lib/*.js + lib/*.d.ts
-npm run typecheck                  # strict type check, no output
+npm run typecheck                  # strict type check (tsc -b; writes lib/ too, references need it)
 node --test test/unit/*.test.mjs   # pure catalog and registry tests (needs a build)
 node test/e2e.mjs                  # boots throwaway DSH instances; never touches your profile
 ```

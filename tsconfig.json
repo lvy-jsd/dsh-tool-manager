@@ -1,0 +1,7 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/dsh-tool-manager" },
+    { "path": "packages/dsh-tool-manager-risk-gate" }
+  ]
+}

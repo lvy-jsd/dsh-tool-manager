@@ -20,6 +20,28 @@
 // skips them and tells the model to load them individually. That keeps each
 // confirmation tied to exactly one dangerous tool.
 
+import type { Agent, Catalog, ExtensionContext } from 'dsh-tool-manager'
+
+/** One `allow` entry: `true` or "*" for every high-risk tool, or a list of names. */
+export type AllowSpec = boolean | string | string[]
+
+export interface RiskGateConfig {
+  enabled?: boolean
+  /** Extra tool names (full or short) treated as high risk. */
+  highRisk?: string[]
+  /** Set false to drop DEFAULT_HIGH_RISK. */
+  defaultHighRisk?: boolean
+  /** Per session id, or "*" for every session. */
+  allow?: Record<string, AllowSpec>
+}
+
+/** The part of a tools/pre-execute event this gate reads. */
+interface PreExecute {
+  name: string
+  agent?: Agent
+  arguments?: { targets?: string[] }
+}
+
 export const name = 'tool-manager-risk-gate'
 export const inject = ['toolCatalog']
 
@@ -34,28 +56,28 @@ export const DEFAULT_HIGH_RISK = [
 ]
 
 /** `mcp__server__tool` -> `tool`; other names unchanged. */
-const shortOf = (name) => (name.startsWith('mcp__') ? name.split('__').pop() : name)
+const shortOf = (name: string): string => (name.startsWith('mcp__') ? name.split('__').pop()! : name)
 
 /**
  * Read an `allow` entry. `true` or "*" allows every high-risk tool in that
  * session; a list allows only the named tools. Anything else allows none.
  */
-function allowedTools(spec) {
+function allowedTools(spec: AllowSpec | undefined): '*' | string[] {
   if (spec === true || spec === '*') return '*'
   if (Array.isArray(spec)) return spec.includes('*') ? '*' : spec
   return []
 }
 
-export function apply(ctx, config = {}) {
+export function apply(ctx: ExtensionContext, config: RiskGateConfig = {}) {
   const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-risk-gate') : ctx.logger) ?? console
   if (config.enabled === false) return
   const extraHighRisk = new Set([...(config.highRisk ?? []), ...(config.defaultHighRisk === false ? [] : DEFAULT_HIGH_RISK)])
   // { "<session id>": ["merge_pull_request", ...] | "*" }
-  const allow = config.allow ?? {}
+  const allow: Record<string, AllowSpec> = config.allow ?? {}
 
   /** High-risk tools among the given names: catalog declaration first. */
-  function riskyAmong(catalog, names) {
-    const risky = []
+  function riskyAmong(catalog: Catalog | undefined, names: Iterable<string>): string[] {
+    const risky: string[] = []
     for (const toolName of names) {
       const tool = catalog?.tools?.get(toolName)
       if (tool?.highRisk || extraHighRisk.has(toolName) || extraHighRisk.has(shortOf(toolName))) risky.push(toolName)
@@ -64,8 +86,8 @@ export function apply(ctx, config = {}) {
   }
 
   /** Tools a tools_load call would add, resolved against the caller's catalog. */
-  function targetsOf(agent, args) {
-    const names = new Set()
+  function targetsOf(agent: Agent | undefined, args: PreExecute['arguments']): string[] {
+    const names = new Set<string>()
     for (const raw of args?.targets ?? []) {
       const node = ctx.toolCatalog.resolve(raw, agent)
       if (node?.kind === 'tool') names.add(node.tool.name)
@@ -77,7 +99,7 @@ export function apply(ctx, config = {}) {
 
   ctx.effect(() => ctx.toolCatalog.registerRiskGate({ name }), 'tool-manager-risk-gate.gate()')
 
-  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   if (extraHighRisk.size) {
     // Tell the core, so group loads skip these tools and a direct call of a
     // hidden one is refused instead of auto-loaded (rescueHiddenCall).
@@ -85,12 +107,12 @@ export function apply(ctx, config = {}) {
     ctx.effect(() => ctx.toolCatalog.annotate(pattern, { risk: 'high' }), 'tool-manager-risk-gate.annotate()')
   }
 
-  ctx.effect(() => ctx.on('tools/pre-execute', async (exec, next) => {
+  ctx.effect(() => ctx.on('tools/pre-execute', async (exec: PreExecute, next: () => Promise<unknown>) => {
     if (exec.name !== 'tools_load') return next()
     const agent = exec.agent
     const sessionId = agent?.id === undefined ? undefined : String(agent.id)
     // A session entry wins; "*" applies to every session.
-    const spec = allow[sessionId] ?? allow['*']
+    const spec = allow[String(sessionId)] ?? allow['*']
     const preApproved = allowedTools(spec)
     if (preApproved === '*') return next()
     const catalog = ctx.toolCatalog.get(agent)
@@ -112,7 +134,7 @@ export function apply(ctx, config = {}) {
   return {
     riskyAmong,
     /** Whether this session may load the given tool without a prompt. */
-    allowedFor: (sessionId, toolName) => {
+    allowedFor: (sessionId: unknown, toolName: string): boolean => {
       const spec = allowedTools(allow[String(sessionId)])
       return spec === '*' || spec.includes(toolName) || spec.includes(shortOf(toolName))
     },

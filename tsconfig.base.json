@@ -5,6 +5,7 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "strict": true,
+    "composite": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "declaration": true,

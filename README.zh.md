@@ -69,12 +69,12 @@ README 和 [docs/DESIGN.md](docs/DESIGN.md) 第 11 节。
 ## 开发与测试
 
 核心包用 TypeScript 编写（`src/`），编译到 `lib/`（JavaScript 加 `.d.ts` 类型声明）；
-`lib/` 是构建产物，不进 git。其余包目前仍是纯 JavaScript。
+`lib/` 是构建产物，不进 git。各包逐个迁移，根目录 `tsconfig.json` 列出已迁移的包，其余仍是纯 JavaScript。
 
 ```sh
 npm install                        # 同时把本机 DSH 的宿主包链接进来（scripts/link-host.mjs）
 npm run build                      # src/*.ts -> lib/*.js + lib/*.d.ts
-npm run typecheck                  # 严格类型检查，不输出文件
+npm run typecheck                  # 严格类型检查（tsc -b；项目引用需要声明文件，所以也会写 lib/）
 node --test test/unit/*.test.mjs   # 纯 catalog 与注册表测试（需先构建）
 node test/e2e.mjs                  # 启动一次性 DSH 实例；绝不碰你的正式 profile
 ```
