@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { scanPackages, attribute, attributionClassifier, groupNameOf } from '../../packages/dsh-tool-manager-attribution-scan/lib/index.js'
+import { apply, scanPackages, attribute, attributionClassifier, groupNameOf } from '../../packages/dsh-tool-manager-attribution-scan/lib/index.js'
 
 function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), 'tm-attr-'))
@@ -71,3 +71,29 @@ test('the classifier passes until the index is ready', async () => {
   assert.equal(classifier.group({ name: 'weather_now' }), 'weather')
   assert.equal(classifier.group({ name: 'note_add' }), 'notes')
 })
+
+// DSH passes ctx.logger as a factory, but a host (or a test kit) may pass a
+// logger object; the other extensions accept both, so this one must too.
+for (const form of ['function', 'object']) {
+  test(`apply accepts ctx.logger as a ${form} and warns through it`, async () => {
+    const warnings = []
+    const logger = { info() {}, warn: (message) => warnings.push(message) }
+    const listeners = new Map()
+    const ctx = {
+      logger: form === 'function' ? () => logger : logger,
+      effect: (fn) => fn(),
+      on: (event, handler) => { listeners.set(event, handler); return () => {} },
+      toolCatalog: {
+        registerClassifier: () => () => {},
+        // A package without a usable dir makes the background scan fail.
+        packages: () => [{ name: 'dsh-broken', dir: null }],
+        refresh() {},
+      },
+    }
+    apply(ctx, {})
+    listeners.get('tool-catalog/after-rebuild')()
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(warnings.length, 1)
+    assert.match(warnings[0], /scan failed/)
+  })
+}

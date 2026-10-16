@@ -132,9 +132,7 @@ export function attributionClassifier({ priority = DEFAULT_PRIORITY, stripPrefix
 
 export function apply(ctx: ExtensionContext, config: AttributionConfig = {}) {
   if (config.enabled === false) return
-  // Unlike the other extensions this only handles the function form of
-  // ctx.logger (what DSH passes); the cast keeps that behavior as it was.
-  const logger: Logger = (ctx.logger as ((name: string) => Logger) | undefined)?.('tool-manager-attribution-scan') ?? console
+  const logger: Logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-attribution-scan') : ctx.logger) ?? console
   let index: AttributionIndex | null = null
   let live = true
   ctx.effect(() => () => { live = false }, 'tool-manager-attribution-scan.lifetime()')
