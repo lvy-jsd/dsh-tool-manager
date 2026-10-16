@@ -13,7 +13,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Classifier, ExtensionContext, Logger, PluginPackage } from 'dsh-tool-manager'
+import type { Classifier, ExtensionContext, Logger, PluginPackage } from '@lvy-jsd/dsh-tool-manager'
 
 /** Literal -> names of the packages that define / mention it. */
 export interface AttributionIndex {
@@ -48,7 +48,7 @@ const MAX_FILES_PER_PACKAGE = 2000
 const LITERAL = /(['"`])([a-z][a-z0-9_]{2,63})\1/g
 const DEFINITION = /\bname\s*:\s*(['"`])([a-z][a-z0-9_]{2,63})\1/g
 // The tool manager's own extensions mention many tool names in rules and docs.
-const SELF = /^dsh-tool-manager-/
+const SELF = /^(@lvy-jsd\/)?dsh-tool-manager-/
 
 /** "@scope/dsh-engram" -> "engram" with stripPrefix "dsh-". */
 export function groupNameOf(pkg: string, stripPrefix = 'dsh-'): string {

@@ -16,7 +16,7 @@
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import type { Agent, ExtensionContext, SerializedState } from 'dsh-tool-manager'
+import type { Agent, ExtensionContext, SerializedState } from '@lvy-jsd/dsh-tool-manager'
 
 export interface PersistConfig {
   enabled?: boolean

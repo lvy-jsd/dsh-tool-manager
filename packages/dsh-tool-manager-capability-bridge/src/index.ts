@@ -20,7 +20,7 @@
 // A pack whose tools include a high-risk tool still needs the risk gate's
 // approval, because the alias expands to the tool's own name.
 
-import type { Disposer, ExtensionContext, HostContext } from 'dsh-tool-manager'
+import type { Disposer, ExtensionContext, HostContext } from '@lvy-jsd/dsh-tool-manager'
 
 /** A pack declaration: one target or a list of targets. */
 export type PackTargets = string | string[]

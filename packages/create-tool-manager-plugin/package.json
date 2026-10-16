@@ -1,5 +1,5 @@
 {
-  "name": "create-tool-manager-plugin",
+  "name": "@lvy-jsd/create-tool-manager-plugin",
   "version": "0.1.0",
   "description": "Scaffold a dsh-tool-manager extension: classifier, visibility filter, hook listener or package.json declaration.",
   "license": "MIT",
@@ -24,6 +24,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b .",
     "prepack": "tsc -b ."

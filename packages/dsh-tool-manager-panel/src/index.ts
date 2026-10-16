@@ -11,7 +11,7 @@
 // server (headless), this plugin mounts nothing and stays harmless.
 
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
-import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry } from 'dsh-tool-manager'
+import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry } from '@lvy-jsd/dsh-tool-manager'
 
 /** The part of the host's webServer service (dsh-host-webserver WebRoute) this plugin uses. */
 export interface WebServer {

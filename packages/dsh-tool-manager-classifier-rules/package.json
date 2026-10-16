@@ -1,5 +1,5 @@
 {
-  "name": "dsh-tool-manager-classifier-rules",
+  "name": "@lvy-jsd/dsh-tool-manager-classifier-rules",
   "version": "0.1.0",
   "description": "Rule-based classifier for dsh-tool-manager: built-in placement rules for common DSH tools plus user overrides from config.",
   "license": "MIT",
@@ -22,6 +22,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b .",
     "prepack": "tsc -b ."
@@ -33,7 +36,7 @@
     "classifier"
   ],
   "peerDependencies": {
-    "dsh-tool-manager": ">=0.2.0"
+    "@lvy-jsd/dsh-tool-manager": ">=0.2.0"
   },
   "dsh": {
     "bundle": {

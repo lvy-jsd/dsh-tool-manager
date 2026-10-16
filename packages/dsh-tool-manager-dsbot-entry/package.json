@@ -1,5 +1,5 @@
 {
-  "name": "dsh-tool-manager-dsbot-entry",
+  "name": "@lvy-jsd/dsh-tool-manager-dsbot-entry",
   "version": "0.1.0",
   "description": "Adds a \"Tool manager\" entry to the ds-bot settings dialog that opens the dsh-tool-manager panel, without changing ds-bot.",
   "license": "MIT",
@@ -27,6 +27,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b . tsconfig.client.json",
     "prepack": "tsc -b . tsconfig.client.json"
@@ -38,7 +41,7 @@
     "ds-bot"
   ],
   "peerDependencies": {
-    "dsh-tool-manager-panel": ">=0.1.0"
+    "@lvy-jsd/dsh-tool-manager-panel": ">=0.1.0"
   },
   "dsh": {
     "bundle": {
@@ -50,7 +53,7 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-locale",
-        "dsh-tool-manager-panel"
+        "@lvy-jsd/dsh-tool-manager-panel"
       ]
     }
   },

@@ -1,7 +1,7 @@
 # dsh-tool-manager-risk-gate bundle patch: one loader entry.
 - insert:
     - id: tool-manager-risk-gate
-      name: dsh-tool-manager-risk-gate
+      name: '@lvy-jsd/dsh-tool-manager-risk-gate'
       config:
         # false disables the gate (high-risk loads are then refused outright).
         enabled: true

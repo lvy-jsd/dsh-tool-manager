@@ -1,5 +1,5 @@
 {
-  "name": "dsh-tool-manager-attribution-scan",
+  "name": "@lvy-jsd/dsh-tool-manager-attribution-scan",
   "version": "0.1.0",
   "description": "Group tools by the plugin package that defines them, found by scanning plugin source for the tool name.",
   "license": "MIT",
@@ -22,6 +22,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b .",
     "prepack": "tsc -b ."
@@ -33,7 +36,7 @@
     "classifier"
   ],
   "peerDependencies": {
-    "dsh-tool-manager": ">=0.2.0"
+    "@lvy-jsd/dsh-tool-manager": ">=0.2.0"
   },
   "dsh": {
     "bundle": {

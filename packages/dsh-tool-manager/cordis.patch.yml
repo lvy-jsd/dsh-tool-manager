@@ -1,7 +1,7 @@
 # dsh-tool-manager bundle patch: one loader entry.
 - insert:
     - id: tool-manager
-      name: dsh-tool-manager
+      name: '@lvy-jsd/dsh-tool-manager'
       config:
         # Extra always-visible tools on top of the built-in core list.
         pinned: []

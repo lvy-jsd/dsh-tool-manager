@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import type { GenerateOptions, LlmRuntime } from '@deepseek-ai/dsh-llm'
-import type { Classifier, ExtensionContext, HostContext, Logger } from 'dsh-tool-manager'
+import type { Classifier, ExtensionContext, HostContext, Logger } from '@lvy-jsd/dsh-tool-manager'
 
 /** What the classifier needs of a group (a catalog Group or a GroupProbe both fit). */
 export interface GroupInput {

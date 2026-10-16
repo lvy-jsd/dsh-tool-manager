@@ -29,6 +29,8 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const packages = resolve(here, '..', 'packages')
+// Bundles are named by package directory; the published names are scoped.
+const packageName = (b) => b.name ?? `@lvy-jsd/${b}`
 const dsh = process.argv[2] ?? join(homedir(), '.local/bin/dsh')
 const port = 18000 + Math.floor(Math.random() * 1000)
 const root = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'dsh-tm-e2e-'))
@@ -47,11 +49,15 @@ function makeProfile(name, bundles, extraPatch = '') {
   const dir = join(home, 'profiles', name)
   writeFileSync(join(dir, 'package.json'), JSON.stringify({
     name: `dsh-profile-${name}`, private: true, dependencies: {},
-    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', 'dsh-tm-testkit', ...bundles.map((b) => b.name ?? b)] } },
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', 'dsh-tm-testkit', ...bundles.map(packageName)] } },
   }, null, 2))
   mkdirSync(join(dir, 'node_modules'), { recursive: true })
   symlinkSync(join(here, 'testkit'), join(dir, 'node_modules', 'dsh-tm-testkit'))
-  for (const b of bundles) symlinkSync(b.dir ?? join(packages, b), join(dir, 'node_modules', b.name ?? b))
+  for (const b of bundles) {
+    const link = join(dir, 'node_modules', packageName(b))
+    mkdirSync(dirname(link), { recursive: true })
+    symlinkSync(b.dir ?? join(packages, b), link)
+  }
   writeFileSync(join(dir, 'cordis.patch.yml'), `
 - id: llm-pi-ai
   name: '@deepseek-ai/dsh-llm-pi-ai'
@@ -67,7 +73,7 @@ function makeProfile(name, bundles, extraPatch = '') {
   name: '@deepseek-ai/dsh-agent-default-model'
   config: { provider: fake, model: fake-1 }
 - id: tool-manager
-  name: dsh-tool-manager
+  name: '@lvy-jsd/dsh-tool-manager'
   config:
     pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens]
 ${extraPatch}`)
@@ -76,7 +82,7 @@ ${extraPatch}`)
 makeProfile('core', ['dsh-tool-manager'])
 makeProfile('rules', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rules'], `
 - id: tool-manager-classifier-rules
-  name: dsh-tool-manager-classifier-rules
+  name: '@lvy-jsd/dsh-tool-manager-classifier-rules'
   config:
     defaults: true
     categories:
@@ -96,7 +102,7 @@ makeProfile('attr-rules', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rule
 // The fake model's route stands in for claude-code: an exempt route is never narrowed.
 makeProfile('exempt', ['dsh-tool-manager'], `
 - id: tool-manager
-  name: dsh-tool-manager
+  name: '@lvy-jsd/dsh-tool-manager'
   config:
     pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens]
     exemptProviders: [fake]
@@ -104,14 +110,14 @@ makeProfile('exempt', ['dsh-tool-manager'], `
 
 makeProfile('gate', ['dsh-tool-manager', 'dsh-tool-manager-risk-gate'], `
 - id: tool-manager-risk-gate
-  name: dsh-tool-manager-risk-gate
+  name: '@lvy-jsd/dsh-tool-manager-risk-gate'
   config:
     highRisk: []
 `)
 
 makeProfile('cap', ['dsh-tool-manager', 'dsh-tool-manager-capability-bridge'], `
 - id: tool-manager-capability-bridge
-  name: dsh-tool-manager-capability-bridge
+  name: '@lvy-jsd/dsh-tool-manager-capability-bridge'
   config:
     packs:
       static: ['/uncategorized/fake']
@@ -122,7 +128,7 @@ makeProfile('cap', ['dsh-tool-manager', 'dsh-tool-manager-capability-bridge'], `
 
 makeProfile('llm', ['dsh-tool-manager', 'dsh-tool-manager-classifier-llm'], `
 - id: tool-manager-classifier-llm
-  name: dsh-tool-manager-classifier-llm
+  name: '@lvy-jsd/dsh-tool-manager-classifier-llm'
   config:
     model: { provider: fake, model: fake-1 }
     cacheFile: ${join(root, 'llm-cache.json')}

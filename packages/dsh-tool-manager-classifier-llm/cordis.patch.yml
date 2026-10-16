@@ -1,7 +1,7 @@
 # dsh-tool-manager-classifier-llm bundle patch: one loader entry.
 - insert:
     - id: tool-manager-classifier-llm
-      name: dsh-tool-manager-classifier-llm
+      name: '@lvy-jsd/dsh-tool-manager-classifier-llm'
       config:
         # false disables the classifier entirely.
         enabled: true

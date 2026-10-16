@@ -1,5 +1,5 @@
 {
-  "name": "dsh-tool-manager-capability-bridge",
+  "name": "@lvy-jsd/dsh-tool-manager-capability-bridge",
   "version": "0.1.0",
   "description": "Load a named bundle of tools in one call: teaches dsh-tool-manager the cap:<name> target form.",
   "license": "MIT",
@@ -22,6 +22,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b .",
     "prepack": "tsc -b ."
@@ -33,7 +36,7 @@
     "capability"
   ],
   "peerDependencies": {
-    "dsh-tool-manager": ">=0.2.0"
+    "@lvy-jsd/dsh-tool-manager": ">=0.2.0"
   },
   "dsh": {
     "bundle": {

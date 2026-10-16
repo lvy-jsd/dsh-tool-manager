@@ -2,4 +2,4 @@
 # Needs dsh-tool-manager-panel (it serves the data and the panel component).
 - insert:
     - id: tool-manager-dsbot-entry
-      name: dsh-tool-manager-dsbot-entry
+      name: '@lvy-jsd/dsh-tool-manager-dsbot-entry'

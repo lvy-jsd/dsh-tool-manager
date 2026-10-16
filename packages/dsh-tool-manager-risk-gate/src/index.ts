@@ -20,7 +20,7 @@
 // skips them and tells the model to load them individually. That keeps each
 // confirmation tied to exactly one dangerous tool.
 
-import type { Agent, Catalog, ExtensionContext } from 'dsh-tool-manager'
+import type { Agent, Catalog, ExtensionContext } from '@lvy-jsd/dsh-tool-manager'
 
 /** One `allow` entry: `true` or "*" for every high-risk tool, or a list of names. */
 export type AllowSpec = boolean | string | string[]

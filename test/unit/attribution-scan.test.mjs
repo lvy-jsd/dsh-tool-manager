@@ -25,7 +25,7 @@ const packages = fixture({
   'ds-bot': { 'lib/team.js': "const TEAM_TOOLS = ['note_add', 'weather_now', 'shared_name']" },
   'dsh-other': { 'lib/x.js': "const a = 'shared_name'", 'test/x.test.js': "const t = { name: 'weather_week' }" },
   'dsh-big': { 'node_modules/dep/lib/y.js': "const t = { name: 'hidden_dep_tool' }" },
-  'dsh-tool-manager-classifier-rules': { 'lib/index.js': "const t = { name: 'weather_week' }" },
+  '@lvy-jsd/dsh-tool-manager-classifier-rules': { 'lib/index.js': "const t = { name: 'weather_week' }" },
 })
 
 test('a single definer wins over packages that only mention the name', async () => {

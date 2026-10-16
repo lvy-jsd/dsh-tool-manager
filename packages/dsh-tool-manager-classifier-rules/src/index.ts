@@ -7,7 +7,7 @@
 //                      plugin declarations beat it.
 // Without this plugin the core puts every group under `uncategorized`.
 
-import type { Classifier, Disposer, ExtensionContext } from 'dsh-tool-manager'
+import type { Classifier, Disposer, ExtensionContext } from '@lvy-jsd/dsh-tool-manager'
 
 /** Tools whose name matches `match` (a regular expression) go to `group`. */
 export interface GroupRule {

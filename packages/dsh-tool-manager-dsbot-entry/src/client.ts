@@ -42,7 +42,7 @@ interface PanelClientExports {
 }
 
 ;(window as unknown as { __ModuleLoader__: ModuleLoader }).__ModuleLoader__.load({
-  id: 'dsh-tool-manager-dsbot-entry',
+  id: '@lvy-jsd/dsh-tool-manager-dsbot-entry',
   factory: (require) => {
     const React = require('react') as typeof import('react')
     const { createPortal } = require('react-dom') as typeof import('react-dom')
@@ -79,7 +79,7 @@ interface PanelClientExports {
 .tm-dsbot-host .tmp-heading{font-size:15px;line-height:24px}
 .bt-settings-close{z-index:3}
 `
-    const CSS_ID = 'dsh-tool-manager-dsbot-entry/entry.css'
+    const CSS_ID = '@lvy-jsd/dsh-tool-manager-dsbot-entry/entry.css'
     function ensureCss() {
       if (document.querySelector(`style[data-plugin-css="${CSS_ID}"]`)) return
       const tag = document.createElement('style')
@@ -182,7 +182,7 @@ interface PanelClientExports {
       if (slots === undefined) return
       let panel: PanelClientExports | undefined
       try {
-        panel = require('dsh-tool-manager-panel') as PanelClientExports | undefined
+        panel = require('@lvy-jsd/dsh-tool-manager-panel') as PanelClientExports | undefined
       } catch {
         return // the panel plugin is not loaded: nothing to show
       }

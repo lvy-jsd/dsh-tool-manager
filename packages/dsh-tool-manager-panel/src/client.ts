@@ -32,7 +32,7 @@ interface ClientContext {
 }
 
 ;(window as unknown as { __ModuleLoader__: ModuleLoader }).__ModuleLoader__.load({
-  id: 'dsh-tool-manager-panel',
+  id: '@lvy-jsd/dsh-tool-manager-panel',
   factory: (require) => {
     const React = require('react') as typeof import('react')
     type ReactNode = import('react').ReactNode
@@ -275,11 +275,11 @@ interface ClientContext {
 .tmp-table td{padding:4px 0;font-family:var(--dsw-font-family-mono,ui-monospace,monospace);word-break:break-word}
 .tmp-empty{color:var(--dsw-alias-label-tertiary);font-size:13px;padding:12px 0}
 `
-    const CSS_ID = 'dsh-tool-manager-panel/section.css'
+    const CSS_ID = '@lvy-jsd/dsh-tool-manager-panel/section.css'
     function ensureCss() {
       if (typeof document === 'undefined' || document.querySelector(`style[data-plugin-css="${CSS_ID}"]`)) return
       const tag = document.createElement('style')
-      tag.dataset.plugin = 'dsh-tool-manager-panel'
+      tag.dataset.plugin = '@lvy-jsd/dsh-tool-manager-panel'
       tag.dataset.pluginCss = CSS_ID
       tag.textContent = CSS
       document.head.appendChild(tag)

@@ -1,7 +1,7 @@
 # dsh-tool-manager-attribution-scan bundle patch: one loader entry.
 - insert:
     - id: tool-manager-attribution-scan
-      name: dsh-tool-manager-attribution-scan
+      name: '@lvy-jsd/dsh-tool-manager-attribution-scan'
       config:
         # false disables the scan entirely.
         enabled: true

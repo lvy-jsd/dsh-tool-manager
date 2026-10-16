@@ -1,7 +1,7 @@
 # dsh-tool-manager-persist bundle patch: one loader entry.
 - insert:
     - id: tool-manager-persist
-      name: dsh-tool-manager-persist
+      name: '@lvy-jsd/dsh-tool-manager-persist'
       config:
         # false disables the plugin entirely.
         enabled: true

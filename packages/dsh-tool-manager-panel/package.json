@@ -1,5 +1,5 @@
 {
-  "name": "dsh-tool-manager-panel",
+  "name": "@lvy-jsd/dsh-tool-manager-panel",
   "version": "0.1.0",
   "description": "Web panel for dsh-tool-manager: browse the tool directory, see what each live session has loaded and what it costs, and load or unload from the UI.",
   "license": "MIT",
@@ -27,6 +27,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b . tsconfig.client.json",
     "prepack": "tsc -b . tsconfig.client.json"
@@ -39,7 +42,7 @@
     "web"
   ],
   "peerDependencies": {
-    "dsh-tool-manager": ">=0.2.0"
+    "@lvy-jsd/dsh-tool-manager": ">=0.2.0"
   },
   "dsh": {
     "bundle": {

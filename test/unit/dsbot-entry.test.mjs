@@ -21,7 +21,7 @@ const makeCtx = () => {
 
 test('panel client exports its section component for other entry points', () => {
   const spec = loadFactory('../../packages/dsh-tool-manager-panel/lib/client.js')
-  assert.equal(spec.id, 'dsh-tool-manager-panel')
+  assert.equal(spec.id, '@lvy-jsd/dsh-tool-manager-panel')
   const mod = spec.factory((id) => (id === 'react' ? react : {}))
   assert.equal(typeof mod.ToolManagerSection, 'function')
   assert.equal(mod.NS, 'tool-manager.panel')
@@ -30,7 +30,7 @@ test('panel client exports its section component for other entry points', () => 
 test('dsbot entry registers one shell overlay with the panel dictionaries', () => {
   const panel = loadFactory('../../packages/dsh-tool-manager-panel/lib/client.js').factory((id) => (id === 'react' ? react : {}))
   const spec = loadFactory('../../packages/dsh-tool-manager-dsbot-entry/lib/client.js')
-  const mod = spec.factory((id) => (id === 'react' ? react : id === 'react-dom' ? { createPortal: () => null } : id === 'dsh-tool-manager-panel' ? panel : {}))
+  const mod = spec.factory((id) => (id === 'react' ? react : id === 'react-dom' ? { createPortal: () => null } : id === '@lvy-jsd/dsh-tool-manager-panel' ? panel : {}))
   const { ctx, registrations } = makeCtx()
   mod.apply(ctx)
   assert.equal(registrations.length, 1)
@@ -41,7 +41,7 @@ test('dsbot entry registers one shell overlay with the panel dictionaries', () =
 test('dsbot entry stays silent when the panel plugin is not loaded', () => {
   const spec = loadFactory('../../packages/dsh-tool-manager-dsbot-entry/lib/client.js')
   const mod = spec.factory((id) => {
-    if (id === 'dsh-tool-manager-panel') throw new Error('module not found')
+    if (id === '@lvy-jsd/dsh-tool-manager-panel') throw new Error('module not found')
     return id === 'react' ? react : { createPortal: () => null }
   })
   const { ctx, registrations } = makeCtx()
