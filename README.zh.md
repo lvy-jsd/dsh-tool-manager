@@ -68,10 +68,20 @@ README 和 [docs/DESIGN.md](docs/DESIGN.md) 第 11 节。
 
 ## 开发与测试
 
+核心包用 TypeScript 编写（`src/`），编译到 `lib/`（JavaScript 加 `.d.ts` 类型声明）；
+`lib/` 是构建产物，不进 git。其余包目前仍是纯 JavaScript。
+
 ```sh
-node --test test/unit/*.test.mjs   # 纯 catalog 与注册表测试
+npm install                        # 同时把本机 DSH 的宿主包链接进来（scripts/link-host.mjs）
+npm run build                      # src/*.ts -> lib/*.js + lib/*.d.ts
+npm run typecheck                  # 严格类型检查，不输出文件
+node --test test/unit/*.test.mjs   # 纯 catalog 与注册表测试（需先构建）
 node test/e2e.mjs                  # 启动一次性 DSH 实例；绝不碰你的正式 profile
 ```
+
+宿主包（`@deepseek-ai/*`）是 peer 依赖，永远不从 npm 安装（`.npmrc` 设了
+`legacy-peer-deps`）：插件旁边多一份 npm 的副本，会遮蔽你实际运行的 DSH。
+`npm install` 会改为从 `$DSH_APP`（默认 `~/.local/share/deepseek-harness/app`）链接。
 
 端到端测试在临时 `DSH_HOME` 里为每个 profile 启动仓库自带的 `headless`
 profile（`core`、`rules`、`preset`、`persist`、`attr`、`attr-rules`、

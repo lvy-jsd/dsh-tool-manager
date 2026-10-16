@@ -6,16 +6,25 @@
   "author": "lvy-jsd",
   "type": "module",
   "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "exports": {
-    ".": "./lib/index.js",
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "src",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "build": "tsc -p .",
+    "prepare": "tsc -p ."
+  },
   "keywords": [
     "dsh",
     "deepseek-harness",

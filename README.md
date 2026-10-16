@@ -69,10 +69,22 @@ is in the core README and [docs/DESIGN.md](docs/DESIGN.md) §11.
 
 ## Develop and test
 
+The core package is written in TypeScript (`src/`) and compiled to `lib/`
+(JavaScript plus `.d.ts` type declarations); `lib/` is build output and not
+committed. The other packages are still plain JavaScript.
+
 ```sh
-node --test test/unit/*.test.mjs   # pure catalog and registry tests
+npm install                        # also links your local DSH host packages (scripts/link-host.mjs)
+npm run build                      # src/*.ts -> lib/*.js + lib/*.d.ts
+npm run typecheck                  # strict type check, no output
+node --test test/unit/*.test.mjs   # pure catalog and registry tests (needs a build)
 node test/e2e.mjs                  # boots throwaway DSH instances; never touches your profile
 ```
+
+Host packages (`@deepseek-ai/*`) are peers and are never installed from the
+registry (`.npmrc` sets `legacy-peer-deps`): a registry copy next to the plugin
+would shadow the DSH you actually run. `npm install` links them from
+`$DSH_APP` (default `~/.local/share/deepseek-harness/app`) instead.
 
 The end-to-end test boots the shipped `headless` profile in a temporary
 `DSH_HOME` once per profile (`core`, `rules`, `preset`, `persist`, `attr`,
