@@ -12,6 +12,13 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildCatalog, resolveTarget, toolsUnder, UNCATEGORIZED } from './catalog.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
+import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolSchema } from './types.js'
+
+export type * from './types.js'
+export { buildCatalog, resolveTarget, toolsUnder, estimateTokens, summary, shortName, structuralGroup, DEFAULT_CATEGORIES, UNCATEGORIZED, MISC_GROUP, OVERRIDE_PRIORITY } from './catalog.js'
+export type { BuildOptions } from './catalog.js'
+export type { RegisteredClassifier, RegisteredFilter } from './service.js'
+export type { VisibilityController, VisibilityOptions } from './visibility.js'
 
 export const name = 'tool-manager'
 export const inject = ['tools']
@@ -37,19 +44,19 @@ export const DEFAULT_PINNED = [
 
 const TEXT_OUTPUT = {
   schema: { type: 'string' },
-  render: (_args, value) => [{ type: 'text', text: String(value) }],
-}
+  render: (_args: unknown, value: string) => [{ type: 'text' as const, text: String(value) }],
+} as const
 
-function fmtTokens(n) {
+function fmtTokens(n: number): string {
   return n >= 1000 ? `~${(n / 1000).toFixed(1)}k tok` : `~${n} tok`
 }
 
-function pad(text, width) {
+function pad(text: string, width: number): string {
   return text.length >= width ? `${text} ` : text + ' '.repeat(width - text.length)
 }
 
-export function apply(ctx, config = {}) {
-  const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager') : ctx.logger) ?? console
+export function apply(ctx: HostContext, config: CoreConfig = {}) {
+  const logger: Logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager') : ctx.logger) ?? console
   // Model routes whose tool list is handed to an external client once per
   // session and never refreshed (Claude Code receives DSH tools through an MCP
   // bridge at startup). Narrowing such a session hides tools it can then never
@@ -59,17 +66,17 @@ export function apply(ctx, config = {}) {
   const exemptProviders = new Set(config.exemptProviders ?? ['claude-code'])
 
   /** The route an agent's next request will use: latest model/selection, else its options. */
-  const selectionScan = new WeakMap() // session -> { seq, provider } (incremental scan)
-  function providerOf(agent) {
+  const selectionScan = new WeakMap<object, { seq: number, provider: string | undefined }>() // session -> incremental scan
+  function providerOf(agent: Agent): string | undefined {
     const session = agent?.session
     try {
       if (session && typeof session.eventAt === 'function' && Number.isInteger(session.seq)) {
         const memo = selectionScan.get(session) ?? { seq: 0, provider: undefined }
-        for (let seq = memo.seq; seq < session.seq; seq += 1) {
+        for (let seq = memo.seq; seq < session.seq!; seq += 1) {
           const event = session.eventAt(seq)
           if (event?.type === 'model/selection' && event.data?.provider) memo.provider = event.data.provider
         }
-        memo.seq = session.seq
+        memo.seq = session.seq!
         selectionScan.set(session, memo)
         if (memo.provider) return memo.provider
       }
@@ -82,7 +89,7 @@ export function apply(ctx, config = {}) {
   // High-risk tools can be loaded individually only while at least one risk
   // gate (e.g. dsh-tool-manager-risk-gate) is registered; the gate confirms the
   // load before it executes. With no gate, high-risk loads are refused.
-  const riskGates = new Set()
+  const riskGates = new Set<{ name: string }>()
 
   const pinnedSet = () => {
     const set = new Set([...DEFAULT_PINNED, ...(config.pinned ?? [])])
@@ -96,15 +103,15 @@ export function apply(ctx, config = {}) {
   // agent's ancestor scopes (its preset). In the DSH web profile most tools
   // live in a preset layer, so a global-only catalog would hide them without
   // listing them. Agents with the same tool set share one cached catalog.
-  const catalogs = new Map()  // key (sorted names) -> catalog
-  let manifestAnnotations = null
+  const catalogs = new Map<string, Catalog>()  // key (sorted names) -> catalog
+  let manifestAnnotations: Annotation[] | null = null
   const invalidate = () => { catalogs.clear() }
   const registries = createRegistries(() => {
     invalidate()
     visibility?.refresh()
   })
 
-  function schemaOf(definition, name) {
+  function schemaOf(definition: { description?: string, parameters?: unknown }, name: string): ToolSchema {
     try {
       if (typeof ctx.tools.schemaOf === 'function') return ctx.tools.schemaOf(definition, false)
     } catch {
@@ -114,11 +121,11 @@ export function apply(ctx, config = {}) {
   }
 
   /** Schemas of tools an agent inherits from its ancestor (preset) layers. */
-  function inheritedSchemas(agent) {
+  function inheritedSchemas(agent: Agent | undefined): ToolSchema[] {
     const layers = ctx.tools.layers
     if (!agent || typeof layers?.chainLayers !== 'function') return []
     const own = layers.peek?.(agent)
-    const out = []
+    const out: ToolSchema[] = []
     for (const layer of layers.chainLayers(agent)) {
       if (layer === own) continue
       for (const [name, definition] of layer.tools.entries()) out.push(schemaOf(definition, name))
@@ -127,9 +134,9 @@ export function apply(ctx, config = {}) {
   }
 
   /** Catalog for one agent, or for the union of all live agents when omitted. */
-  const getCatalog = (agent) => {
+  const getCatalog = (agent?: Agent): Catalog => {
     const pinned = pinnedSet()
-    const byName = new Map(ctx.tools.schemas().map((s) => [s.name, s]))
+    const byName = new Map<string, ToolSchema>(ctx.tools.schemas().map((s) => [s.name, s]))
     for (const a of agent ? [agent] : visibility.agents()) {
       for (const s of inheritedSchemas(a)) if (!byName.has(s.name)) byName.set(s.name, s)
     }
@@ -159,7 +166,10 @@ export function apply(ctx, config = {}) {
     // The catalog is rebuilt lazily after any registry change.
     invalidate,
     onStateChange: (agent, state) => ctx.emit('tool-catalog/state-changed', { agent, state }),
-    isExempt: (agent) => exemptProviders.has(providerOf(agent)),
+    isExempt: (agent) => {
+      const provider = providerOf(agent)
+      return provider !== undefined && exemptProviders.has(provider)
+    },
     logger,
   })
 
@@ -174,16 +184,16 @@ export function apply(ctx, config = {}) {
 
   // Rescue a direct call of a hidden tool (see rescueHiddenCall). Runs before
   // dispatch resolves the name, so loading here makes the call succeed.
-  ctx.effect(() => ctx.on('tools/pre-execute', async (exec, next) => {
+  ctx.effect(() => ctx.on('tools/pre-execute', async (exec: { agent?: Agent, name: string } | undefined, next: () => unknown) => {
     const agent = exec?.agent
-    if (!agent || pinnedSet().has(exec.name) || ENTRY_TOOLS.includes(exec.name)) return next()
-    const refusal = await rescueHiddenCall(agent, exec.name)
+    if (!agent || pinnedSet().has(exec!.name) || ENTRY_TOOLS.includes(exec!.name)) return next()
+    const refusal = await rescueHiddenCall(agent, exec!.name)
     if (refusal !== undefined) return { kind: 'deny', reason: refusal }
     return next()
   }), 'tool-manager.rescue-hidden-call()')
 
   // --- the toolCatalog service ---------------------------------------------------
-  ctx.provide('toolCatalog', {
+  const service = {
     registerClassifier: registries.registerClassifier,
     annotate: registries.annotate,
     defineCategory: registries.defineCategory,
@@ -204,7 +214,7 @@ export function apply(ctx, config = {}) {
      * Declare that a plugin confirms high-risk loads (normally by returning
      * {kind:'ask'} from tools/pre-execute for tools_load). Returns a disposer.
      */
-    registerRiskGate(gate = {}) {
+    registerRiskGate(gate: RiskGate = {}): Disposer {
       const entry = { name: gate.name ?? 'anonymous' }
       riskGates.add(entry)
       return () => { riskGates.delete(entry) }
@@ -217,25 +227,25 @@ export function apply(ctx, config = {}) {
       visibility.refresh()
     },
     /** Catalog as one agent sees it, or the union over live agents. */
-    get: (agent) => getCatalog(agent),
-    resolve: (target, agent) => resolveTarget(getCatalog(agent), target, [...registries.resolvers]),
+    get: (agent?: Agent) => getCatalog(agent),
+    resolve: (target: string, agent?: Agent) => resolveTarget(getCatalog(agent), target, [...registries.resolvers]),
     /** Loaded state of one agent: { loaded, groups, excluded, handoffGroups, handoffTools } (Sets). */
-    stateOf: (agent) => visibility.stateOf(agent),
+    stateOf: (agent: Agent) => visibility.stateOf(agent),
     /** Plain JSON of an agent's loaded state, for persistence plugins. */
-    exportState: (agent) => visibility.exportState(agent),
+    exportState: (agent: Agent) => visibility.exportState(agent),
     /** Replace an agent's loaded state (e.g. restored after a restart). */
-    importState: (agent, state) => visibility.importState(agent, state),
-    allowFor: (agent) => visibility.allowFor(agent),
+    importState: (agent: Agent, state: Partial<SerializedState>) => visibility.importState(agent, state),
+    allowFor: (agent: Agent) => visibility.allowFor(agent),
     /** True when the agent's model route is in `exemptProviders` (never narrowed). */
-    isExempt: (agent) => visibility.isExempt(agent),
+    isExempt: (agent: Agent) => visibility.isExempt(agent),
     /**
      * Load/unload on behalf of an agent, through the same path as the entry
      * tools (hooks, vetoes, risk gates and persistence all apply). Returns the
      * same text the model would see. Intended for UI plugins such as
      * dsh-tool-manager-panel.
      */
-    load: (agent, targets, options) => loadTargets(agent, targets, options),
-    unload: (agent, targets) => unloadTargets(agent, targets),
+    load: (agent: Agent, targets: readonly string[], options?: LoadOptions) => loadTargets(agent, targets, options),
+    unload: (agent: Agent, targets: readonly string[]) => unloadTargets(agent, targets),
     /** Live agents, each with its parent when it is a subagent. */
     agents: () => {
       // The parent lookup goes through the injected agents API: the plugin ctx
@@ -268,7 +278,7 @@ export function apply(ctx, config = {}) {
      * Structured cross-directory search for UIs: the same matching rules as
      * tools_ls(query), returned as data instead of text.
      */
-    find: (query, path = '/') => {
+    find: (query: string, path = '/') => {
       const cat = getCatalog()
       const node = resolveTarget(cat, path, [...registries.resolvers])
       if (node.kind === 'missing') return []
@@ -284,7 +294,7 @@ export function apply(ctx, config = {}) {
       }))
     },
     /** Schema tokens actually sent for an agent: pinned tools plus its loaded set. */
-    wireTokens: (agent) => {
+    wireTokens: (agent: Agent) => {
       const visible = new Set(visibility.allowFor(agent) ?? [])
       const cat = getCatalog(agent)
       let tokens = 0
@@ -294,7 +304,8 @@ export function apply(ctx, config = {}) {
       }
       return tokens
     },
-  })
+  } satisfies ToolCatalogService
+  ctx.provide('toolCatalog', service)
 
   // --- direct calls of a hidden tool -----------------------------------------------
   //
@@ -310,7 +321,7 @@ export function apply(ctx, config = {}) {
   //     has to go through the risk gate and its approval.
   // The cost is a few tokens when the model skips the directory; the benefit is
   // that forgetting to pin a protocol tool degrades instead of breaking.
-  async function rescueHiddenCall(agent, name) {
+  async function rescueHiddenCall(agent: Agent, name: string): Promise<string | undefined> {
     // allowFor() is null for an agent this plugin does not track (and for one
     // whose context cannot restrict at all): nothing to rescue there.
     if (visibility.allowFor(agent) === null) return undefined
@@ -329,7 +340,7 @@ export function apply(ctx, config = {}) {
     try {
       await ctx.serial('tool-catalog/before-load', { agent, targets: [name], names: [name], rescue: true })
     } catch (error) {
-      return `Load of "${name}" refused: ${error?.message ?? error}`
+      return `Load of "${name}" refused: ${errorText(error)}`
     }
     visibility.update(agent, (next) => {
       next.loaded.add(name)
@@ -348,24 +359,24 @@ export function apply(ctx, config = {}) {
   }
 
   // --- listing -------------------------------------------------------------------
-  function visibleSetFor(agent) {
+  function visibleSetFor(agent: Agent | undefined): Set<string> | null {
     const allow = agent ? visibility.allowFor(agent) : null
     return allow ? new Set(allow) : null
   }
 
-  function toolLine(tool, visible, withPath = false) {
+  function toolLine(tool: ToolEntry, visible: Set<string> | null, withPath = false): string {
     const marks = `${visible?.has(tool.name) ? '*' : ' '}${tool.highRisk ? '!' : ' '}`
     const label = withPath ? `/${tool.category}/${tool.group}/${tool.short}` : tool.short
     return `  ${marks} ${pad(label, withPath ? 48 : 34)}${pad(fmtTokens(tool.tokens), 11)}${tool.summary}`
   }
 
-  function listing(cat, node, visible) {
-    const count = (tools) => ({
+  function listing(cat: Catalog, node: CatalogNode, visible: Set<string> | null): string {
+    const count = (tools: readonly ToolEntry[]) => ({
       n: tools.length,
       loaded: tools.filter((t) => visible?.has(t.name)).length,
       tokens: tools.reduce((s, t) => s + t.tokens, 0),
     })
-    const lines = []
+    const lines: string[] = []
     if (node.kind === 'root') {
       lines.push('/  (categories; * = loaded, ! = high risk; tools_ls with query searches everything)')
       for (const category of cat.categories.values()) {
@@ -390,7 +401,7 @@ export function apply(ctx, config = {}) {
   }
 
   /** Tools under `node` matching every word of `query` (name, group, category, description). */
-  function matchingTools(cat, node, query) {
+  function matchingTools(cat: Catalog, node: CatalogNode, query: unknown): ToolEntry[] {
     const words = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean)
     if (!words.length) return []
     return toolsUnder(cat, node).filter((t) => {
@@ -399,16 +410,16 @@ export function apply(ctx, config = {}) {
     })
   }
 
-  function search(cat, node, query, visible) {
+  function search(cat: Catalog, node: CatalogNode, query: string, visible: Set<string> | null): string {
     const hits = matchingTools(cat, node, query)
     if (!hits.length) return `No tools match "${query}".`
     const shown = hits.slice(0, 40)
     return [`${hits.length} match(es) for "${query}" (load by path or full name):`, ...shown.map((t) => toolLine(t, visible, true)), hits.length > shown.length ? `  … ${hits.length - shown.length} more; narrow the query or the path` : ''].filter(Boolean).join('\n')
   }
 
-  function agentOf(exec) {
+  function agentOf(exec: { agent?: unknown } | undefined): Agent {
     if (!exec?.agent) throw new Error('tool-manager: this tool must be called by an agent')
-    return exec.agent
+    return exec.agent as Agent
   }
 
   // --- load / unload (shared by the entry tools and the toolCatalog service) -------
@@ -419,17 +430,17 @@ export function apply(ctx, config = {}) {
    * apply identically; risk-gate approval does not, since a panel click is
    * itself the user's consent.
    */
-  async function loadTargets(agent, targets, { forSubagents = false } = {}) {
+  async function loadTargets(agent: Agent, targets: readonly string[], { forSubagents = false }: LoadOptions = {}): Promise<string> {
     const cat = getCatalog(agent)
     const nodes = targets.map((raw) => ({ raw, node: resolveTarget(cat, raw, [...registries.resolvers]) }))
     const names = nodes.flatMap(({ node }) => (node.kind === 'root' || node.kind === 'missing' ? [] : toolsUnder(cat, node).map((t) => t.name)))
     try {
       await ctx.serial('tool-catalog/before-load', { agent, targets, names })
     } catch (error) {
-      return `Load refused: ${error?.message ?? error}`
+      return `Load refused: ${errorText(error)}`
     }
     const before = new Set(visibility.allowFor(agent) ?? [])
-    const notes = []
+    const notes: string[] = []
     visibility.update(agent, (state) => {
       for (const { raw, node } of nodes) {
         if (node.kind === 'missing' || node.kind === 'root') {
@@ -481,12 +492,12 @@ export function apply(ctx, config = {}) {
   }
 
   /** Hide targets again. Returns the model-facing text. */
-  async function unloadTargets(agent, targets) {
+  async function unloadTargets(agent: Agent, targets: readonly string[]): Promise<string> {
     const cat = getCatalog(agent)
     try {
       await ctx.serial('tool-catalog/before-unload', { agent, targets })
     } catch (error) {
-      return `Unload refused: ${error?.message ?? error}`
+      return `Unload refused: ${errorText(error)}`
     }
     const before = new Set(visibility.allowFor(agent) ?? [])
     visibility.update(agent, (state) => {
@@ -534,10 +545,10 @@ export function apply(ctx, config = {}) {
     output: TEXT_OUTPUT,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const cat = getCatalog(exec?.agent)
+      const cat = getCatalog(exec?.agent as Agent | undefined)
       const node = resolveTarget(cat, args.path ?? '/', [...registries.resolvers])
       if (node.kind === 'missing') return `No such path: ${node.target}. Start from tools_ls("/") or search with tools_ls({query}).`
-      const visible = visibleSetFor(exec?.agent)
+      const visible = visibleSetFor(exec?.agent as Agent | undefined)
       return args.query ? search(cat, node, args.query, visible) : listing(cat, node, visible)
     },
   }))
@@ -568,6 +579,17 @@ export function apply(ctx, config = {}) {
       return unloadTargets(agentOf(exec), args.targets ?? [])
     },
   }))
+}
+
+/** Options for toolCatalog.load / tools_load. */
+export interface LoadOptions {
+  /** Also hand the targets to subagents started afterwards. */
+  forSubagents?: boolean
+}
+
+/** The message of a thrown value, whatever was thrown. */
+function errorText(error: unknown): string {
+  return String((error as { message?: unknown } | null | undefined)?.message ?? error)
 }
 
 export default { name, inject, apply }
