@@ -8,7 +8,12 @@
 // Restrictions from other plugins (connector governance deny) intersect with
 // ours, so a hard deny always wins.
 
-function emptyState() {
+import type { Agent, AgentContext, Catalog, Disposer, HostContext, LoadState, Logger, SerializedState, StateProvider } from './types.js'
+import type { RegisteredFilter } from './service.js'
+
+const STATE_KEYS = ['loaded', 'groups', 'excluded', 'handoffGroups', 'handoffTools'] as const
+
+function emptyState(): LoadState {
   return {
     loaded: new Set(),      // individual tool names
     groups: new Set(),      // subscribed group names (future tools included)
@@ -19,40 +24,59 @@ function emptyState() {
 }
 
 /** Plain JSON form of one agent's state (sorted arrays). */
-export function serializeState(state) {
-  const out = {}
-  for (const [key, value] of Object.entries(state)) out[key] = [...value].sort()
+export function serializeState(state: LoadState): SerializedState {
+  const out = {} as SerializedState
+  for (const key of STATE_KEYS) out[key] = [...state[key]].sort()
   return out
 }
 
 /** Inverse of serializeState; unknown keys are ignored, values coerced to strings. */
-export function deserializeState(raw) {
+export function deserializeState(raw: Partial<Record<keyof LoadState, Iterable<unknown>>> | null | undefined): LoadState {
   const state = emptyState()
-  for (const key of Object.keys(state)) for (const value of raw?.[key] ?? []) state[key].add(String(value))
+  for (const key of STATE_KEYS) for (const value of raw?.[key] ?? []) state[key].add(String(value))
   return state
 }
 
-export function createVisibilityController(ctx, { pinned, entryTools = [], getFilters = () => [], getCatalog, invalidate, onStateChange, isExempt = () => false, logger }) {
-  const states = new Map()        // agent -> state
-  const installed = new Map()     // agent -> { key, dispose }
-  const providers = []            // state providers (persistence plugins)
-  const touched = new Set()       // agents mutated by a load/unload
-  let agentsApi = null
+export interface VisibilityOptions {
+  pinned: () => Iterable<string>
+  entryTools?: readonly string[]
+  getFilters?: () => readonly RegisteredFilter[]
+  getCatalog: (agent?: Agent) => Catalog
+  invalidate?: () => void
+  onStateChange?: (agent: Agent, state: SerializedState) => void
+  isExempt?: (agent: Agent) => boolean
+  logger?: Logger
+}
+
+interface RegisteredProvider {
+  name: string
+  load: NonNullable<StateProvider['load']>
+  save: NonNullable<StateProvider['save']>
+}
+
+export type VisibilityController = ReturnType<typeof createVisibilityController>
+
+export function createVisibilityController(ctx: Pick<HostContext, 'tools'>, { pinned, entryTools = [], getFilters = () => [], getCatalog, invalidate, onStateChange, isExempt = () => false, logger }: VisibilityOptions) {
+  const states = new Map<Agent, LoadState>()
+  const installed = new Map<Agent, { key: string, dispose: Disposer }>()
+  const providers: RegisteredProvider[] = []   // state providers (persistence plugins)
+  const touched = new Set<Agent>()             // agents mutated by a load/unload
+  let agentsApi: AgentContext['agents'] | null = null
   let syncing = false
   let disposed = false
 
   // --- names the host will accept in restrict() for this agent ------------
-  function restrictableNames(agent) {
+  function restrictableNames(agent: Agent): Set<string> {
     try {
       if (typeof ctx.tools.view === 'function') return new Set(ctx.tools.view(agent).restrictableNames)
     } catch (error) {
-      logger?.debug?.(`tool-manager: view() unavailable: ${error.message}`)
+      logger?.debug?.(`tool-manager: view() unavailable: ${(error as Error).message}`)
     }
     return new Set(ctx.tools.schemas().map((s) => s.name))
   }
 
-  function allowFor(agent) {
-    const state = states.get(agent)
+  function allowFor(agent: Agent): string[] {
+    const state = states.get(agent)!
     const catalog = getCatalog(agent)
     const wanted = new Set(pinned())
     for (const name of state.loaded) wanted.add(name)
@@ -70,7 +94,7 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
         const kept = new Set(filter(agent, [...allow]) ?? allow)
         allow = allow.filter((n) => kept.has(n) || entryTools.includes(n))
       } catch (error) {
-        logger?.warn?.(`tool-manager: visibility filter ${name} failed: ${error.message}`)
+        logger?.warn?.(`tool-manager: visibility filter ${name} failed: ${(error as Error).message}`)
       }
     }
     return allow.sort()
@@ -81,10 +105,10 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
   // nested install must not stack a second restriction (restrictions
   // intersect, and an orphan would hide every later load), so it only marks
   // the agent dirty and the outer call loops.
-  const busy = new Set()
-  const dirty = new Set()
+  const busy = new Set<Agent>()
+  const dirty = new Set<Agent>()
 
-  function install(agent) {
+  function install(agent: Agent) {
     if (!states.has(agent) || agent?.ctx?.tools?.restrict === undefined) return
     if (busy.has(agent)) {
       dirty.add(agent)
@@ -101,7 +125,7 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
     }
   }
 
-  function installOnce(agent) {
+  function installOnce(agent: Agent) {
     // An exempt agent (e.g. a Claude Code route, whose tool list is handed over
     // once at session start and never refreshed) gets no restriction at all; a
     // restriction installed before it switched route is lifted.
@@ -117,11 +141,11 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
     try {
       // New restriction first, then release the old one, so there is never a
       // moment with no restriction (which would expose every tool).
-      const dispose = agent.ctx.tools.restrict({ allow })
+      const dispose = agent.ctx!.tools!.restrict!({ allow })
       installed.set(agent, { key, dispose })
       current?.dispose?.()
     } catch (error) {
-      logger?.warn?.(`tool-manager: restrict agent ${agent?.id} failed: ${error.message}`)
+      logger?.warn?.(`tool-manager: restrict agent ${String(agent?.id)} failed: ${(error as Error).message}`)
     }
   }
 
@@ -135,32 +159,34 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
         if (!states.has(agent)) adopt(agent)
         install(agent)
       }
-      for (const agent of [...states.keys()]) if (!agentsApi.list().includes(agent)) forget(agent)
+      const live = agentsApi.list()
+      for (const agent of [...states.keys()]) if (!live.includes(agent)) forget(agent)
     } finally {
       syncing = false
     }
   }
 
-  function parentOf(agent) {
-    if (typeof agentsApi?.isOwnedBy !== 'function') return undefined
-    return agentsApi.list().find((candidate) => candidate !== agent && agentsApi.isOwnedBy(agent.id, candidate))
+  function parentOf(agent: Agent): Agent | undefined {
+    const api = agentsApi
+    if (typeof api?.isOwnedBy !== 'function') return undefined
+    return api.list().find((candidate) => candidate !== agent && api.isOwnedBy!(agent.id, candidate))
   }
 
   /** State handed back by a provider, or null when none has any. */
-  function stateFromProviders(agent) {
+  function stateFromProviders(agent: Agent): LoadState | null {
     for (const { name, load } of providers) {
       try {
         const raw = load(agent)
         if (raw) return deserializeState(raw)
       } catch (error) {
-        logger?.warn?.(`tool-manager: state provider ${name} failed to load: ${error.message}`)
+        logger?.warn?.(`tool-manager: state provider ${name} failed to load: ${(error as Error).message}`)
       }
     }
     return null
   }
 
   /** What an agent starts from: pinned tools plus the parent's handoff. */
-  function fallbackState(agent) {
+  function fallbackState(agent: Agent): LoadState {
     const state = emptyState()
     const parent = parentOf(agent)
     const parentState = parent && states.get(parent)
@@ -171,17 +197,17 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
     return state
   }
 
-  function adopt(agent) {
+  function adopt(agent: Agent) {
     states.set(agent, stateFromProviders(agent) ?? fallbackState(agent))
   }
 
   /** Save a state change through every provider (fire and forget). */
-  function broadcast(agent, state) {
+  function broadcast(agent: Agent, state: SerializedState) {
     for (const { name, save } of providers) {
       try {
         save(agent, state)
       } catch (error) {
-        logger?.warn?.(`tool-manager: state provider ${name} failed to save: ${error.message}`)
+        logger?.warn?.(`tool-manager: state provider ${name} failed to save: ${(error as Error).message}`)
       }
     }
   }
@@ -191,8 +217,8 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
    * restart). `load(agent)` returns a serialized state or null; `save(agent,
    * state)` receives plain JSON. Returns a disposer.
    */
-  function registerStateProvider(provider = {}) {
-    const entry = { name: provider.name ?? 'anonymous', load: provider.load ?? (() => null), save: provider.save ?? (() => {}) }
+  function registerStateProvider(provider: StateProvider = {}): Disposer {
+    const entry: RegisteredProvider = { name: provider.name ?? 'anonymous', load: provider.load ?? (() => null), save: provider.save ?? (() => {}) }
     providers.push(entry)
     // A persistence plugin normally mounts after this controller's first sync,
     // so agents already adopted from the fallback state (nothing loaded yet)
@@ -212,26 +238,26 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
     }
   }
 
-  function forget(agent) {
+  function forget(agent: Agent) {
     states.delete(agent)
     touched.delete(agent)
     installed.get(agent)?.dispose?.()
     installed.delete(agent)
   }
 
-  function mount(agentCtx) {
+  function mount(agentCtx: AgentContext): Disposer {
     agentsApi = agentCtx.agents
     const stops = [
-      agentCtx.on('agent/created', ({ agent }) => {
+      agentCtx.on('agent/created', ({ agent }: { agent: Agent }) => {
         invalidate?.()
         if (!states.has(agent)) adopt(agent)
         install(agent)
       }),
-      agentCtx.on('agent/disposed', ({ agent }) => forget(agent)),
+      agentCtx.on('agent/disposed', ({ agent }: { agent: Agent }) => forget(agent)),
       agentCtx.on('tools/change', () => { invalidate?.(); syncAll() }),
       // A route switch (model/selection) can make an agent exempt or not; it is
       // appended before the next request, so re-evaluate right away.
-      agentCtx.on('session/event', (session, event) => {
+      agentCtx.on('session/event', (session: { id?: unknown } | undefined, event: { type?: string } | undefined) => {
         if (event?.type !== 'model/selection' && event?.type !== 'request/context') return
         const agent = agentsApi?.get?.(session?.id)
         if (agent && states.has(agent)) install(agent)
@@ -246,13 +272,13 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
     }
   }
 
-  function stateOf(agent) {
+  function stateOf(agent: Agent): LoadState {
     if (!states.has(agent)) adopt(agent)
-    return states.get(agent)
+    return states.get(agent)!
   }
 
   /** Apply a mutation to one agent's state, reinstall, and notify listeners. */
-  function update(agent, mutate) {
+  function update<R>(agent: Agent, mutate: (state: LoadState) => R): R {
     const state = stateOf(agent)
     touched.add(agent)
     const result = mutate(state)
@@ -264,7 +290,7 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
   }
 
   /** Replace one agent's state (e.g. restored by a persistence plugin). */
-  function importState(agent, raw) {
+  function importState(agent: Agent, raw: Parameters<typeof deserializeState>[0]) {
     states.set(agent, deserializeState(raw))
     install(agent)
   }
@@ -272,16 +298,16 @@ export function createVisibilityController(ctx, { pinned, entryTools = [], getFi
   return {
     mount,
     update,
-    agents: () => agentsApi?.list() ?? [],
+    agents: (): Agent[] => agentsApi?.list() ?? [],
     parentOf,
     stateOf,
     registerStateProvider,
     stateProviders: () => providers.map((p) => p.name),
-    exportState: (agent) => serializeState(stateOf(agent)),
+    exportState: (agent: Agent) => serializeState(stateOf(agent)),
     importState,
     // null for an agent this plugin does not restrict (untracked or exempt).
-    allowFor: (agent) => (states.has(agent) && !isExempt(agent) ? allowFor(agent) : null),
-    isExempt: (agent) => isExempt(agent),
+    allowFor: (agent: Agent): string[] | null => (states.has(agent) && !isExempt(agent) ? allowFor(agent) : null),
+    isExempt: (agent: Agent) => isExempt(agent),
     refresh: syncAll,
     dispose() {
       disposed = true
