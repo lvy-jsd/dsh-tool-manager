@@ -15,12 +15,49 @@
 // If the expected DOM is not there (ds-bot changed, or is not installed), the
 // module does nothing. ds-bot keeps every node it rendered; this module only
 // adds and removes its own.
-window.__ModuleLoader__.load({
+//
+// A classic script, not a module: tsc only strips the types (see
+// tsconfig.client.json), with no bundler.
+
+// The host surface this file touches, described by use: the host's own types
+// for these are merge-extensible maps that other packages augment, which a
+// standalone build cannot see.
+interface ModuleLoader {
+  load(registration: { id: string, factory: (require: (specifier: string) => unknown) => Record<string, unknown> }): void
+}
+type Translate = (key: string) => string
+type SectionComponent = import('react').ComponentType<{ t?: Translate }>
+interface OverlaySlots {
+  inject(name: string, fn: () => () => void): () => void
+  register(spec: Record<string, unknown>, component: SectionComponent): () => void
+}
+interface ClientContext {
+  get(name: string): unknown
+  effect(fn: () => void | (() => void), label?: string): void
+}
+/** What this module reads of dsh-tool-manager-panel's client exports. */
+interface PanelClientExports {
+  ToolManagerSection?: SectionComponent
+  NS?: string
+}
+
+;(window as unknown as { __ModuleLoader__: ModuleLoader }).__ModuleLoader__.load({
   id: 'dsh-tool-manager-dsbot-entry',
   factory: (require) => {
-    const React = require('react')
-    const { createPortal } = require('react-dom')
+    const React = require('react') as typeof import('react')
+    const { createPortal } = require('react-dom') as typeof import('react-dom')
     const h = React.createElement
+
+    interface Found {
+      dialog: Element
+      nav: Element
+      main: Element
+    }
+    interface Mount extends Found {
+      row: HTMLButtonElement
+      host: HTMLDivElement
+      onNavClick: (event: Event) => void
+    }
     const { useEffect, useRef, useState } = React
 
     const ID = 'tool-manager-dsbot-entry'
@@ -56,16 +93,16 @@ window.__ModuleLoader__.load({
     const ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>'
 
     /** Find the ds-bot settings dialog and its nav, or null when the DOM is not as expected. */
-    function findDialog() {
+    function findDialog(): Found | null {
       const dialog = document.querySelector('.bt-settings[role=dialog]')
       const nav = dialog?.querySelector(':scope > nav.bt-settings-nav')
       const main = dialog?.querySelector(':scope > .bt-settings-main')
       return dialog && nav && main ? { dialog, nav, main } : null
     }
 
-    function makeEntry(Section) {
-      return function DsbotEntry({ t }) {
-        const [mount, setMount] = useState(null) // { dialog, nav, row, host }
+    function makeEntry(Section: SectionComponent) {
+      return function DsbotEntry({ t }: { t?: Translate }) {
+        const [mount, setMount] = useState<Mount | null>(null)
         const [open, setOpen] = useState(false)
         const label = useRef('')
         label.current = typeof t === 'function' ? t('nav') : 'Tool manager'
@@ -73,7 +110,7 @@ window.__ModuleLoader__.load({
         // Watch for the dialog; attach once per dialog instance.
         useEffect(() => {
           ensureCss()
-          let current = null
+          let current: Mount | null = null
           const detach = () => {
             current?.row.remove()
             current?.host.remove()
@@ -103,8 +140,8 @@ window.__ModuleLoader__.load({
             host.hidden = true
             found.dialog.insertBefore(host, found.main.nextSibling)
             // Any ds-bot row closes the panel; ours toggles it open.
-            const onNavClick = (event) => {
-              const item = event.target.closest?.('.bt-settings-item')
+            const onNavClick = (event: Event) => {
+              const item = (event.target as Element).closest?.('.bt-settings-item')
               if (!item) return
               setOpen(item === row)
             }
@@ -140,12 +177,12 @@ window.__ModuleLoader__.load({
 
     const inject = ['slots', 'locale']
 
-    function apply(ctx) {
-      const slots = ctx.get('slots')
+    function apply(ctx: ClientContext) {
+      const slots = ctx.get('slots') as OverlaySlots | undefined
       if (slots === undefined) return
-      let panel
+      let panel: PanelClientExports | undefined
       try {
-        panel = require('dsh-tool-manager-panel')
+        panel = require('dsh-tool-manager-panel') as PanelClientExports | undefined
       } catch {
         return // the panel plugin is not loaded: nothing to show
       }

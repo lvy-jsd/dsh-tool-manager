@@ -1,6 +1,7 @@
 node_modules/
 # build output of TypeScript packages
 packages/dsh-tool-manager/lib/
+packages/dsh-tool-manager-dsbot-entry/lib/
 packages/dsh-tool-manager-panel/lib/
 packages/create-tool-manager-plugin/lib/
 packages/dsh-tool-manager-classifier-llm/lib/

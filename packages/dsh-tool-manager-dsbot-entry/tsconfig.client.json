@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // The browser half is a classic script that DSH concatenates with other
+  // plugins' bundles: legacy detection keeps tsc from adding "export {}", and
+  // alwaysStrict off keeps a leading "use strict" from leaking into the combo.
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/.client.tsbuildinfo",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "types": [],
+    "moduleDetection": "legacy",
+    "alwaysStrict": false,
+    "inlineSources": true
+  },
+  "files": ["src/client.ts"]
+}

@@ -10,6 +10,8 @@
     { "path": "packages/dsh-tool-manager-classifier-llm" },
     { "path": "packages/create-tool-manager-plugin" },
     { "path": "packages/dsh-tool-manager-panel" },
-    { "path": "packages/dsh-tool-manager-panel/tsconfig.client.json" }
+    { "path": "packages/dsh-tool-manager-panel/tsconfig.client.json" },
+    { "path": "packages/dsh-tool-manager-dsbot-entry" },
+    { "path": "packages/dsh-tool-manager-dsbot-entry/tsconfig.client.json" }
   ]
 }
