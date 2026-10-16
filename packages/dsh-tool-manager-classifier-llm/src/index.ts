@@ -22,6 +22,55 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import type { GenerateOptions, LlmRuntime } from '@deepseek-ai/dsh-llm'
+import type { Classifier, ExtensionContext, HostContext, Logger } from 'dsh-tool-manager'
+
+/** What the classifier needs of a group (a catalog Group or a GroupProbe both fit). */
+export interface GroupInput {
+  name: string
+  tools?: { name: string, description?: string }[]
+}
+
+/** Group cache key -> category. */
+export type CategoryCache = Record<string, string>
+
+/** Returns a category name (anything else counts as no answer) or throws. */
+export type ClassifyGroup = (group: GroupInput) => Promise<string | undefined> | string | undefined
+
+export interface LlmClassifierOptions {
+  name?: string
+  priority?: number
+  cache?: CategoryCache
+  classifyGroup?: ClassifyGroup
+  onBatch?(cache: CategoryCache): unknown
+  batchSize?: number
+  logger?: Logger
+  maxPending?: number
+}
+
+export interface LlmClassifier extends Classifier {
+  name: string
+  priority: number
+  categorize(group: GroupInput): string | undefined
+  schedule(): Promise<void>
+  drain(): Promise<void>
+  pending(): number
+  failedKeys(): string[]
+}
+
+export interface ClassifierLlmConfig {
+  enabled?: boolean
+  name?: string
+  priority?: number
+  cacheFile?: string
+  /** A cache object to use instead of reading cacheFile. */
+  cache?: CategoryCache
+  model?: { provider?: string, model?: string }
+  maxTokens?: number
+  batchSize?: number
+  /** Replaces the model call (tests, custom pipelines). */
+  classify?: ClassifyGroup
+}
 
 export const name = 'tool-manager-classifier-llm'
 export const inject = ['toolCatalog']
@@ -35,7 +84,7 @@ export const CATEGORIES = [
   'collaboration', 'automation', 'connectors', 'search', 'system',
 ]
 
-export function defaultCacheFile() {
+export function defaultCacheFile(): string {
   const dshHome = process.env.DSH_HOME || join(homedir(), '.config', 'deepseek-harness')
   return join(dshHome, 'tool-manager', 'classifier-cache.json')
 }
@@ -45,7 +94,7 @@ export function defaultCacheFile() {
  * each description is hashed so a rewritten description re-classifies while an
  * unrelated tool joining the group does not re-hash the rest.
  */
-export function groupKey(group) {
+export function groupKey(group: GroupInput): string {
   const parts = [...(group.tools ?? [])]
     .map((tool) => `${tool.name}:${createHash('sha1').update(String(tool.description ?? '')).digest('hex').slice(0, 12)}`)
     .sort()
@@ -53,30 +102,32 @@ export function groupKey(group) {
 }
 
 /** Read the cache; a corrupt or missing file is an empty cache, never a crash. */
-export function readCache(file, logger) {
+export function readCache(file: string, logger?: Logger): CategoryCache {
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8'))
     return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch (error) {
+  } catch (caught) {
+    const error = caught as NodeJS.ErrnoException
     if (error.code !== 'ENOENT') logger?.warn?.(`classifier-llm: ignoring unreadable cache ${file}: ${error.message}`)
     return {}
   }
 }
 
 /** Write the cache atomically, so a crash cannot leave a half-written file. */
-export function writeCache(file, cache, logger) {
+export function writeCache(file: string, cache: CategoryCache, logger?: Logger): void {
   try {
     mkdirSync(dirname(file), { recursive: true })
     const tmp = `${file}.tmp`
     writeFileSync(tmp, JSON.stringify(cache, null, 2))
     renameSync(tmp, file)
-  } catch (error) {
+  } catch (caught) {
+    const error = caught as Error
     logger?.warn?.(`classifier-llm: writing cache ${file} failed: ${error.message}`)
   }
 }
 
 /** Prompt for one group: the tool list plus the fixed category vocabulary. */
-export function buildPrompt(group) {
+export function buildPrompt(group: GroupInput): string {
   const tools = (group.tools ?? []).map((tool) => {
     const first = String(tool.description ?? '').split('\n')[0].trim().slice(0, 160)
     return `- ${tool.name}: ${first}`
@@ -93,7 +144,7 @@ export function buildPrompt(group) {
 }
 
 /** Pull the first category name out of a model answer, or undefined. */
-export function parseCategory(text) {
+export function parseCategory(text: unknown): string | undefined {
   const value = String(text ?? '').toLowerCase()
   for (const category of CATEGORIES) {
     if (new RegExp(`(^|[^a-z])${category}([^a-z]|$)`).test(value)) return category
@@ -114,13 +165,13 @@ export function createLlmClassifier({
   batchSize = 5,
   logger,
   maxPending = 200,
-} = {}) {
-  const pending = new Map()      // key -> group
-  const inFlight = new Set()     // keys being classified right now
-  const failed = new Set()       // keys that errored; not retried this process
+}: LlmClassifierOptions = {}): LlmClassifier {
+  const pending = new Map<string, GroupInput>()      // key -> group
+  const inFlight = new Set<string>()     // keys being classified right now
+  const failed = new Set<string>()       // keys that errored; not retried this process
   let pumping = false
 
-  function categorize(group) {
+  function categorize(group: GroupInput): string | undefined {
     const key = groupKey(group)
     const cached = cache[key]
     if (typeof cached === 'string') return cached
@@ -130,7 +181,7 @@ export function createLlmClassifier({
     return undefined
   }
 
-  async function pump() {
+  async function pump(): Promise<void> {
     if (pumping || typeof classifyGroup !== 'function') return
     pumping = true
     try {
@@ -141,7 +192,7 @@ export function createLlmClassifier({
         for (const [key, group] of batch) {
           inFlight.add(key)
           try {
-            const category = await classifyGroup(group)
+            const category = await classifyGroup!(group)
             if (typeof category === 'string' && CATEGORIES.includes(category)) {
               cache[key] = category
               changed = true
@@ -151,7 +202,8 @@ export function createLlmClassifier({
               failed.add(key)
               logger?.warn?.(`classifier-llm: no usable category for group "${group.name}"`)
             }
-          } catch (error) {
+          } catch (caught) {
+            const error = caught as Error
             failed.add(key)
             logger?.warn?.(`classifier-llm: classifying "${group.name}" failed: ${error.message}`)
           } finally {
@@ -166,7 +218,7 @@ export function createLlmClassifier({
   }
 
   /** Start the background pump; call it after any categorize() miss. */
-  function schedule() {
+  function schedule(): Promise<void> {
     if (pending.size === 0 || typeof classifyGroup !== 'function') return Promise.resolve()
     return pump()
   }
@@ -196,11 +248,11 @@ export function createLlmClassifier({
  * assembler, so this package needs no import from the harness — the `llm`
  * service is enough, and a deployment without it simply stays uncategorized.
  */
-export function createLlmCaller(llm, { provider, model, maxTokens = 16, temperature = 0 }) {
-  return async function classifyGroup(group) {
+export function createLlmCaller(llm: Pick<LlmRuntime, 'stream'>, { provider, model, maxTokens = 16, temperature = 0 }: { provider: string, model: string, maxTokens?: number, temperature?: number }): ClassifyGroup {
+  return async function classifyGroup(group: GroupInput): Promise<string | undefined> {
     let text = ''
     let finished = false
-    const options = {
+    const options: GenerateOptions = {
       provider,
       model,
       system: 'You are a strict classifier. You answer with one word.',
@@ -227,15 +279,15 @@ export function createLlmCaller(llm, { provider, model, maxTokens = 16, temperat
   }
 }
 
-export function apply(ctx, config = {}) {
+export function apply(ctx: ExtensionContext & Pick<HostContext, 'get'> & { llm?: Pick<LlmRuntime, 'stream'> }, config: ClassifierLlmConfig = {}) {
   const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-classifier-llm') : ctx.logger) ?? console
   if (config.enabled === false) return
   const file = config.cacheFile ?? defaultCacheFile()
   const cache = config.cache ?? readCache(file, logger)
   const target = config.model ?? {}
-  const llm = typeof ctx.get === 'function' ? ctx.get('llm') : ctx.llm
+  const llm = (typeof ctx.get === 'function' ? ctx.get('llm') : ctx.llm) as Pick<LlmRuntime, 'stream'> | undefined
 
-  let classifyGroup
+  let classifyGroup: ClassifyGroup | undefined
   if (typeof config.classify === 'function') {
     classifyGroup = config.classify   // injected for tests and custom pipelines
   } else if (llm !== undefined && target.provider && target.model) {
@@ -263,7 +315,8 @@ export function apply(ctx, config = {}) {
       // A new answer changes where a group belongs: rebuild so the model sees it.
       try {
         ctx.toolCatalog.refresh()
-      } catch (error) {
+      } catch (caught) {
+        const error = caught as Error
         logger.warn?.(`tool-manager-classifier-llm: refresh after classifying failed: ${error.message}`)
       }
     },
