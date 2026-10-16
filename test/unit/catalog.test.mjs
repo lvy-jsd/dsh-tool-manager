@@ -1,7 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { buildCatalog, resolveTarget, estimateTokens, UNCATEGORIZED } from '../../packages/dsh-tool-manager/lib/catalog.js'
-import { createRegistries, packageNameOf } from '../../packages/dsh-tool-manager/lib/service.js'
+import { createRegistries, listPluginPackages, packageNameOf, readManifestAnnotations } from '../../packages/dsh-tool-manager/lib/service.js'
 import {
   rulesClassifier, groupCategoriesFrom, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, USER_PRIORITY, DEFAULT_PRIORITY,
 } from '../../packages/dsh-tool-manager-classifier-rules/lib/index.js'
@@ -107,6 +111,42 @@ test('packageNameOf handles scoped and subpath specifiers', () => {
   assert.equal(packageNameOf('@scope/pkg/sub'), '@scope/pkg')
   assert.equal(packageNameOf('dsh-adb'), 'dsh-adb')
   assert.equal(packageNameOf('@deepseek-ai/dsh-tool-subagent/list-agents'), '@deepseek-ai/dsh-tool-subagent')
+})
+
+// The packages themselves are scoped (@lvy-jsd/…), so a scoped package's
+// dsh.toolCatalog must be found from its loader entry, including when its
+// exports hide package.json and the manifest is found by walking up.
+test('dsh.toolCatalog declarations of scoped packages are read from loader entries', () => {
+  const root = mkdtempSync(join(tmpdir(), 'tm-scoped-'))
+  const write = (dir, manifest) => {
+    const pkgDir = join(root, 'node_modules', dir)
+    mkdirSync(join(pkgDir, 'lib'), { recursive: true })
+    writeFileSync(join(pkgDir, 'lib', 'index.js'), 'export default {}\n')
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ type: 'module', main: 'lib/index.js', ...manifest }))
+  }
+  write('@acme/dsh-open', {
+    name: '@acme/dsh-open',
+    dsh: { toolCatalog: { match: '^open_', category: 'vendor', tools: { open_danger: { risk: 'high' } } } },
+  })
+  write('@acme/dsh-hidden', {
+    name: '@acme/dsh-hidden',
+    exports: { '.': './lib/index.js' },
+    dsh: { toolCatalog: { tools: { hidden_tool: { group: 'hidden' } } } },
+  })
+  const entries = [
+    { options: { name: '@acme/dsh-open/lib/index.js' } },
+    { options: { name: '@acme/dsh-hidden' } },
+    { options: { name: '@acme/dsh-open' } }, // the same package twice is listed once
+  ]
+  const ctx = { get: (name) => (name === 'loader' ? { baseUrl: pathToFileURL(join(root, 'noop.js')).href, entries: () => entries } : undefined) }
+
+  assert.deepEqual(listPluginPackages(ctx).map((p) => p.name), ['@acme/dsh-open', '@acme/dsh-hidden'])
+  const annotations = readManifestAnnotations(ctx)
+  assert.deepEqual(annotations.map((a) => [a.source, String(a.match), a.meta]), [
+    ['@acme/dsh-open', '/^open_/', { category: 'vendor' }],
+    ['@acme/dsh-open', 'open_danger', { category: 'vendor', risk: 'high' }],
+    ['@acme/dsh-hidden', 'hidden_tool', { group: 'hidden' }],
+  ])
 })
 
 test('a renamed group inherits the category of the structural group its tools came from', () => {
