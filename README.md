@@ -69,10 +69,11 @@ is in the core README and [docs/DESIGN.md](docs/DESIGN.md) §11.
 
 ## Develop and test
 
-The core package is written in TypeScript (`src/`) and compiled to `lib/`
+Every package is written in TypeScript (`src/`) and compiled to `lib/`
 (JavaScript plus `.d.ts` type declarations); `lib/` is build output and not
-committed. Packages migrate one at a time; `tsconfig.json` at the root lists
-the ones already in TypeScript, the rest are still plain JavaScript.
+committed. The root `tsconfig.json` lists the packages (project references);
+the two browser halves (`client.ts`) have their own `tsconfig.client.json`,
+because DSH loads them as classic scripts, not modules.
 
 ```sh
 npm install                        # also links your local DSH host packages (scripts/link-host.mjs)

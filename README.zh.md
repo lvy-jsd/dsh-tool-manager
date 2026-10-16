@@ -68,8 +68,9 @@ README 和 [docs/DESIGN.md](docs/DESIGN.md) 第 11 节。
 
 ## 开发与测试
 
-核心包用 TypeScript 编写（`src/`），编译到 `lib/`（JavaScript 加 `.d.ts` 类型声明）；
-`lib/` 是构建产物，不进 git。各包逐个迁移，根目录 `tsconfig.json` 列出已迁移的包，其余仍是纯 JavaScript。
+所有包都用 TypeScript 编写（`src/`），编译到 `lib/`（JavaScript 加 `.d.ts` 类型声明）；
+`lib/` 是构建产物，不进 git。根目录 `tsconfig.json` 列出所有包（项目引用）；两个浏览器端模块
+（`client.ts`）有各自的 `tsconfig.client.json`，因为 DSH 把它们当作经典脚本而不是模块加载。
 
 ```sh
 npm install                        # 同时把本机 DSH 的宿主包链接进来（scripts/link-host.mjs）

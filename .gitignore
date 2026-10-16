@@ -1,13 +1,4 @@
 node_modules/
-# build output of TypeScript packages
-packages/dsh-tool-manager/lib/
-packages/dsh-tool-manager-dsbot-entry/lib/
-packages/dsh-tool-manager-panel/lib/
-packages/create-tool-manager-plugin/lib/
-packages/dsh-tool-manager-classifier-llm/lib/
-packages/dsh-tool-manager-attribution-scan/lib/
-packages/dsh-tool-manager-capability-bridge/lib/
-packages/dsh-tool-manager-classifier-rules/lib/
-packages/dsh-tool-manager-persist/lib/
-packages/dsh-tool-manager-risk-gate/lib/
+# build output (and the tsc -b cache inside it)
+packages/*/lib/
 *.tsbuildinfo
