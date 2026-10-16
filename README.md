@@ -1,5 +1,7 @@
 # dsh-tool-manager (monorepo)
 
+English | [中文](README.zh.md)
+
 On-demand tool loading for DeepSeek Harness: every tool is browsable as a
 directory (category → group → tool) and only what an agent loads reaches the
 model's context. Built as a small core plus replaceable extension plugins.
@@ -73,8 +75,8 @@ node test/e2e.mjs                  # boots throwaway DSH instances; never touche
 ```
 
 The end-to-end test boots the shipped `headless` profile in a temporary
-`DSH_HOME` once per profile (`core`, `rules`, `preset`, `persist`, `gate`,
-`llm`, `cap`), with
+`DSH_HOME` once per profile (`core`, `rules`, `preset`, `persist`, `attr`,
+`attr-rules`, `exempt`, `gate`, `cap`, `llm`), with
 a test kit plugin and a scripted fake OpenAI-compatible model that records the
 exact tool list of every model request. The panel's server half is covered by
 unit tests that serve its routes over a real HTTP socket.
