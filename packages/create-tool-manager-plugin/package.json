@@ -6,18 +6,27 @@
   "author": "lvy-jsd",
   "type": "module",
   "main": "lib/cli.js",
+  "types": "lib/cli.d.ts",
   "bin": {
     "create-tool-manager-plugin": "./lib/index.js"
   },
   "exports": {
-    ".": "./lib/cli.js",
+    ".": {
+      "types": "./lib/cli.d.ts",
+      "default": "./lib/cli.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "src",
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "build": "tsc -b .",
+    "prepare": "tsc -b ."
+  },
   "keywords": [
     "dsh",
     "deepseek-harness",

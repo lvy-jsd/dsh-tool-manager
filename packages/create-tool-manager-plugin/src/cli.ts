@@ -18,12 +18,33 @@ import { dirname, join, resolve } from 'node:path'
 
 export const TYPES = ['classifier', 'filter', 'hook', 'declaration']
 
+export interface Args {
+  name?: string
+  type: string
+  dir?: string
+  help?: boolean
+}
+
+export interface ScaffoldOptions {
+  name?: string
+  type?: string
+  dir?: string
+  logger?(line: string): void
+}
+
+export interface ScaffoldResult {
+  dir: string
+  package: string
+  type: string
+  files: string[]
+}
+
 const YEAR = new Date().getFullYear()
 
-const kebab = (value) => String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-const camel = (value) => kebab(value).replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())
+const kebab = (value: unknown): string => String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+const camel = (value: unknown): string => kebab(value).replace(/-([a-z0-9])/g, (_: string, c: string) => c.toUpperCase())
 
-const PACKAGE_JSON = (name, type) => `${JSON.stringify({
+const PACKAGE_JSON = (name: string, type: string): string => `${JSON.stringify({
   name,
   version: '0.1.0',
   private: true,
@@ -37,14 +58,14 @@ const PACKAGE_JSON = (name, type) => `${JSON.stringify({
   ...(type === 'declaration' ? { dsh: { bundle: { patch: './cordis.patch.yml' }, toolCatalog: { match: '^my_', category: 'vendor' } } } : { dsh: { bundle: { patch: './cordis.patch.yml' } } }),
 }, null, 2)}\n`
 
-const PATCH = (name, type) => `# ${name} bundle patch: one loader entry.
+const PATCH = (name: string, type: string): string => `# ${name} bundle patch: one loader entry.
 - insert:
     - id: ${name}
       name: ${name}
 ${type === 'declaration' ? '' : `      config: {}
 `}`
 
-const LIB = (name, type) => {
+const LIB = (name: string, type: string): string => {
   if (type === 'classifier') {
     return `// ${name}: place tools into groups and categories.
 //
@@ -146,7 +167,7 @@ export default { name }
 `
 }
 
-const README = (name, type) => `# ${name}
+const README = (name: string, type: string): string => `# ${name}
 
 A [\`dsh-tool-manager\`](https://github.com/lvy-jsd/dsh-tool-manager) **${type}** extension.
 
@@ -183,7 +204,7 @@ ${type === 'classifier' ? '`registerClassifier` — place tools into groups and 
 MIT — see [LICENSE](LICENSE).
 `
 
-const TEST = (name, type) => {
+const TEST = (name: string, type: string): string => {
   const importPath = `../lib/index.js`
   if (type === 'declaration') {
     return `import { test } from 'node:test'
@@ -246,7 +267,7 @@ ${type === 'classifier' ? `test('${name}: registers a classifier that places its
 `
 }
 
-const LICENSE = (name) => `MIT License
+const LICENSE = (name: string): string => `MIT License
 
 Copyright (c) ${YEAR} ${name} contributors
 
@@ -276,8 +297,8 @@ export const USAGE = `create-tool-manager-plugin <name> [--type ${TYPES.join('|'
   --dir  where to create it (default: ./<name>)
 `
 
-export function parseArgs(argv) {
-  const args = { type: 'classifier' }
+export function parseArgs(argv: string[]): Args {
+  const args: Args = { type: 'classifier' }
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--type') { args.type = argv[++i]; continue }
@@ -293,7 +314,7 @@ export function parseArgs(argv) {
  * Write a complete extension package.
  * @returns the list of files written, relative to the target directory.
  */
-export function scaffold({ name, type = 'classifier', dir, logger } = {}) {
+export function scaffold({ name, type = 'classifier', dir, logger }: ScaffoldOptions = {}): ScaffoldResult {
   if (!name) throw new Error('a package name is required')
   if (!TYPES.includes(type)) throw new Error(`unknown type "${type}"; expected one of: ${TYPES.join(', ')}`)
   const pkg = kebab(name)
@@ -302,7 +323,7 @@ export function scaffold({ name, type = 'classifier', dir, logger } = {}) {
   if (existsSync(target) && existsSync(join(target, 'package.json'))) {
     throw new Error(`${target} already contains a package.json; refusing to overwrite`)
   }
-  const files = {
+  const files: Record<string, string> = {
     'package.json': PACKAGE_JSON(pkg, type),
     'cordis.patch.yml': PATCH(pkg, type),
     'README.md': README(pkg, type),
@@ -319,11 +340,12 @@ export function scaffold({ name, type = 'classifier', dir, logger } = {}) {
   return { dir: target, package: pkg, type, files: Object.keys(files) }
 }
 
-export function main(argv = process.argv.slice(2), log = console.log) {
-  let args
+export function main(argv: string[] = process.argv.slice(2), log: (line: string) => void = console.log): number {
+  let args: Args
   try {
     args = parseArgs(argv)
-  } catch (error) {
+  } catch (caught) {
+    const error = caught as Error
     log(`error: ${error.message}`)
     log(USAGE)
     return 2
@@ -337,7 +359,8 @@ export function main(argv = process.argv.slice(2), log = console.log) {
     log(`\n${result.package} (${result.type}) created in ${result.dir}`)
     log(`  next: cd ${result.dir} && npm test`)
     return 0
-  } catch (error) {
+  } catch (caught) {
+    const error = caught as Error
     log(`error: ${error.message}`)
     return 1
   }
