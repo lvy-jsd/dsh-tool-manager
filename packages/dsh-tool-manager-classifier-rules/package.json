@@ -16,6 +16,7 @@
   },
   "files": [
     "lib",
+    "!lib/.tsbuildinfo",
     "src",
     "cordis.patch.yml",
     "README.md",
