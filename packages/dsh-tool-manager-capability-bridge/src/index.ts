@@ -20,26 +20,48 @@
 // A pack whose tools include a high-risk tool still needs the risk gate's
 // approval, because the alias expands to the tool's own name.
 
+import type { Disposer, ExtensionContext, HostContext } from 'dsh-tool-manager'
+
+/** A pack declaration: one target or a list of targets. */
+export type PackTargets = string | string[]
+
+export interface CapabilityBridgeConfig {
+  enabled?: boolean
+  /** Target prefix that marks a pack (default "cap:"). */
+  prefix?: string
+  packs?: Record<string, PackTargets>
+  /** Set false to keep packs out of tools_ls. */
+  listInDirectory?: boolean
+}
+
+/** The plugin's return value, also provided as the `toolCapabilityPacks` service. */
+export interface CapabilityPacks {
+  prefix: string
+  packs(): Record<string, string[]>
+  names(): string[]
+  registerPack(name: string, targets: PackTargets): Disposer
+}
+
 export const name = 'tool-manager-capability-bridge'
 export const inject = ['toolCatalog']
 
 /** The prefix that marks a target as a capability pack. */
 export const PREFIX = 'cap:'
 
-export function apply(ctx, config = {}) {
+export function apply(ctx: ExtensionContext & Partial<Pick<HostContext, 'provide'>>, config: CapabilityBridgeConfig = {}): CapabilityPacks | undefined {
   const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-capability-bridge') : ctx.logger) ?? console
   if (config.enabled === false) return
   const prefix = config.prefix ?? PREFIX
-  const packs = new Map()
+  const packs = new Map<string, string[]>()
 
   /** Normalize one pack declaration into a list of target strings. */
-  function normalize(targets) {
+  function normalize(targets: unknown): string[] {
     if (typeof targets === 'string') return [targets]
     if (Array.isArray(targets)) return targets.map(String).filter((one) => one.trim() !== '')
     return []
   }
 
-  function registerPack(name, targets) {
+  function registerPack(name: string, targets: PackTargets): Disposer {
     const key = String(name)
     packs.set(key, normalize(targets))
     ctx.toolCatalog.refresh()
@@ -57,7 +79,7 @@ export function apply(ctx, config = {}) {
     resolve(target) {
       const key = target.slice(prefix.length).trim()
       if (!packs.has(key)) return undefined      // unknown pack: fall through to a normal lookup
-      const targets = packs.get(key)
+      const targets = packs.get(key)!
       if (targets.length === 0) {
         logger.warn?.(`tool-manager-capability-bridge: pack "${key}" declares no tools`)
         return []
@@ -72,7 +94,7 @@ export function apply(ctx, config = {}) {
     ctx.effect(() => ctx.toolCatalog.defineCategory('capabilities', 'Named tool bundles (load with cap:<name>)'), 'tool-manager-capability-bridge.category()')
   }
 
-  const api = {
+  const api: CapabilityPacks = {
     prefix,
     packs: () => Object.fromEntries([...packs].map(([key, targets]) => [key, [...targets]])),
     names: () => [...packs.keys()],
