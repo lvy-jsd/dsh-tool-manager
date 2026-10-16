@@ -13,6 +13,28 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { Classifier, ExtensionContext, Logger, PluginPackage } from 'dsh-tool-manager'
+
+/** Literal -> names of the packages that define / mention it. */
+export interface AttributionIndex {
+  defined: Map<string, Set<string>>
+  mentioned: Map<string, Set<string>>
+}
+
+export interface AttributionConfig {
+  enabled?: boolean
+  priority?: number
+  /** Prefix dropped from package names to form group names (default "dsh-"). */
+  stripPrefix?: string
+  /** Package names to skip: a regular expression, or a string matched whole. */
+  exclude?: (string | RegExp)[]
+}
+
+export interface AttributionClassifierOptions {
+  priority?: number
+  stripPrefix?: string
+  getIndex(): AttributionIndex | null
+}
 
 export const name = 'tool-manager-attribution-scan'
 export const inject = ['toolCatalog']
@@ -29,12 +51,12 @@ const DEFINITION = /\bname\s*:\s*(['"`])([a-z][a-z0-9_]{2,63})\1/g
 const SELF = /^dsh-tool-manager-/
 
 /** "@scope/dsh-engram" -> "engram" with stripPrefix "dsh-". */
-export function groupNameOf(pkg, stripPrefix = 'dsh-') {
-  const bare = String(pkg).split('/').pop()
+export function groupNameOf(pkg: string, stripPrefix = 'dsh-'): string {
+  const bare = String(pkg).split('/').pop()!
   return stripPrefix && bare.startsWith(stripPrefix) && bare.length > stripPrefix.length ? bare.slice(stripPrefix.length) : bare
 }
 
-async function* sourceFiles(dir, budget) {
+async function* sourceFiles(dir: string, budget: { left: number }): AsyncGenerator<string> {
   let entries
   try {
     entries = await readdir(dir, { withFileTypes: true })
@@ -57,11 +79,11 @@ async function* sourceFiles(dir, budget) {
  * Scan packages and return `{ defined, mentioned }`: maps from a literal to the
  * set of package names that define / mention it. Pure apart from reading files.
  */
-export async function scanPackages(packages, { exclude = [] } = {}) {
+export async function scanPackages(packages: Iterable<Pick<PluginPackage, 'name' | 'dir'>>, { exclude = [] }: { exclude?: (string | RegExp)[] } = {}): Promise<AttributionIndex> {
   const excluded = exclude.map((rule) => (rule instanceof RegExp ? rule : new RegExp(`^(?:${rule})$`)))
-  const defined = new Map()
-  const mentioned = new Map()
-  const add = (map, key, pkg) => {
+  const defined = new Map<string, Set<string>>()
+  const mentioned = new Map<string, Set<string>>()
+  const add = (map: Map<string, Set<string>>, key: string, pkg: string) => {
     let set = map.get(key)
     if (!set) map.set(key, (set = new Set()))
     set.add(pkg)
@@ -71,7 +93,7 @@ export async function scanPackages(packages, { exclude = [] } = {}) {
     const budget = { left: MAX_FILES_PER_PACKAGE }
     for (const sub of SOURCE_DIRS) {
       for await (const file of sourceFiles(join(dir, sub), budget)) {
-        let text
+        let text: string
         try {
           if ((await stat(file)).size > MAX_FILE_BYTES) continue
           text = await readFile(file, 'utf8')
@@ -87,17 +109,17 @@ export async function scanPackages(packages, { exclude = [] } = {}) {
 }
 
 /** The package a tool belongs to, or undefined when the index cannot tell. */
-export function attribute(index, toolName) {
+export function attribute(index: AttributionIndex | null | undefined, toolName: string): string | undefined {
   if (!index || toolName.startsWith('mcp__')) return undefined
   const definers = index.defined.get(toolName)
   if (definers?.size === 1) return [...definers][0]
-  if (definers?.size > 1) return undefined
+  if (definers && definers.size > 1) return undefined
   const mentions = index.mentioned.get(toolName)
   return mentions?.size === 1 ? [...mentions][0] : undefined
 }
 
 /** Build the classifier around a (possibly not yet ready) index. */
-export function attributionClassifier({ priority = DEFAULT_PRIORITY, stripPrefix = 'dsh-', getIndex }) {
+export function attributionClassifier({ priority = DEFAULT_PRIORITY, stripPrefix = 'dsh-', getIndex }: AttributionClassifierOptions): Classifier {
   return {
     name: 'attribution:source',
     priority,
@@ -108,10 +130,12 @@ export function attributionClassifier({ priority = DEFAULT_PRIORITY, stripPrefix
   }
 }
 
-export function apply(ctx, config = {}) {
+export function apply(ctx: ExtensionContext, config: AttributionConfig = {}) {
   if (config.enabled === false) return
-  const logger = ctx.logger?.('tool-manager-attribution-scan') ?? console
-  let index = null
+  // Unlike the other extensions this only handles the function form of
+  // ctx.logger (what DSH passes); the cast keeps that behavior as it was.
+  const logger: Logger = (ctx.logger as ((name: string) => Logger) | undefined)?.('tool-manager-attribution-scan') ?? console
+  let index: AttributionIndex | null = null
   let live = true
   ctx.effect(() => () => { live = false }, 'tool-manager-attribution-scan.lifetime()')
 

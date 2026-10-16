@@ -5,6 +5,7 @@
     { "path": "packages/dsh-tool-manager-risk-gate" },
     { "path": "packages/dsh-tool-manager-persist" },
     { "path": "packages/dsh-tool-manager-classifier-rules" },
-    { "path": "packages/dsh-tool-manager-capability-bridge" }
+    { "path": "packages/dsh-tool-manager-capability-bridge" },
+    { "path": "packages/dsh-tool-manager-attribution-scan" }
   ]
 }
