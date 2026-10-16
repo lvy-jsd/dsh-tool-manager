@@ -19,6 +19,10 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager @lvy-jsd/dsh-tool-manager
 dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 ```
 
+> **Install the scoped `@lvy-jsd/…` packages.** The unscoped `dsh-tool-manager`
+> on npm is a different project. Do not install both: each one narrows which
+> tools an agent can see, so together they hide tools from each other.
+
 On a fresh install every group is `uncategorized` until a classifier is
 installed — the tools are still browsable and loadable, only the categories are
 missing. See [Extending](#extending) to write your own classifier.

@@ -19,6 +19,9 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager @lvy-jsd/dsh-tool-manager
 dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 ```
 
+> **请安装带 scope 的 `@lvy-jsd/…` 包。** npm 上不带 scope 的 `dsh-tool-manager`
+> 是另一个项目。不要两个同时安装：两者都会收窄 Agent 能看到的工具，装在一起会互相把对方的工具藏起来。
+
 全新安装后，所有分组都归在 `uncategorized` 下，直到装上分类器 ——
 工具本身仍然可以浏览和加载，只是缺了分类。想自己写分类器见
 [扩展](#extending)。
