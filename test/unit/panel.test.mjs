@@ -69,7 +69,16 @@ function makeCatalog() {
     wireTokens: () => 1234,
     load: async (a, targets) => `Loaded ${targets.length} target(s)`,
     unload: async (a, targets) => `Unloaded ${targets.length} target(s)`,
-    config: () => ({ pinned: ['bash'], entryTools: ['tools_ls'], extraPinned: [], unpinned: [], highRisk: [] }),
+    config: () => ({
+      pinned: ['bash'], entryTools: ['tools_ls'], extraPinned: [], unpinned: [], highRisk: [],
+      exemptProviders: ['claude-code'], defaults: ['bash'], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false,
+    }),
+    updateConfig: (patch) => ({
+      pinned: ['bash', ...(patch.pinned ?? [])], entryTools: ['tools_ls'],
+      extraPinned: patch.pinned ?? [], unpinned: patch.unpin ?? [], highRisk: patch.highRisk ?? [],
+      exemptProviders: [], defaults: ['bash'], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: true,
+    }),
+    reloadConfig: () => ({ pinned: [], entryTools: [], extraPinned: [], unpinned: [], highRisk: [], exemptProviders: [], defaults: [], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false }),
     extensions: () => ({ classifiers: [{ name: 'rules:defaults', priority: 100 }], filters: ['testkit'], annotations: [], categories: ['device', 'code'], riskGates: ['risk-gate'], stateProviders: ['persist'] }),
     find: () => [{ ...tools[0], path: '/device/adb/install' }],
   }
@@ -149,6 +158,55 @@ test('api: extensions are listed for the Extensions view', () => {
   assert.equal(ext.classifiers[0].name, 'rules:defaults')
   assert.equal(ext.classifiers[0].priority, 100)
   assert.deepEqual(ext.riskGates, ['risk-gate'])
+})
+
+test('api: config reports the settings file and is editable', () => {
+  const body = createApi(makeCatalog()).config()
+  assert.equal(body.editable, true)
+  assert.equal(body.config.settingsFile, '/tmp/dsh/tool-manager/config.json')
+  assert.equal(body.config.hasSettings, false)
+  assert.deepEqual(body.config.extraPinned, [])
+  assert.deepEqual(body.config.entryTools, ['tools_ls'])
+})
+
+test('api: updateConfig returns the new effective configuration', () => {
+  const body = createApi(makeCatalog()).updateConfig({ settings: { pinned: ['adb_install'] } })
+  assert.deepEqual(body.config.extraPinned, ['adb_install'])
+  assert.equal(body.config.hasSettings, true)
+  assert.match(body.config.settingsFile, /config\.json$/)
+})
+
+test('api: updateConfig is reachable through the whitelist', async () => {
+  const routes = []
+  const ctx = {
+    webRuntime: { trustedHosts: [] },
+    webServer: { register: (route) => { routes.push(route); return () => {} } },
+    on: () => () => {},
+    logger: () => ({ warn() {}, info() {} }),
+  }
+  const dispose = mountWebRoutes(ctx, makeCatalog())
+  const server = createServer((req, res) => routes[0].handler(req, res))
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const base = `http://127.0.0.1:${server.address().port}`
+  try {
+    const call = async (method, params) => (await fetch(base, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method, params }),
+    })).json()
+    const saved = await call('updateConfig', { settings: { highRisk: ['merge_pull_request'] } })
+    assert.equal(saved.ok, true)
+    assert.deepEqual(saved.config.highRisk, ['merge_pull_request'])
+    const reloaded = await call('reloadConfig', {})
+    assert.equal(reloaded.ok, true)
+    assert.deepEqual(reloaded.config.highRisk, [])
+    // An unknown method stays a 400, not a silent no-op.
+    const unknown = await call('updateEverything', {})
+    assert.equal(unknown.ok, false)
+  } finally {
+    dispose()
+    await new Promise((resolve) => server.close(resolve))
+  }
 })
 
 // --- route mounting -----------------------------------------------------------

@@ -11,7 +11,7 @@
 // server (headless), this plugin mounts nothing and stays harmless.
 
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
-import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry } from '@lvy-jsd/dsh-tool-manager'
+import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry, ToolManagerSettings } from '@lvy-jsd/dsh-tool-manager'
 
 /** The part of the host's webServer service (dsh-host-webserver WebRoute) this plugin uses. */
 export interface WebServer {
@@ -50,6 +50,8 @@ export interface ApiParams {
   sessionId?: unknown
   targets?: string[]
   forSubagents?: boolean
+  /** Edited lists for the updateConfig method. */
+  settings?: ToolManagerSettings
 }
 
 interface SseClient {
@@ -249,9 +251,20 @@ export function createApi(catalog: ToolCatalogService) {
       const message = await catalog.unload(agent, targets ?? [])
       return { ok: true, message }
     },
-    /** Effective configuration (read-only in v1). */
+    /** Effective configuration plus the settings file it can be edited into. */
     config() {
-      return { config: catalog.config(), editable: false, note: 'Editing from the panel is not implemented yet; use the plugin config.' }
+      return { config: catalog.config(), editable: true, note: 'Saved to the settings file; these values win over the plugin config.' }
+    },
+    /**
+     * Persist edited lists. The core rebuilds the catalog, so the caller sees
+     * the resulting configuration rather than having to guess it.
+     */
+    updateConfig({ settings }: ApiParams = {}) {
+      return { config: catalog.updateConfig(settings ?? {}) }
+    },
+    /** Re-read the settings file after an external edit. */
+    reloadConfig() {
+      return { config: catalog.reloadConfig() }
     },
     /** Registered extension points, so a user can see what is active. */
     extensions() {
@@ -344,6 +357,8 @@ export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { 
   const stops: (Disposer | undefined)[] = [
     wctx.on?.('tool-catalog/after-rebuild', () => broadcast(clients, 'catalog', { at: Date.now() })),
     wctx.on?.('tool-catalog/state-changed', ({ agent, state }) => broadcast(clients, 'state', { sessionId: String(agent?.id ?? ''), state })),
+    // Settings can change from another panel tab, so every open panel refreshes.
+    wctx.on?.('tool-catalog/settings-changed', ({ config }) => broadcast(clients, 'config', { config })),
   ]
 
   return () => {
@@ -364,6 +379,8 @@ const API_WHITELIST = new Map<unknown, (api: PanelApi, params: ApiParams) => obj
   ['load', (api, params) => api.load(params)],
   ['unload', (api, params) => api.unload(params)],
   ['config', (api) => api.config()],
+  ['updateConfig', (api, params) => api.updateConfig(params)],
+  ['reloadConfig', (api) => api.reloadConfig()],
   ['extensions', (api) => api.extensions()],
   ['search', (api, params) => api.search(params)],
 ])

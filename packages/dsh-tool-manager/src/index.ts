@@ -10,6 +10,7 @@
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildCatalog, resolveTarget, toolsUnder, UNCATEGORIZED } from './catalog.js'
+import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
 import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolSchema } from './types.js'
@@ -57,6 +58,15 @@ function pad(text: string, width: number): string {
 
 export function apply(ctx: HostContext, config: CoreConfig = {}) {
   const logger: Logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager') : ctx.logger) ?? console
+  // Values a UI may edit live in their own file, which wins per key over the
+  // plugin config: an operator editing cordis.patch.yml must not have a stale
+  // panel overwrite it on the next click, and a panel edit must not be undone
+  // by the next restart.
+  const settings = createSettingsStore({
+    file: config.settingsFile ?? defaultSettingsFile(),
+    base: { pinned: config.pinned, unpin: config.unpin, highRisk: config.highRisk },
+    logger,
+  })
   // Model routes whose tool list is handed to an external client once per
   // session and never refreshed (Claude Code receives DSH tools through an MCP
   // bridge at startup). Narrowing such a session hides tools it can then never
@@ -92,10 +102,32 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   const riskGates = new Set<{ name: string }>()
 
   const pinnedSet = () => {
-    const set = new Set([...DEFAULT_PINNED, ...(config.pinned ?? [])])
-    for (const n of config.unpin ?? []) set.delete(n)
+    const current = settings.effective()
+    const set = new Set([...DEFAULT_PINNED, ...current.pinned])
+    for (const n of current.unpin) set.delete(n)
     for (const n of ENTRY_TOOLS) set.add(n)
     return set
+  }
+
+  /**
+   * Configuration as one object for UIs. `extraPinned`/`unpinned` show the
+   * settings file, so the panel edits exactly what it displays; `pinned` is the
+   * resulting always-on set, defaults and entry tools included.
+   */
+  function configSnapshot() {
+    const current = settings.effective()
+    return {
+      pinned: [...pinnedSet()],
+      entryTools: [...ENTRY_TOOLS],
+      extraPinned: [...current.pinned],
+      unpinned: [...current.unpin],
+      highRisk: [...current.highRisk],
+      exemptProviders: [...exemptProviders],
+      defaults: [...DEFAULT_PINNED],
+      settingsFile: settings.file,
+      // An empty file is not an override, so count keys rather than existence.
+      hasSettings: Object.keys(settings.stored()).length > 0,
+    }
   }
 
   // --- catalog -----------------------------------------------------------------
@@ -151,7 +183,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       // Package declarations first, runtime annotate() after, so runtime wins.
       annotations: [...manifestAnnotations, ...registries.annotations],
       categories: Object.fromEntries(registries.categories),
-      highRisk: config.highRisk ?? [],
+      highRisk: settings.effective().highRisk,
     })
     catalogs.set(key, catalog)
     ctx.emit('tool-catalog/after-rebuild', { catalog })
@@ -255,14 +287,27 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
         return { agent, id: String(agent.id), parentId: parent ? String(parent.id) : null }
       })
     },
-    /** Effective configuration, for UI display. */
-    config: () => ({
-      pinned: [...pinnedSet()],
-      entryTools: [...ENTRY_TOOLS],
-      extraPinned: config.pinned ?? [],
-      unpinned: config.unpin ?? [],
-      highRisk: config.highRisk ?? [],
-    }),
+    /** Effective configuration, for UI display and editing. */
+    config: () => configSnapshot(),
+    /**
+     * Persist UI-edited settings and apply them at once. The catalog is rebuilt
+     * because a changed always-on or high-risk list changes every directory.
+     */
+    updateConfig(patch) {
+      settings.update(patch)
+      invalidate()
+      visibility.refresh()
+      ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
+      return configSnapshot()
+    },
+    /** Re-read the settings file, for after an external edit. */
+    reloadConfig() {
+      settings.reload()
+      invalidate()
+      visibility.refresh()
+      ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
+      return configSnapshot()
+    },
     /** Enabled plugin packages on this host: `{ name, dir, manifest }[]`. */
     packages: () => listPluginPackages(ctx),
     /** Registered extension points, so a UI can show what is active. */

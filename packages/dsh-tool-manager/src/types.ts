@@ -234,6 +234,19 @@ export interface HostContext {
   provide(name: string, service: unknown): void
 }
 
+/**
+ * Settings a UI may edit at runtime. Each key is an independent list, so two
+ * writers editing different keys cannot clobber each other.
+ */
+export interface ToolManagerSettings {
+  /** Extra always-on tools. */
+  pinned?: string[]
+  /** Tools removed from the default always-on list. */
+  unpin?: string[]
+  /** Tool names treated as high risk. */
+  highRisk?: string[]
+}
+
 /** Configuration of the core plugin. */
 export interface CoreConfig {
   /** Extra always-on tools. */
@@ -244,6 +257,12 @@ export interface CoreConfig {
   highRisk?: string[]
   /** Model routes never narrowed (default ["claude-code"]). */
   exemptProviders?: string[]
+  /**
+   * Where UI-edited settings are persisted (default
+   * <DSH_HOME>/tool-manager/config.json). Those values win over the fields
+   * above, per key.
+   */
+  settingsFile?: string
 }
 
 /** A plugin package the host loader knows. */
@@ -297,7 +316,28 @@ export interface ToolCatalogService {
   unload(agent: Agent, targets: readonly string[]): Promise<string>
   /** Live agents, each with its parent when it is a subagent. */
   agents(): { agent: Agent, id: string, parentId: string | null }[]
-  config(): { pinned: string[], entryTools: string[], extraPinned: string[], unpinned: string[], highRisk: string[] }
+  /** Effective configuration, for UI display. */
+  config(): {
+    pinned: string[]
+    entryTools: string[]
+    extraPinned: string[]
+    unpinned: string[]
+    highRisk: string[]
+    exemptProviders: string[]
+    defaults: string[]
+    /** Where UI edits are persisted. */
+    settingsFile: string
+    /** True when a settings file exists and overrides the plugin config. */
+    hasSettings: boolean
+  }
+  /**
+   * Persist UI-edited settings (merged per key) and apply them at once. The
+   * values win over the plugin config from the next call on. Returns the new
+   * effective configuration, in the same shape as config().
+   */
+  updateConfig(patch: ToolManagerSettings): ReturnType<ToolCatalogService['config']>
+  /** Re-read the settings file, for after an external edit. */
+  reloadConfig(): ReturnType<ToolCatalogService['config']>
   packages(): PluginPackage[]
   extensions(): {
     classifiers: { name: string, priority: number }[]

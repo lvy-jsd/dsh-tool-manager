@@ -76,6 +76,8 @@ interface ClientContext {
       extraPinned?: string[]
       unpinned?: string[]
       highRisk?: string[]
+      settingsFile?: string
+      hasSettings?: boolean
     }
     interface ExtensionsJson {
       classifiers?: { name: string, priority: number }[]
@@ -86,6 +88,7 @@ interface ClientContext {
     }
     type Load = (targets: string[]) => Promise<void>
     type Unload = (sessionId: string, targets: string[]) => Promise<void>
+    type SaveSettings = (patch: { pinned?: string[], unpin?: string[], highRisk?: string[] }, label: string) => Promise<void>
 
     const ID = 'tool-manager'
     const NS = 'tool-manager.panel'
@@ -115,6 +118,11 @@ interface ClientContext {
       unload: 'Unload',
       select: 'Select',
       selected: 'Selected',
+      selectAll: 'Select all',
+      clearSelection: 'Clear',
+      selectedCount: '{n} selected',
+      loadSelected: 'Load selected',
+      unloadSelected: 'Unload selected',
       noSession: 'No live session to load into.',
       loaded: 'Loaded {targets}. Hover for details.',
       unloaded: 'Unloaded {targets}.',
@@ -133,10 +141,19 @@ interface ClientContext {
       'config.title': 'Configuration',
       'config.pinned': 'Always-on tools',
       'config.pinnedValue': '{n} ({entry} entry tools)',
-      'config.extraPinned': 'Extra always-on (config)',
-      'config.unpinned': 'Removed from always-on (config)',
-      'config.highRisk': 'High risk (config)',
-      'config.readOnly': 'Read-only in this version: edit the plugin configuration instead.',
+      'config.defaults': 'Built-in always-on',
+      'config.extraPinned': 'Extra always-on',
+      'config.unpinned': 'Removed from always-on',
+      'config.highRisk': 'High risk',
+      'config.empty': 'One tool name per line, or comma-separated',
+      'config.save': 'Save',
+      'config.saving': 'Saving…',
+      'config.revert': 'Revert',
+      'config.saved': 'Saved: {label}.',
+      'config.saveFailed': 'Saving {label} failed: {message}',
+      'config.storedIn': 'Stored in',
+      'config.hasSettings': 'The settings file overrides the plugin config for the lists it sets.',
+      'config.noSettings': 'No settings file yet; the plugin config is in effect until you save.',
       'ext.title': 'Extension points',
       'ext.classifier': 'Classifier',
       'ext.priority': 'priority {n}',
@@ -182,6 +199,11 @@ interface ClientContext {
       unload: '卸载',
       select: '选择',
       selected: '已选择',
+      selectAll: '全选',
+      clearSelection: '清除',
+      selectedCount: '已选 {n} 项',
+      loadSelected: '加载选中',
+      unloadSelected: '卸载选中',
       noSession: '没有可加载的活动会话。',
       loaded: '已加载 {targets}。悬停查看详情。',
       unloaded: '已卸载 {targets}。',
@@ -200,10 +222,19 @@ interface ClientContext {
       'config.title': '配置',
       'config.pinned': '常驻工具',
       'config.pinnedValue': '{n} 个（其中入口工具 {entry} 个）',
-      'config.extraPinned': '额外常驻（配置）',
-      'config.unpinned': '移出常驻（配置）',
-      'config.highRisk': '高危（配置）',
-      'config.readOnly': '当前版本只读：请在插件配置中修改。',
+      'config.defaults': '内置常驻',
+      'config.extraPinned': '额外常驻',
+      'config.unpinned': '移出常驻',
+      'config.highRisk': '高危',
+      'config.empty': '每行一个工具名，也可用逗号分隔',
+      'config.save': '保存',
+      'config.saving': '保存中…',
+      'config.revert': '还原',
+      'config.saved': '已保存：{label}。',
+      'config.saveFailed': '保存{label}失败：{message}',
+      'config.storedIn': '保存位置',
+      'config.hasSettings': '配置文件会覆盖插件配置中同名列表。',
+      'config.noSettings': '尚未生成配置文件；保存之前仍使用插件配置。',
       'ext.title': '扩展点',
       'ext.classifier': '分类器',
       'ext.priority': '优先级 {n}',
@@ -274,6 +305,13 @@ interface ClientContext {
 .tmp-table th{text-align:left;font-weight:500;color:var(--dsw-alias-label-secondary);padding:4px 12px 4px 0;white-space:nowrap;vertical-align:top}
 .tmp-table td{padding:4px 0;font-family:var(--dsw-font-family-mono,ui-monospace,monospace);word-break:break-word}
 .tmp-empty{color:var(--dsw-alias-label-tertiary);font-size:13px;padding:12px 0}
+.tmp-field{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.tmp-label{font-size:12px;color:var(--dsw-alias-label-secondary)}
+.tmp-textarea{font:inherit;font-size:12px;font-family:var(--dsw-font-family-mono,ui-monospace,monospace);padding:6px 10px;resize:vertical;border-radius:var(--dsw-radius-sm,6px);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}
+.tmp-textarea::placeholder{color:var(--dsw-alias-label-tertiary)}
+.tmp-textarea:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}
+.tmp-mono{font-family:var(--dsw-font-family-mono,ui-monospace,monospace);font-size:12px;color:var(--dsw-alias-label-secondary);margin:0;word-break:break-all}
+.tmp-row input[type=checkbox]{flex:none;margin:0;accent-color:var(--dsw-alias-state-business-primary)}
 `
     const CSS_ID = '@lvy-jsd/dsh-tool-manager-panel/section.css'
     function ensureCss() {
@@ -321,11 +359,15 @@ interface ClientContext {
     const Button = ({ ghost, onClick, children, title }: { ghost?: boolean, onClick?: () => void, children?: ReactNode, title?: string }) =>
       h('button', { type: 'button', className: 'tmp-btn', 'data-ghost': ghost === true, onClick, title }, children)
 
-    function Directory({ t, path, setPath, load, version }: { t: Translate, path: string, setPath: (path: string) => void, load: Load, version: number }) {
+    function Directory({ t, path, setPath, load, unload, version }: { t: Translate, path: string, setPath: (path: string) => void, load: Load, unload: (targets: string[]) => Promise<void>, version: number }) {
       const [root, setRoot] = useState<NodeJson | null>(null)
       const [results, setResults] = useState<FoundTool[] | null>(null)
       const [query, setQuery] = useState('')
       const [error, setError] = useState<string | null>(null)
+      // Targets ticked for a batch load/unload. Targets are node paths (which
+      // the core resolves to a whole group) or tool names, never both for the
+      // same row, so a click on any row is unambiguous.
+      const [checked, setChecked] = useState<string[]>([])
 
       useEffect(() => {
         let live = true
@@ -336,12 +378,18 @@ interface ClientContext {
         return () => { live = false }
       }, [path, version])
 
+      // Selection is per directory listing: navigating elsewhere would leave
+      // ticks pointing at rows that are no longer on screen.
+      useEffect(() => { setChecked([]) }, [path, version])
+
       const search = (event: import('react').KeyboardEvent<HTMLInputElement>) => {
         if (event.key !== 'Enter') return
         const q = query.trim()
         if (!q) { setResults(null); return }
         api<{ results: FoundTool[] }>('search', { query: q }).then((body) => setResults(body.results)).catch((e: Error) => setError(e.message))
       }
+
+      const toggle = (target: string) => setChecked((all) => (all.includes(target) ? all.filter((x) => x !== target) : [...all, target]))
 
       const parts = path.split('/').filter(Boolean)
       const crumbs: ReactNode[] = [h(Button, { key: 'root', ghost: true, onClick: () => setPath('/') }, t('root'))]
@@ -351,6 +399,16 @@ interface ClientContext {
         crumbs.push(h(Button, { key: target, ghost: true, onClick: () => setPath(target) }, i === 0 ? categoryLabel(t, part) : part))
       })
       const bar = h('div', { className: 'tmp-bar' }, ...crumbs, h('span', { className: 'tmp-grow' }),
+        checked.length
+          ? h('span', { className: 'tmp-stat' }, format(t, 'selectedCount', { n: checked.length }))
+          : null,
+        checked.length
+          ? h(Button, { onClick: () => load(checked).then(() => setChecked([])) }, t('loadSelected'))
+          : null,
+        checked.length
+          ? h(Button, { onClick: () => unload(checked).then(() => setChecked([])) }, t('unloadSelected'))
+          : null,
+        checked.length ? h(Button, { ghost: true, onClick: () => setChecked([]) }, t('clearSelection')) : null,
         h('input', {
           className: 'tmp-input', type: 'search', value: query, placeholder: t('search'),
           onChange: (e: import('react').ChangeEvent<HTMLInputElement>) => setQuery(e.target.value), onKeyDown: search,
@@ -362,6 +420,7 @@ interface ClientContext {
           results.length === 0
             ? h('div', { className: 'tmp-empty' }, t('noMatch'))
             : h('div', { className: 'tmp-list' }, results.map((tool) => h('div', { key: tool.name, className: 'tmp-row' },
+              h('input', { type: 'checkbox', checked: checked.includes(tool.name), onChange: () => toggle(tool.name), 'aria-label': tool.name }),
               h('span', { className: 'tmp-name' }, tool.path || `/${tool.category}/${tool.group}/${tool.short}`),
               h(Chip, null, format(t, 'tokens', { n: tokNumber(tool.tokens) })),
               tool.highRisk ? h(Chip, { tone: 'warn' }, t('highRisk')) : null,
@@ -373,21 +432,29 @@ interface ClientContext {
       if (root.kind === 'missing') return h('div', null, bar, h('div', { className: 'tmp-empty' }, format(t, 'noPath', { path })))
 
       const rows = root.kind === 'tool' ? [root] : root.children ?? []
-      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, bar,
+      const targets = rows.map((node) => (node.kind === 'tool' ? node.name! : node.path))
+      const allChecked = targets.length > 0 && targets.every((x) => checked.includes(x))
+      const header = rows.length > 1
+        ? h('div', { className: 'tmp-bar' },
+          h(Button, { ghost: true, onClick: () => setChecked(allChecked ? [] : targets) }, allChecked ? t('clearSelection') : t('selectAll')))
+        : null
+      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, bar, header,
         h('div', { className: 'tmp-list' }, rows.map((node) => {
           const isTool = node.kind === 'tool'
+          const target = isTool ? node.name! : node.path
           const label = node.kind === 'category' ? categoryLabel(t, node.name) : node.name
           const description = node.kind === 'category' ? categoryDescription(t, node.name, node.description) : node.description || node.summary
           return h('div', {
             key: node.path ?? node.name, className: 'tmp-row', 'data-nav': !isTool,
             onClick: isTool ? undefined : (e: import('react').MouseEvent) => { if ((e.target as HTMLElement).tagName !== 'BUTTON') setPath(node.path) },
           },
+          h('input', { type: 'checkbox', checked: checked.includes(target), onChange: () => toggle(target), 'aria-label': target }),
           h('span', { className: 'tmp-name' }, label + (isTool ? '' : '/')),
           h(Chip, null, isTool ? t('tool') : format(t, 'tools', { n: node.toolCount ?? 0 })),
           h(Chip, null, format(t, 'tokens', { n: tokNumber(node.tokens) })),
           node.highRisk ? h(Chip, { tone: 'warn' }, t('highRisk')) : null,
           h('span', { className: 'tmp-desc', title: description }, description || ''),
-          h(Button, { onClick: () => load([isTool ? node.name! : node.path]) }, t('load')),
+          h(Button, { onClick: () => load([target]) }, t('load')),
           )
         })))
     }
@@ -423,28 +490,77 @@ interface ClientContext {
         )))
     }
 
-    function Config({ t }: { t: Translate }) {
+    /**
+     * Editable settings. Each list is saved on its own, because the core merges
+     * a patch per key: editing one list never rewrites the others.
+     */
+    function Config({ t, save, external }: { t: Translate, save: SaveSettings, external: number }) {
       const [data, setData] = useState<{ config: ConfigJson, ext: ExtensionsJson } | null>(null)
       const [error, setError] = useState<string | null>(null)
+      const [drafts, setDrafts] = useState<Record<string, string>>({})
+      const [version, setVersion] = useState(0)
+      const [busy, setBusy] = useState<string | null>(null)
+
       useEffect(() => {
         Promise.all([api<{ config: ConfigJson }>('config'), api<ExtensionsJson>('extensions')])
-          .then(([c, e]) => setData({ config: c.config, ext: e }))
+          .then(([c, e]) => {
+            setData({ config: c.config, ext: e })
+            setDrafts({
+              pinned: (c.config.extraPinned ?? []).join('\n'),
+              unpin: (c.config.unpinned ?? []).join('\n'),
+              highRisk: (c.config.highRisk ?? []).join('\n'),
+            })
+            setError(null)
+          })
           .catch((e: Error) => setError(e.message))
-      }, [])
+        // `external` bumps when another panel tab or an outside edit changed the
+        // settings, so this tab reloads instead of showing stale values.
+      }, [version, external])
+
       if (error) return h('div', { className: 'tmp-empty' }, format(t, 'error', { message: error }))
       if (!data) return h('div', { className: 'tmp-empty' }, t('loading'))
       const { config, ext } = data
       const list = (xs: string[] | undefined) => (xs && xs.length ? xs.join(', ') : t('none'))
       const row = (k: string, v: ReactNode, key?: string) => h('tr', { key: key ?? k }, h('th', null, k), h('td', null, v))
+
+      // Names may be typed one per line or comma-separated; duplicates and
+      // blanks are dropped so the saved list matches what the core expects.
+      const parse = (text: string) => [...new Set(text.split(/[\n,]/).map((s) => s.trim()).filter(Boolean))]
+      const editor = (key: string, label: string) => h('div', { className: 'tmp-field' },
+        h('label', { className: 'tmp-label' }, label),
+        h('textarea', {
+          className: 'tmp-textarea', rows: 3, value: drafts[key] ?? '', spellCheck: false,
+          placeholder: t('config.empty'),
+          onChange: (e: import('react').ChangeEvent<HTMLTextAreaElement>) => setDrafts((d) => ({ ...d, [key]: e.target.value })),
+        }),
+        h('div', { className: 'tmp-bar' },
+          h(Button, {
+            onClick: async () => {
+              setBusy(key)
+              try {
+                await save({ [key]: parse(drafts[key] ?? '') }, label)
+                setVersion((v) => v + 1)
+              } finally {
+                setBusy(null)
+              }
+            },
+          }, busy === key ? t('config.saving') : t('config.save')),
+          h(Button, { ghost: true, onClick: () => setVersion((v) => v + 1) }, t('config.revert')),
+        ),
+      )
+
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
         h('div', { className: 'tmp-card' }, h('h3', null, t('config.title')),
           h('table', { className: 'tmp-table' }, h('tbody', null,
             row(t('config.pinned'), format(t, 'config.pinnedValue', { n: (config.pinned ?? []).length, entry: (config.entryTools ?? []).length })),
-            row(t('config.extraPinned'), list(config.extraPinned)),
-            row(t('config.unpinned'), list(config.unpinned)),
-            row(t('config.highRisk'), list(config.highRisk)),
+            row(t('config.defaults'), list(config.pinned)),
           )),
-          h('p', { className: 'tmp-muted' }, t('config.readOnly'))),
+          editor('pinned', t('config.extraPinned')),
+          editor('unpin', t('config.unpinned')),
+          editor('highRisk', t('config.highRisk')),
+          h('p', { className: 'tmp-muted' }, t('config.storedIn')),
+          h('p', { className: 'tmp-mono' }, config.settingsFile ?? ''),
+          h('p', { className: 'tmp-muted' }, config.hasSettings ? t('config.hasSettings') : t('config.noSettings'))),
         h('div', { className: 'tmp-card' }, h('h3', null, t('ext.title')),
           h('table', { className: 'tmp-table' }, h('tbody', null,
             ...(ext.classifiers ?? []).map((c) => row(t('ext.classifier'), `${c.name} · ${format(t, 'ext.priority', { n: c.priority })}`, `c:${c.name}`)),
@@ -462,6 +578,7 @@ interface ClientContext {
       const [sessions, setSessions] = useState<SessionRow[] | null>(null)
       const [selected, setSelected] = useState<string | null>(null)
       const [version, setVersion] = useState(0)
+      const [settingsVersion, setSettingsVersion] = useState(0)
       const [flash, setFlash] = useState<{ message: string, detail?: string } | null>(null)
       const [offline, setOffline] = useState(false)
       const timer = useRef(0)
@@ -488,6 +605,7 @@ interface ClientContext {
           events = new EventSource(EVENTS)
           events.addEventListener('state', refreshSessions)
           events.addEventListener('catalog', () => setVersion((v) => v + 1))
+          events.addEventListener('config', () => setSettingsVersion((v) => v + 1))
         } catch {
           // No event stream: the interval still refreshes.
         }
@@ -514,6 +632,20 @@ interface ClientContext {
           say(format(t, 'unloadFailed', { message: (e as Error).message }))
         }
       }
+      /** Batch unload from the Directory tab, which acts on the selected session. */
+      const unloadInDirectory = async (targets: string[]) => {
+        if (!target) return say(t('noSession'))
+        await unload(target, targets)
+      }
+      const save: SaveSettings = async (patch, label) => {
+        try {
+          await api<object>('updateConfig', { settings: patch })
+          say(format(t, 'config.saved', { label }))
+        } catch (e) {
+          say(format(t, 'config.saveFailed', { message: (e as Error).message }))
+          throw e
+        }
+      }
 
       const totalTokens = (sessions ?? []).reduce((n, s) => n + (s.wireTokens ?? 0), 0)
       const tabs = ['directory', 'sessions', 'config']
@@ -529,9 +661,9 @@ interface ClientContext {
           h('span', { className: 'tmp-stat', style: { paddingBottom: 9 } },
             offline ? t('offline') : format(t, 'stat', { n: (sessions ?? []).length, tokens: format(t, 'tokens', { n: tokNumber(totalTokens) }) }))),
         h('div', { className: 'tmp-flash', role: 'status', title: flash?.detail }, flash?.message ?? ''),
-        tab === 'directory' ? h(Directory, { t, path, setPath, load, version })
+        tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, version })
           : tab === 'sessions' ? h(Sessions, { t, sessions, selected: target, setSelected, unload })
-            : h(Config, { t }),
+            : h(Config, { t, save, external: settingsVersion }),
       )
     }
 
