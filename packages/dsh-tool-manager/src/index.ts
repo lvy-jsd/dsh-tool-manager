@@ -10,10 +10,11 @@
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildCatalog, resolveTarget, toolsUnder, UNCATEGORIZED } from './catalog.js'
+import { createMetadataStore, defaultMetadataFile } from './metadata.js'
 import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
-import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolSchema } from './types.js'
+import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolSchema } from './types.js'
 
 export type * from './types.js'
 export { buildCatalog, resolveTarget, toolsUnder, estimateTokens, summary, shortName, structuralGroup, DEFAULT_CATEGORIES, UNCATEGORIZED, MISC_GROUP, OVERRIDE_PRIORITY } from './catalog.js'
@@ -67,6 +68,10 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     base: { pinned: config.pinned, unpin: config.unpin, highRisk: config.highRisk },
     logger,
   })
+  // Panel-edited tool metadata (group, category, risk, summary). Applied after
+  // every other annotation, so an edit corrects a package declaration instead of
+  // being overruled by it.
+  const metadata = createMetadataStore({ file: config.metadataFile ?? defaultMetadataFile(), logger })
   // Model routes whose tool list is handed to an external client once per
   // session and never refreshed (Claude Code receives DSH tools through an MCP
   // bridge at startup). Narrowing such a session hides tools it can then never
@@ -130,6 +135,44 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     }
   }
 
+  /**
+   * One tool's metadata plus every layer behind it, so the panel can show what
+   * is declared, what was edited, and what the model actually gets. A tool that
+   * is pinned away or not registered is reported as missing rather than absent,
+   * so the UI can explain why there is nothing to edit.
+   */
+  function toolMetaSnapshot(name: string) {
+    const entry = getCatalog().tools.get(name)
+    const declared: ToolMeta = { ...annotationForLayers(name) }
+    return {
+      name,
+      found: entry !== undefined,
+      effective: entry?.annotation ?? declared,
+      edited: metadata.get(name) ?? {},
+      declared,
+      group: entry?.group ?? declared.group ?? '',
+      category: entry?.category ?? declared.category ?? '',
+      summary: entry?.summary ?? declared.summary ?? '',
+      highRisk: entry?.highRisk === true,
+      path: entry ? `/${entry.category}/${entry.group}/${entry.short}` : '',
+      missing: entry === undefined,
+    }
+  }
+
+  /**
+   * The declared metadata only: package.json first, runtime annotate() after,
+   * with panel edits left out so the UI can tell the two apart.
+   */
+  function annotationForLayers(name: string): ToolMeta {
+    manifestAnnotations ??= readManifestAnnotations(ctx, logger)
+    const merged: ToolMeta = {}
+    for (const annotation of [...manifestAnnotations, ...registries.annotations]) {
+      const hit = typeof annotation.match === 'string' ? annotation.match === name : annotation.match.test(name)
+      if (hit) Object.assign(merged, annotation.meta)
+    }
+    return merged
+  }
+
   // --- catalog -----------------------------------------------------------------
   // The directory is built per agent: global tools plus tools registered in the
   // agent's ancestor scopes (its preset). In the DSH web profile most tools
@@ -180,8 +223,9 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     manifestAnnotations ??= readManifestAnnotations(ctx, logger)
     const catalog = buildCatalog(schemas, {
       classifiers: [...registries.classifiers],
-      // Package declarations first, runtime annotate() after, so runtime wins.
-      annotations: [...manifestAnnotations, ...registries.annotations],
+      // Package declarations first, runtime annotate() after, so runtime wins —
+      // and panel edits last of all, so they win over both.
+      annotations: [...manifestAnnotations, ...registries.annotations, ...metadata.annotations()],
       categories: Object.fromEntries(registries.categories),
       highRisk: settings.effective().highRisk,
     })
@@ -308,6 +352,29 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
       return configSnapshot()
     },
+    /** Metadata of one tool, with the layers that decide each field. */
+    toolMeta: (name: string) => toolMetaSnapshot(String(name)),
+    /**
+     * Edit metadata from the panel. The store wins over the package
+     * declaration, and the catalog is rebuilt so the Directory tab moves the
+     * tool at once.
+     */
+    updateToolMeta(name, meta) {
+      metadata.set(String(name), meta)
+      invalidate()
+      visibility.refresh()
+      ctx.emit('tool-catalog/metadata-changed', { name: String(name) })
+      return toolMetaSnapshot(String(name))
+    },
+    /** Drop every edited field of one tool, falling back to its declaration. */
+    clearToolMeta(name) {
+      metadata.clear(String(name))
+      invalidate()
+      visibility.refresh()
+      ctx.emit('tool-catalog/metadata-changed', { name: String(name) })
+      return toolMetaSnapshot(String(name))
+    },
+    metadataFile: () => metadata.file,
     /** Enabled plugin packages on this host: `{ name, dir, manifest }[]`. */
     packages: () => listPluginPackages(ctx),
     /** Registered extension points, so a UI can show what is active. */

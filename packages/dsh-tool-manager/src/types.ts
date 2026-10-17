@@ -263,6 +263,11 @@ export interface CoreConfig {
    * above, per key.
    */
   settingsFile?: string
+  /**
+   * Where UI-edited tool metadata is persisted (default
+   * <DSH_HOME>/tool-manager/metadata.json).
+   */
+  metadataFile?: string
 }
 
 /** A plugin package the host loader knows. */
@@ -338,6 +343,38 @@ export interface ToolCatalogService {
   updateConfig(patch: ToolManagerSettings): ReturnType<ToolCatalogService['config']>
   /** Re-read the settings file, for after an external edit. */
   reloadConfig(): ReturnType<ToolCatalogService['config']>
+  /**
+   * Metadata of one tool as the catalog currently shows it, including which
+   * layer decided each field (`manifest`, `runtime`, `metadata` or `classifier`).
+   */
+  toolMeta(name: string): {
+    name: string
+    found: boolean
+    /** Effective values after every layer. */
+    effective: ToolMeta
+    /** Values edited from the panel, which win over the layers above. */
+    edited: ToolMeta
+    /** Values from package.json and runtime annotate() calls. */
+    declared: ToolMeta
+    group: string
+    category: string
+    summary: string
+    highRisk: boolean
+    /** The tool's directory path, for linking back to the Directory tab. */
+    path: string
+    /** True when the tool is not in the catalog (unregistered or pinned away). */
+    missing: boolean
+  }
+  /**
+   * Replace the editable metadata of one tool. Fields left out are dropped, so
+   * an emptied field falls back to the package declaration; an empty object
+   * removes the override entirely.
+   */
+  updateToolMeta(name: string, meta: ToolMeta): ReturnType<ToolCatalogService['toolMeta']>
+  /** Drop every edited field of one tool, falling back to its declaration. */
+  clearToolMeta(name: string): ReturnType<ToolCatalogService['toolMeta']>
+  /** Where edited metadata is persisted. */
+  metadataFile(): string
   packages(): PluginPackage[]
   extensions(): {
     classifiers: { name: string, priority: number }[]

@@ -79,6 +79,26 @@ interface ClientContext {
       settingsFile?: string
       hasSettings?: boolean
     }
+    /** The four editable metadata fields, as stored and as applied. */
+    interface ToolMetaFields {
+      group?: string
+      category?: string
+      risk?: string
+      summary?: string
+    }
+    interface ToolMetaJson {
+      name: string
+      found: boolean
+      effective: ToolMetaFields
+      edited: ToolMetaFields
+      declared: ToolMetaFields
+      group: string
+      category: string
+      summary: string
+      highRisk: boolean
+      path: string
+      missing: boolean
+    }
     interface ExtensionsJson {
       classifiers?: { name: string, priority: number }[]
       filters?: string[]
@@ -89,6 +109,8 @@ interface ClientContext {
     type Load = (targets: string[]) => Promise<void>
     type Unload = (sessionId: string, targets: string[]) => Promise<void>
     type SaveSettings = (patch: { pinned?: string[], unpin?: string[], highRisk?: string[] }, label: string) => Promise<void>
+    type SaveMeta = (name: string, meta: ToolMetaFields, label: string) => Promise<ToolMetaJson>
+    type DropMeta = (name: string) => Promise<ToolMetaJson>
 
     const ID = 'tool-manager'
     const NS = 'tool-manager.panel'
@@ -102,6 +124,7 @@ interface ClientContext {
       'tab.directory': 'Directory',
       'tab.sessions': 'Sessions',
       'tab.config': 'Configuration',
+      'tab.meta': 'Tool metadata',
       stat: '{n} live session(s) · {tokens} in context',
       offline: 'Panel service offline',
       loading: 'Loading…',
@@ -154,6 +177,31 @@ interface ClientContext {
       'config.storedIn': 'Stored in',
       'config.hasSettings': 'The settings file overrides the plugin config for the lists it sets.',
       'config.noSettings': 'No settings file yet; the plugin config is in effect until you save.',
+      'meta.title': 'Tool metadata',
+      'meta.pick': 'Choose a tool…',
+      'meta.load': 'Inspect',
+      'meta.hint': 'Type a tool name (or pick one from the Directory) to see and edit its category, group, summary and risk level. Parameters and descriptions come from the host and are not editable here.',
+      'meta.notFound': 'This tool is not in the catalog right now; it may be pinned away or belong to a session that is not live.',
+      'meta.declared': 'Declared by package',
+      'meta.edited': 'Edited here',
+      'meta.effective': 'Applied to the model',
+      'meta.group': 'Group',
+      'meta.category': 'Category',
+      'meta.risk': 'Risk level',
+      'meta.summary': 'Summary',
+      'meta.inherit': 'inherited',
+      'meta.riskHigh': 'high',
+      'meta.riskNormal': 'normal',
+      'meta.save': 'Save metadata',
+      'meta.saving': 'Saving…',
+      'meta.clear': 'Drop edits',
+      'meta.cleared': 'Dropped every edit of {name}.',
+      'meta.saved': 'Saved metadata for {name}.',
+      'meta.saveFailed': 'Saving metadata for {name} failed: {message}',
+      'meta.storedIn': 'Edited metadata is stored in',
+      'meta.emptyEdit': 'Leave a field blank to fall back to the declared value.',
+      'meta.noTools': 'No tools in the catalog.',
+      editMeta: 'Metadata',
       'ext.title': 'Extension points',
       'ext.classifier': 'Classifier',
       'ext.priority': 'priority {n}',
@@ -183,6 +231,7 @@ interface ClientContext {
       'tab.directory': '目录',
       'tab.sessions': '会话',
       'tab.config': '配置',
+      'tab.meta': '工具元数据',
       stat: '{n} 个活动会话 · 上下文中 {tokens}',
       offline: '面板服务离线',
       loading: '加载中…',
@@ -235,6 +284,31 @@ interface ClientContext {
       'config.storedIn': '保存位置',
       'config.hasSettings': '配置文件会覆盖插件配置中同名列表。',
       'config.noSettings': '尚未生成配置文件；保存之前仍使用插件配置。',
+      'meta.title': '工具元数据',
+      'meta.pick': '选择工具…',
+      'meta.load': '查看',
+      'meta.hint': '输入工具名（或在“目录”里选中一个）即可查看并修改它的分类、分组、摘要和风险等级。参数与描述由宿主提供，这里不能修改。',
+      'meta.notFound': '该工具当前不在目录中：可能被设为常驻，或所属会话已结束。',
+      'meta.declared': '包内声明',
+      'meta.edited': '面板修改',
+      'meta.effective': '实际生效',
+      'meta.group': '分组',
+      'meta.category': '分类',
+      'meta.risk': '风险等级',
+      'meta.summary': '摘要',
+      'meta.inherit': '未设置',
+      'meta.riskHigh': '高危',
+      'meta.riskNormal': '普通',
+      'meta.save': '保存元数据',
+      'meta.saving': '保存中…',
+      'meta.clear': '撤销修改',
+      'meta.cleared': '已撤销 {name} 的全部修改。',
+      'meta.saved': '已保存 {name} 的元数据。',
+      'meta.saveFailed': '保存 {name} 的元数据失败：{message}',
+      'meta.storedIn': '修改后的元数据保存在',
+      'meta.emptyEdit': '留空表示回落到包内声明的值。',
+      'meta.noTools': '目录中没有工具。',
+      editMeta: '元数据',
       'ext.title': '扩展点',
       'ext.classifier': '分类器',
       'ext.priority': '优先级 {n}',
@@ -359,7 +433,7 @@ interface ClientContext {
     const Button = ({ ghost, onClick, children, title }: { ghost?: boolean, onClick?: () => void, children?: ReactNode, title?: string }) =>
       h('button', { type: 'button', className: 'tmp-btn', 'data-ghost': ghost === true, onClick, title }, children)
 
-    function Directory({ t, path, setPath, load, unload, version }: { t: Translate, path: string, setPath: (path: string) => void, load: Load, unload: (targets: string[]) => Promise<void>, version: number }) {
+    function Directory({ t, path, setPath, load, unload, inspect, version }: { t: Translate, path: string, setPath: (path: string) => void, load: Load, unload: (targets: string[]) => Promise<void>, inspect: (name: string) => void, version: number }) {
       const [root, setRoot] = useState<NodeJson | null>(null)
       const [results, setResults] = useState<FoundTool[] | null>(null)
       const [query, setQuery] = useState('')
@@ -454,6 +528,7 @@ interface ClientContext {
           h(Chip, null, format(t, 'tokens', { n: tokNumber(node.tokens) })),
           node.highRisk ? h(Chip, { tone: 'warn' }, t('highRisk')) : null,
           h('span', { className: 'tmp-desc', title: description }, description || ''),
+          isTool ? h(Button, { ghost: true, onClick: () => inspect(node.name!) }, t('editMeta')) : null,
           h(Button, { onClick: () => load([target]) }, t('load')),
           )
         })))
@@ -571,6 +646,129 @@ interface ClientContext {
           ))))
     }
 
+    /** One line describing a metadata layer, so blanks are visible as such. */
+    const describe = (meta: ToolMetaFields, t: Translate): string => {
+      const parts = [
+        meta.category ? `${t('meta.category')}: ${meta.category}` : null,
+        meta.group ? `${t('meta.group')}: ${meta.group}` : null,
+        meta.risk ? `${t('meta.risk')}: ${meta.risk === 'high' ? t('meta.riskHigh') : meta.risk}` : null,
+        meta.summary ? `${t('meta.summary')}: ${meta.summary}` : null,
+      ].filter(Boolean)
+      return parts.length ? parts.join(' · ') : t('none')
+    }
+
+    /**
+     * Metadata editor. Everything the model can receive about a tool lives in
+     * the four fields below; parameters and the description belong to the host
+     * and are shown read-only in the Directory instead. Fields are submitted
+     * whole, so clearing one falls back to its declared value.
+     */
+    function MetaEditor({ t, initial, tools, save, drop }: { t: Translate, initial: string | null, tools: string[], save: SaveMeta, drop: DropMeta }) {
+      const [name, setName] = useState(initial ?? '')
+      const [data, setData] = useState<{ meta: ToolMetaJson, metadataFile: string } | null>(null)
+      const [drafts, setDrafts] = useState<Record<string, string>>({})
+      const [error, setError] = useState<string | null>(null)
+      const [busy, setBusy] = useState(false)
+
+      const load = useCallback((wanted: string) => {
+        const value = wanted.trim()
+        if (!value) return
+        api<{ meta: ToolMetaJson, metadataFile: string }>('toolMeta', { tool: value })
+          .then((body) => {
+            setData(body)
+            // The draft starts from the edited value when there is one, so the
+            // form shows what is actually applied rather than the declaration.
+            setDrafts({
+              group: body.meta.edited.group ?? '',
+              category: body.meta.edited.category ?? '',
+              risk: body.meta.edited.risk ?? '',
+              summary: body.meta.edited.summary ?? '',
+            })
+            setError(null)
+          })
+          .catch((e: Error) => setError(e.message))
+      }, [])
+
+      useEffect(() => { if (initial) { setName(initial); load(initial) } }, [initial, load])
+
+      // A save sends the whole form, so the entry the core returns is what the
+      // panel shows next: no guessing about which field it kept.
+      const submit = async () => {
+        const value = name.trim()
+        if (!value) return
+        setBusy(true)
+        try {
+          const body = await save(value, { group: drafts.group ?? '', category: drafts.category ?? '', risk: drafts.risk ?? '', summary: drafts.summary ?? '' }, value)
+          setData({ meta: body, metadataFile: data?.metadataFile ?? '' })
+          setDrafts({
+            group: body.edited.group ?? '',
+            category: body.edited.category ?? '',
+            risk: body.edited.risk ?? '',
+            summary: body.edited.summary ?? '',
+          })
+        } catch {
+          // save() already reported the failure; keep the draft for a retry.
+        } finally {
+          setBusy(false)
+        }
+      }
+      const revert = async () => {
+        const value = name.trim()
+        if (!value) return
+        setBusy(true)
+        try {
+          const body = await drop(value)
+          setData({ meta: body, metadataFile: data?.metadataFile ?? '' })
+          setDrafts({ group: '', category: '', risk: '', summary: '' })
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const field = (key: string, label: string) => h('div', { className: 'tmp-field' },
+        h('label', { className: 'tmp-label' }, label),
+        h('input', {
+          className: 'tmp-input', type: 'text', value: drafts[key] ?? '', spellCheck: false,
+          placeholder: t('meta.inherit'),
+          onChange: (e: import('react').ChangeEvent<HTMLInputElement>) => setDrafts((d) => ({ ...d, [key]: e.target.value })),
+        }))
+
+      return h('div', { className: 'tmp-card' }, h('h3', null, t('meta.title')),
+        h('p', { className: 'tmp-muted' }, t('meta.hint')),
+        h('div', { className: 'tmp-bar' },
+          h('input', {
+            className: 'tmp-input', type: 'text', list: 'tmp-tool-names', value: name, placeholder: t('meta.pick'), spellCheck: false,
+            onChange: (e: import('react').ChangeEvent<HTMLInputElement>) => setName(e.target.value),
+            onKeyDown: (e: import('react').KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') load(name) },
+          }),
+          h('datalist', { id: 'tmp-tool-names' }, ...tools.map((n) => h('option', { key: n, value: n }))),
+          h(Button, { onClick: () => load(name) }, t('meta.load')),
+        ),
+        error ? h('p', { className: 'tmp-empty' }, format(t, 'error', { message: error })) : null,
+        data && data.meta.missing ? h('p', { className: 'tmp-muted' }, t('meta.notFound')) : null,
+        data
+          ? h('div', null,
+            h('table', { className: 'tmp-table' }, h('tbody', null,
+              h('tr', null, h('th', null, t('meta.effective')), h('td', null, `${data.meta.path || data.meta.name}${data.meta.highRisk ? ` · ${t('highRisk')}` : ''}`)),
+              h('tr', null, h('th', null, t('meta.declared')), h('td', null, describe(data.meta.declared, t))),
+              h('tr', null, h('th', null, t('meta.edited')), h('td', null, describe(data.meta.edited, t))),
+            )),
+            field('group', t('meta.group')),
+            field('category', t('meta.category')),
+            field('summary', t('meta.summary')),
+            field('risk', t('meta.risk')),
+            h('p', { className: 'tmp-muted' }, t('meta.emptyEdit')),
+            h('div', { className: 'tmp-bar' },
+              h(Button, { onClick: submit }, busy ? t('meta.saving') : t('meta.save')),
+              h(Button, { ghost: true, onClick: revert }, t('meta.clear')),
+            ),
+            h('p', { className: 'tmp-muted' }, t('meta.storedIn')),
+            h('p', { className: 'tmp-mono' }, data.metadataFile),
+          )
+          : null,
+      )
+    }
+
     function ToolManagerSection({ t }: { t: Translate }) {
       ensureCss()
       const [tab, setTab] = useState('directory')
@@ -579,6 +777,11 @@ interface ClientContext {
       const [selected, setSelected] = useState<string | null>(null)
       const [version, setVersion] = useState(0)
       const [settingsVersion, setSettingsVersion] = useState(0)
+      const [inspectName, setInspectName] = useState<string | null>(null)
+      // Bumped on every inspect, so clicking "Metadata" twice on the same tool
+      // remounts the editor instead of leaving the previous form on screen.
+      const [inspectTick, setInspectTick] = useState(0)
+      const [tools, setTools] = useState<string[]>([])
       const [flash, setFlash] = useState<{ message: string, detail?: string } | null>(null)
       const [offline, setOffline] = useState(false)
       const timer = useRef(0)
@@ -597,6 +800,14 @@ interface ClientContext {
           .catch(() => setOffline(true))
       }, [])
 
+      // The name picker is filled from the catalog rather than from the current
+      // directory listing, so a tool can be inspected from any tab.
+      const refreshTools = useCallback(() => {
+        api<{ tools: string[] }>('toolNames').then((body) => setTools(body.tools)).catch(() => setTools([]))
+      }, [])
+
+      useEffect(() => { refreshTools() }, [refreshTools, version])
+
       useEffect(() => {
         refreshSessions()
         const interval = setInterval(refreshSessions, 15000)
@@ -606,11 +817,14 @@ interface ClientContext {
           events.addEventListener('state', refreshSessions)
           events.addEventListener('catalog', () => setVersion((v) => v + 1))
           events.addEventListener('config', () => setSettingsVersion((v) => v + 1))
+          // An edit from another tab rebuilds the catalog, so the tool list and
+          // the current entry are refreshed rather than left stale.
+          events.addEventListener('metadata', () => { setVersion((v) => v + 1); refreshTools() })
         } catch {
           // No event stream: the interval still refreshes.
         }
         return () => { clearInterval(interval); events?.close(); clearTimeout(timer.current) }
-      }, [refreshSessions])
+      }, [refreshSessions, refreshTools])
 
       const target = selected ?? sessions?.[0]?.id ?? null
       const load: Load = async (targets) => {
@@ -646,9 +860,31 @@ interface ClientContext {
           throw e
         }
       }
+      const saveMeta: SaveMeta = async (name, meta, label) => {
+        try {
+          const body = await api<{ meta: ToolMetaJson }>('updateToolMeta', { tool: name, meta })
+          say(format(t, 'meta.saved', { name: label }))
+          setVersion((v) => v + 1)
+          refreshTools()
+          return body.meta
+        } catch (e) {
+          say(format(t, 'meta.saveFailed', { name: label, message: (e as Error).message }))
+          throw e
+        }
+      }
+      const dropMeta: DropMeta = async (name) => {
+        const body = await api<{ meta: ToolMetaJson }>('clearToolMeta', { tool: name })
+        say(format(t, 'meta.cleared', { name }))
+        setVersion((v) => v + 1)
+        refreshTools()
+        return body.meta
+      }
+      // The Directory tab hands a tool to the metadata editor and switches tab,
+      // so "Metadata" is one click rather than a name to retype.
+      const inspect = (name: string) => { setInspectName(name); setInspectTick((v) => v + 1); setTab('meta') }
 
       const totalTokens = (sessions ?? []).reduce((n, s) => n + (s.wireTokens ?? 0), 0)
-      const tabs = ['directory', 'sessions', 'config']
+      const tabs = ['directory', 'sessions', 'config', 'meta']
       return h('div', { className: 'tmp-section' },
         h('h2', { className: 'tmp-heading' }, t('title')),
         h('p', { className: 'tmp-intro' }, t('intro')),
@@ -661,9 +897,10 @@ interface ClientContext {
           h('span', { className: 'tmp-stat', style: { paddingBottom: 9 } },
             offline ? t('offline') : format(t, 'stat', { n: (sessions ?? []).length, tokens: format(t, 'tokens', { n: tokNumber(totalTokens) }) }))),
         h('div', { className: 'tmp-flash', role: 'status', title: flash?.detail }, flash?.message ?? ''),
-        tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, version })
+        tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, inspect, version })
           : tab === 'sessions' ? h(Sessions, { t, sessions, selected: target, setSelected, unload })
-            : h(Config, { t, save, external: settingsVersion }),
+            : tab === 'meta' ? h(MetaEditor, { key: inspectTick, t, initial: inspectName, tools, save: saveMeta, drop: dropMeta })
+              : h(Config, { t, save, external: settingsVersion }),
       )
     }
 

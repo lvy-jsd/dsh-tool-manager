@@ -11,7 +11,7 @@
 // server (headless), this plugin mounts nothing and stays harmless.
 
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
-import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry, ToolManagerSettings } from '@lvy-jsd/dsh-tool-manager'
+import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry, ToolManagerSettings, ToolMeta } from '@lvy-jsd/dsh-tool-manager'
 
 /** The part of the host's webServer service (dsh-host-webserver WebRoute) this plugin uses. */
 export interface WebServer {
@@ -52,6 +52,10 @@ export interface ApiParams {
   forSubagents?: boolean
   /** Edited lists for the updateConfig method. */
   settings?: ToolManagerSettings
+  /** Tool name for the metadata methods. */
+  tool?: unknown
+  /** Edited metadata for the updateToolMeta method. */
+  meta?: ToolMeta
 }
 
 interface SseClient {
@@ -266,6 +270,28 @@ export function createApi(catalog: ToolCatalogService) {
     reloadConfig() {
       return { config: catalog.reloadConfig() }
     },
+    /**
+     * One tool with its metadata layers: what the package declares, what was
+     * edited from the panel, and what the model actually receives.
+     */
+    toolMeta({ tool }: ApiParams = {}) {
+      return { meta: catalog.toolMeta(String(tool ?? '')), metadataFile: catalog.metadataFile() }
+    },
+    /**
+     * Merge edited metadata for one tool. The core rebuilds the catalog, so the
+     * caller sees the resulting entry instead of having to guess it.
+     */
+    updateToolMeta({ tool, meta }: ApiParams = {}) {
+      const name = String(tool ?? '')
+      if (!name) return { ok: false, message: 'tool is required' }
+      return { ok: true, meta: catalog.updateToolMeta(name, meta ?? {}), metadataFile: catalog.metadataFile() }
+    },
+    /** Drop every edited field of one tool, falling back to its declaration. */
+    clearToolMeta({ tool }: ApiParams = {}) {
+      const name = String(tool ?? '')
+      if (!name) return { ok: false, message: 'tool is required' }
+      return { ok: true, meta: catalog.clearToolMeta(name), metadataFile: catalog.metadataFile() }
+    },
     /** Registered extension points, so a user can see what is active. */
     extensions() {
       return catalog.extensions()
@@ -273,6 +299,10 @@ export function createApi(catalog: ToolCatalogService) {
     /** Cross-directory search: the same matching as tools_ls(query), as data. */
     search({ query, path }: ApiParams = {}) {
       return { results: catalog.find(query ?? '', path ?? '/') }
+    },
+    /** Every tool name in the catalog, for a name picker in the UI. */
+    toolNames() {
+      return { tools: [...catalog.get().tools.keys()].sort() }
     },
   }
 }
@@ -318,7 +348,11 @@ export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { 
         const body = await readJsonBody(req) as { method?: unknown, params?: ApiParams } | null
         const dispatch = API_WHITELIST.get(body?.method)
         if (!dispatch) return writeJson(res, 400, { ok: false, message: `unknown method "${body?.method ?? ''}"` })
-        writeJson(res, 200, { ok: true, ...(await dispatch(api, body?.params ?? {})) })
+        const result = await dispatch(api, body?.params ?? {})
+        // A rejected edit comes back as `ok: false` from the route itself, so the
+        // browser's single ok-check covers both transport and validation errors.
+        if ((result as { ok?: boolean }).ok === false) return writeJson(res, 400, { ok: false, ...result })
+        writeJson(res, 200, { ok: true, ...result })
       } catch (error) {
         logger?.warn?.(`tool-manager-panel api error: ${(error as Error | undefined)?.message ?? error}`)
         writeJson(res, 400, { ok: false, message: error instanceof Error ? error.message : String(error) })
@@ -359,6 +393,8 @@ export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { 
     wctx.on?.('tool-catalog/state-changed', ({ agent, state }) => broadcast(clients, 'state', { sessionId: String(agent?.id ?? ''), state })),
     // Settings can change from another panel tab, so every open panel refreshes.
     wctx.on?.('tool-catalog/settings-changed', ({ config }) => broadcast(clients, 'config', { config })),
+    // Edited metadata moves a tool in the tree, so the Directory tab reloads.
+    wctx.on?.('tool-catalog/metadata-changed', ({ name }) => broadcast(clients, 'metadata', { name: String(name ?? '') })),
   ]
 
   return () => {
@@ -381,8 +417,12 @@ const API_WHITELIST = new Map<unknown, (api: PanelApi, params: ApiParams) => obj
   ['config', (api) => api.config()],
   ['updateConfig', (api, params) => api.updateConfig(params)],
   ['reloadConfig', (api) => api.reloadConfig()],
+  ['toolMeta', (api, params) => api.toolMeta(params)],
+  ['updateToolMeta', (api, params) => api.updateToolMeta(params)],
+  ['clearToolMeta', (api, params) => api.clearToolMeta(params)],
   ['extensions', (api) => api.extensions()],
   ['search', (api, params) => api.search(params)],
+  ['toolNames', (api) => api.toolNames()],
 ])
 
 export function apply(ctx: ExtensionContext & { inject(deps: string[], fn: (wctx: WebContext) => void): void }, config: { enabled?: boolean } = {}) {

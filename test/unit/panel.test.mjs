@@ -81,6 +81,20 @@ function makeCatalog() {
     reloadConfig: () => ({ pinned: [], entryTools: [], extraPinned: [], unpinned: [], highRisk: [], exemptProviders: [], defaults: [], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false }),
     extensions: () => ({ classifiers: [{ name: 'rules:defaults', priority: 100 }], filters: ['testkit'], annotations: [], categories: ['device', 'code'], riskGates: ['risk-gate'], stateProviders: ['persist'] }),
     find: () => [{ ...tools[0], path: '/device/adb/install' }],
+    toolMeta: (name) => ({
+      name: String(name), found: byName.has(String(name)),
+      effective: { category: 'device', group: 'adb' }, edited: {}, declared: { category: 'device' },
+      group: 'adb', category: 'device', summary: 'Install an APK.', highRisk: false,
+      path: '/device/adb/install', missing: !byName.has(String(name)),
+    }),
+    updateToolMeta: (name, meta) => ({
+      name: String(name), found: byName.has(String(name)),
+      effective: { ...meta }, edited: { ...meta }, declared: { category: 'device' },
+      group: meta.group ?? 'adb', category: meta.category ?? 'device', summary: meta.summary ?? '', highRisk: meta.risk === 'high',
+      path: '/device/adb/install', missing: !byName.has(String(name)),
+    }),
+    clearToolMeta: (name) => ({ ...service.toolMeta(name), edited: {} }),
+    metadataFile: () => '/tmp/dsh/tool-manager/metadata.json',
   }
   return service
 }
@@ -207,6 +221,71 @@ test('api: updateConfig is reachable through the whitelist', async () => {
     dispose()
     await new Promise((resolve) => server.close(resolve))
   }
+})
+
+test('api: toolMeta reports the layers, the path and the metadata file', () => {
+  const body = createApi(makeCatalog()).toolMeta({ tool: 'adb_install' })
+  assert.equal(body.meta.name, 'adb_install')
+  assert.equal(body.meta.found, true)
+  assert.equal(body.meta.missing, false)
+  assert.equal(body.meta.path, '/device/adb/install')
+  assert.deepEqual(body.meta.edited, {})
+  assert.equal(body.metadataFile, '/tmp/dsh/tool-manager/metadata.json')
+})
+
+test('api: updateToolMeta and clearToolMeta return the new entry', () => {
+  const api = createApi(makeCatalog())
+  const saved = api.updateToolMeta({ tool: 'adb_install', meta: { group: 'flash', risk: 'high' } })
+  assert.equal(saved.ok, true)
+  assert.deepEqual(saved.meta.edited, { group: 'flash', risk: 'high' })
+  assert.equal(saved.meta.highRisk, true)
+  const cleared = api.clearToolMeta({ tool: 'adb_install' })
+  assert.deepEqual(cleared.meta.edited, {})
+})
+
+test('api: a metadata call without a tool name is refused', () => {
+  const api = createApi(makeCatalog())
+  const result = api.updateToolMeta({ meta: { group: 'x' } })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /tool is required/)
+})
+
+test('api: metadata is reachable through the whitelist and reports failures as 400', async () => {
+  const routes = []
+  const ctx = {
+    webRuntime: { trustedHosts: [] },
+    webServer: { register: (route) => { routes.push(route); return () => {} } },
+    on: () => () => {},
+    logger: () => ({ warn() {}, info() {} }),
+  }
+  const dispose = mountWebRoutes(ctx, makeCatalog())
+  const server = createServer((req, res) => routes[0].handler(req, res))
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const base = `http://127.0.0.1:${server.address().port}`
+  try {
+    const call = async (method, params) => (await fetch(base, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method, params }),
+    })).json()
+    const saved = await call('updateToolMeta', { tool: 'adb_install', meta: { group: 'flash' } })
+    assert.equal(saved.ok, true)
+    assert.deepEqual(saved.meta.edited, { group: 'flash' })
+    const cleared = await call('clearToolMeta', { tool: 'adb_install' })
+    assert.equal(cleared.ok, true)
+    assert.deepEqual(cleared.meta.edited, {})
+    // A route-level rejection must not arrive as a 200 with ok:true.
+    const refused = await call('updateToolMeta', { meta: { group: 'flash' } })
+    assert.equal(refused.ok, false)
+  } finally {
+    dispose()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test('api: toolNames lists the catalog for the metadata picker', () => {
+  const { tools } = createApi(makeCatalog()).toolNames()
+  assert.deepEqual(tools, ['adb_install', 'merge_pull_request'])
 })
 
 // --- route mounting -----------------------------------------------------------
