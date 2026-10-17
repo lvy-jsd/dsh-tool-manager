@@ -105,6 +105,19 @@ interface ClientContext {
       path: string
       missing: boolean
     }
+    /** One proposed move, as the server half computes it. */
+    interface TidySuggestionJson {
+      group: string
+      current: string
+      suggested: string
+      tools: string[]
+    }
+    interface TidyPlanJson {
+      suggestions: TidySuggestionJson[]
+      rejected: { group: string, answer: string, reason: string }[]
+      allowed: string[]
+      model: { provider: string, model: string } | null
+    }
     interface ExtensionsJson {
       classifiers?: { name: string, priority: number }[]
       filters?: string[]
@@ -132,6 +145,33 @@ interface ClientContext {
       'tab.sessions': 'Sessions',
       'tab.config': 'Configuration',
       'tab.meta': 'Tool metadata',
+      'tab.tidy': 'Tidy',
+      'tidy.title': 'One-click tidy',
+      'tidy.intro': 'Ask the model to place the groups that are still uncategorized. Nothing is written until you confirm the preview.',
+      'tidy.model': 'Model',
+      'tidy.noModel': 'No model is configured, so tidy is disabled. Set a default model in DSH, or add a model to this plugin.',
+      'tidy.noLlm': 'The llm service is not available on this host, so tidy is disabled.',
+      'tidy.pending': '{groups} uncategorized groups · {tools} tools',
+      'tidy.nothing': 'Every group already has a category. Nothing to tidy.',
+      'tidy.allowed': 'Allowed categories',
+      'tidy.ask': 'Ask the model',
+      'tidy.asking': 'Asking…',
+      'tidy.preview': 'Preview',
+      'tidy.confirm': 'Apply {n}',
+      'tidy.applying': 'Applying…',
+      'tidy.applied': 'Placed {groups} groups ({tools} tools).',
+      'tidy.none': 'The model proposed nothing usable.',
+      'tidy.rejected': 'Ignored answers',
+      'tidy.rejectedLine': '{group}: {answer} — {reason}',
+      'tidy.unknownGroup': 'unknown group',
+      'tidy.unknownCategory': 'not one of the listed categories',
+      'tidy.failed': 'Tidy failed: {message}',
+      'tidy.selectAll': 'Select all',
+      'tidy.selectNone': 'Select none',
+      'tidy.missing': 'Groups no longer in the catalog: {groups}',
+      'tidy.col.group': 'Group',
+      'tidy.col.move': 'Move',
+      'tidy.col.tools': 'Tools',
       stat: '{n} live session(s) · {tokens} in context',
       offline: 'Panel service offline',
       loading: 'Loading…',
@@ -249,6 +289,33 @@ interface ClientContext {
       'tab.sessions': '会话',
       'tab.config': '配置',
       'tab.meta': '工具元数据',
+      'tab.tidy': '一键整理',
+      'tidy.title': '一键整理',
+      'tidy.intro': '让模型给还没分类的分组安排分类。预览确认之前不会写入任何东西。',
+      'tidy.model': '模型',
+      'tidy.noModel': '没有配置模型，整理功能不可用。在 DSH 里设置默认模型，或给这个插件指定一个模型。',
+      'tidy.noLlm': '这个宿主上没有 llm 服务，整理功能不可用。',
+      'tidy.pending': '{groups} 个未分类分组 · {tools} 个工具',
+      'tidy.nothing': '所有分组都已经有分类了，没有需要整理的。',
+      'tidy.allowed': '可选分类',
+      'tidy.ask': '让模型整理',
+      'tidy.asking': '正在询问…',
+      'tidy.preview': '预览',
+      'tidy.confirm': '应用 {n} 项',
+      'tidy.applying': '正在写入…',
+      'tidy.applied': '已整理 {groups} 个分组（{tools} 个工具）。',
+      'tidy.none': '模型没有给出可用的建议。',
+      'tidy.rejected': '被忽略的回答',
+      'tidy.rejectedLine': '{group}：{answer} —— {reason}',
+      'tidy.unknownGroup': '未知分组',
+      'tidy.unknownCategory': '不在可选分类里',
+      'tidy.failed': '整理失败：{message}',
+      'tidy.selectAll': '全选',
+      'tidy.selectNone': '全不选',
+      'tidy.missing': '目录里已经不存在的分组：{groups}',
+      'tidy.col.group': '分组',
+      'tidy.col.move': '改为',
+      'tidy.col.tools': '工具数',
       stat: '{n} 个活动会话 · 上下文中 {tokens}',
       offline: '面板服务离线',
       loading: '加载中…',
@@ -685,6 +752,127 @@ interface ClientContext {
           ))))
     }
 
+    /**
+     * One-click tidy: preview first, write on confirm.
+     *
+     * The preview is the whole point of this view. A placement is durable, so a
+     * wrong answer is work to undo rather than something that clears itself; the
+     * model only proposes, and every row is unticked-able before the write.
+     */
+    function Tidy({ t, onApplied }: { t: Translate, onApplied: () => void }) {
+      const [status, setStatus] = useState<{ groups: number, tools: number, allowed: string[], model: { provider: string, model: string } | null } | null>(null)
+      const [plan, setPlan] = useState<TidyPlanJson | null>(null)
+      const [drop, setDrop] = useState<Record<string, boolean>>({})
+      const [busy, setBusy] = useState<'ask' | 'apply' | null>(null)
+      const [message, setMessage] = useState<{ text: string, tone?: string } | null>(null)
+
+      const refresh = useCallback(() => {
+        api<{ groups: number, tools: number, allowed: string[], model: { provider: string, model: string } | null }>('tidyStatus')
+          .then((body) => setStatus({ groups: body.groups, tools: body.tools, allowed: body.allowed, model: body.model }))
+          .catch((e: Error) => setMessage({ text: format(t, 'tidy.failed', { message: e.message }), tone: 'warn' }))
+      }, [t])
+
+      useEffect(() => { refresh() }, [refresh])
+
+      if (!status) return h('div', { className: 'tmp-empty' }, t('loading'))
+
+      const ask = async () => {
+        setBusy('ask')
+        setMessage(null)
+        try {
+          const body = await api<{ plan: TidyPlanJson }>('tidyPreview')
+          setPlan(body.plan)
+          setDrop({})
+          if (body.plan.suggestions.length === 0) setMessage({ text: t('tidy.none'), tone: 'warn' })
+        } catch (e) {
+          setMessage({ text: format(t, 'tidy.failed', { message: (e as Error).message }), tone: 'warn' })
+        } finally {
+          setBusy(null)
+        }
+      }
+
+      const apply = async () => {
+        if (!plan) return
+        const rows = plan.suggestions.filter((s) => !drop[s.group]).map((s) => ({ group: s.group, suggested: s.suggested }))
+        if (rows.length === 0) return
+        setBusy('apply')
+        try {
+          const body = await api<{ applied: { group: string, category: string, tools: number }[], missing: string[] }>('tidyApply', { suggestions: rows })
+          const groups = body.applied.length
+          const tools = body.applied.reduce((n, row) => n + row.tools, 0)
+          const notes = [format(t, 'tidy.applied', { groups, tools })]
+          if (body.missing.length) notes.push(format(t, 'tidy.missing', { groups: body.missing.join(', ') }))
+          setMessage({ text: notes.join(' · ') })
+          setPlan(null)
+          refresh()
+          onApplied()
+        } catch (e) {
+          setMessage({ text: format(t, 'tidy.failed', { message: (e as Error).message }), tone: 'warn' })
+        } finally {
+          setBusy(null)
+        }
+      }
+
+      const disabledReason = !status.model ? t('tidy.noModel') : null
+      const selected = plan ? plan.suggestions.filter((s) => !drop[s.group]).length : 0
+      const toggleAll = (on: boolean) => {
+        if (!plan) return
+        const next: Record<string, boolean> = {}
+        for (const s of plan.suggestions) next[s.group] = !on
+        setDrop(next)
+      }
+
+      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+        h('div', { className: 'tmp-card' }, h('h3', null, t('tidy.title')),
+          h('p', { className: 'tmp-muted' }, t('tidy.intro')),
+          h('table', { className: 'tmp-table' }, h('tbody', null,
+            h('tr', null, h('th', null, t('tidy.pending')), h('td', null, format(t, 'tidy.pending', { groups: status.groups, tools: status.tools }))),
+            h('tr', null, h('th', null, t('tidy.model')), h('td', null, status.model ? `${status.model.provider}/${status.model.model}` : t('none'))),
+            h('tr', null, h('th', null, t('tidy.allowed')), h('td', null, status.allowed.map((c) => categoryLabel(t, c)).join(', ') || t('none'))),
+          )),
+          disabledReason ? h('p', { className: 'tmp-muted' }, disabledReason) : null,
+          h('div', { className: 'tmp-bar' },
+            h(Button, {
+              onClick: () => { void ask() },
+              title: disabledReason ?? undefined,
+            }, busy === 'ask' ? t('tidy.asking') : t('tidy.ask')),
+            status.groups === 0 ? h('span', { className: 'tmp-muted' }, t('tidy.nothing')) : null,
+          ),
+          message ? h('div', { className: 'tmp-flash', role: 'status', 'data-tone': message.tone }, message.text) : null),
+        plan
+          ? h('div', { className: 'tmp-card' }, h('h3', null, t('tidy.preview')),
+            h('div', { className: 'tmp-bar' },
+              h(Button, { ghost: true, onClick: () => toggleAll(true) }, t('tidy.selectAll')),
+              h(Button, { ghost: true, onClick: () => toggleAll(false) }, t('tidy.selectNone'))),
+            h('table', { className: 'tmp-table' }, h('tbody', null,
+              h('tr', null, h('th', null, ''), h('th', null, t('tidy.col.group')), h('th', null, t('tidy.col.move')), h('th', null, t('tidy.col.tools'))),
+              ...plan.suggestions.map((s) => h('tr', { key: s.group },
+                h('td', null, h('input', {
+                  type: 'checkbox', checked: !drop[s.group],
+                  onChange: (e: import('react').ChangeEvent<HTMLInputElement>) => setDrop((d) => ({ ...d, [s.group]: !e.target.checked })),
+                })),
+                h('td', null, s.group),
+                h('td', null, `${categoryLabel(t, s.current)} → ${categoryLabel(t, s.suggested)}`),
+                h('td', null, String(s.tools.length)),
+              )),
+            )),
+            plan.rejected.length
+              ? h('div', null,
+                h('p', { className: 'tmp-muted' }, t('tidy.rejected')),
+                ...plan.rejected.map((r) => h('p', { key: `${r.group}:${r.answer}`, className: 'tmp-muted' },
+                  format(t, 'tidy.rejectedLine', {
+                    group: r.group,
+                    answer: r.answer,
+                    reason: r.reason === 'unknown group' ? t('tidy.unknownGroup') : t('tidy.unknownCategory'),
+                  }))))
+              : null,
+            h('div', { className: 'tmp-bar' },
+              h(Button, { onClick: () => { void apply() } }, busy === 'apply' ? t('tidy.applying') : format(t, 'tidy.confirm', { n: selected }))),
+          )
+          : null,
+      )
+    }
+
     /** One line describing a metadata layer, so blanks are visible as such. */
     const describe = (meta: ToolMetaFields, t: Translate): string => {
       const parts = [
@@ -933,7 +1121,7 @@ interface ClientContext {
       const inspect = (name: string) => { setInspectName(name); setInspectTick((v) => v + 1); setTab('meta') }
 
       const totalTokens = (sessions ?? []).reduce((n, s) => n + (s.wireTokens ?? 0), 0)
-      const tabs = ['directory', 'sessions', 'config', 'meta']
+      const tabs = ['directory', 'sessions', 'config', 'meta', 'tidy']
       return h('div', { className: 'tmp-section' },
         h('h2', { className: 'tmp-heading' }, t('title')),
         h('p', { className: 'tmp-intro' }, t('intro')),
@@ -949,7 +1137,8 @@ interface ClientContext {
         tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, inspect, version })
           : tab === 'sessions' ? h(Sessions, { t, sessions, selected: target, setSelected, unload, setExempt })
             : tab === 'meta' ? h(MetaEditor, { key: inspectTick, t, initial: inspectName, tools, save: saveMeta, drop: dropMeta })
-              : h(Config, { t, save, external: settingsVersion }),
+              : tab === 'tidy' ? h(Tidy, { t, onApplied: () => { setVersion((v) => v + 1); refreshSessions() } })
+                : h(Config, { t, save, external: settingsVersion }),
       )
     }
 

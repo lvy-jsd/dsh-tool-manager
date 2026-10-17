@@ -5,3 +5,8 @@
       config:
         # false disables the panel (routes and sidebar entry).
         enabled: true
+        # Model for the Tidy tab. Omit to follow the host's default selection;
+        # with no model at all the tab explains why it is disabled.
+        # model:
+        #   provider: deepseek-official
+        #   model: deepseek-flash

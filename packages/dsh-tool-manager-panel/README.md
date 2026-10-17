@@ -15,11 +15,20 @@ Optional — the core works without it. When the deployment has no web server
 | **Sessions** | every live agent (subagents marked with their parent), its loaded groups and tools, how many tools are visible (`exempt` for a route listed in `exemptProviders`, which is never narrowed), and the **schema tokens actually sent** for it | `load` / `unload` per agent; **exempt this session** writes a per-session entry to the exemption file |
 | **Configuration** | the effective always-on list, config additions, and the high-risk list, plus every registered extension point (classifiers with priorities, visibility filters, risk gates, state providers, categories) and the exemption file in force | edit the always-on and high-risk lists; add/remove tools; saves to `settings.json` |
 | **Metadata** | one tool's three layers — what the package or a classifier declares, what the panel edited, and what the model actually receives — with its group, category, risk and summary | edit and save (writes `metadata.json`), or revert to the declaration |
+| **Tidy** | the groups still in `uncategorized`, the categories the model may choose from, and which model is in force | **ask the model** for a placement per group, then apply the rows you confirm; writes `metadata.json` |
 
 Editing is limited to metadata the core exposes: categories, groups, summaries
 and the risk mark. The JSON schema sent to the model (`description`,
 `parameters`) has no public interception point in DSH, so the panel does not
 touch it.
+
+Tidy never runs on its own. A placement is durable, so a wrong answer is work to
+undo rather than something that clears itself: the model only proposes, every
+row is unticked-able, and nothing is written until **Apply**. The model comes
+from this plugin's `model` config, else from the host's default selection
+(`agentDefaultModel`); with neither, the button explains why it is disabled
+instead of failing. Answers naming a group that does not exist, or a category
+that is not in the catalog, are shown as rejected rather than dropped silently.
 
 Exemptions move to a file once you toggle one from the panel: see the core
 package's README for the precedence between `exempt.json` and the configured

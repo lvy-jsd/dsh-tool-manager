@@ -12,6 +12,26 @@
 
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 import type { Agent, Disposer, ExtensionContext, HostContext, Logger, ToolCatalogService, ToolEntry, ToolManagerSettings, ToolMeta } from '@lvy-jsd/dsh-tool-manager'
+import { UNCATEGORIZED } from '@lvy-jsd/dsh-tool-manager'
+import { applyTidyPlan, requestTidyPlan } from './tidy.js'
+import type { TidyGroup, TidyLlm } from './tidy.js'
+
+/**
+ * What the tidy endpoints need from the host, resolved at call time rather than
+ * injected: the panel has to stay loadable on a host with no model configured,
+ * and a missing model is a disabled button, not a failed plugin.
+ */
+export interface TidyRuntime {
+  llm?: () => TidyLlm | undefined
+  model?: () => { provider: string, model: string } | null
+}
+
+/** Plugin configuration: the on/off switch and an optional model override. */
+export interface PanelConfig {
+  enabled?: boolean
+  /** Replaces the host's default model for the tidy call (tests, a fixed model). */
+  model?: { provider?: string, model?: string }
+}
 
 /** The part of the host's webServer service (dsh-host-webserver WebRoute) this plugin uses. */
 export interface WebServer {
@@ -58,6 +78,8 @@ export interface ApiParams {
   meta?: ToolMeta
   /** True to exempt the session, false to stop exempting it. */
   exempt?: unknown
+  /** Rows the user confirmed in the tidy preview. */
+  suggestions?: unknown
 }
 
 interface SseClient {
@@ -216,7 +238,27 @@ function findAgent(catalog: ToolCatalogService, sessionId: unknown): Agent | nul
  * The JSON-RPC facade behind POST /tool-manager/api. Every method reads from the
  * toolCatalog service, so the panel sees exactly what the model sees.
  */
-export function createApi(catalog: ToolCatalogService) {
+export function createApi(catalog: ToolCatalogService, tidy: TidyRuntime = {}) {
+  /** The groups still sitting in `uncategorized`, as the model needs them. */
+  function uncategorizedGroups(): TidyGroup[] {
+    const cat = catalog.get()
+    const out: TidyGroup[] = []
+    for (const group of cat.groups.values()) {
+      if (group.category !== UNCATEGORIZED) continue
+      out.push({
+        name: group.name,
+        tools: group.tools.map((tool) => ({ name: tool.name, description: tool.description, summary: tool.summary })),
+      })
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  /** Every category the model may answer with, in a stable order. */
+  function allowedCategories(): string[] {
+    const names = [...catalog.get().categories.keys()].filter((name) => name !== UNCATEGORIZED)
+    return names.sort()
+  }
+
   return {
     /** One directory node (or the root) for the Directory view. */
     tree({ path }: ApiParams = {}) {
@@ -321,6 +363,47 @@ export function createApi(catalog: ToolCatalogService) {
     toolNames() {
       return { tools: [...catalog.get().tools.keys()].sort() }
     },
+    /**
+     * What a one-click tidy would consider, without calling the model: the
+     * uncategorized groups, the categories it may choose from, and which model
+     * is in force. The UI disables the button when `model` is null.
+     */
+    tidyStatus() {
+      const groups = uncategorizedGroups()
+      return {
+        groups: groups.length,
+        tools: groups.reduce((total, group) => total + group.tools.length, 0),
+        allowed: allowedCategories(),
+        model: tidy.model?.() ?? null,
+      }
+    },
+    /**
+     * Ask the model to place the uncategorized groups. Nothing is written here:
+     * the answer is a preview the user confirms with tidyApply, because a
+     * placement is durable and a wrong one is work to undo.
+     */
+    async tidyPreview() {
+      const model = tidy.model?.()
+      if (!model) return { ok: false, message: 'no model configured' }
+      const llm = tidy.llm?.()
+      if (!llm) return { ok: false, message: 'the llm service is not available on this host' }
+      const groups = uncategorizedGroups()
+      const allowed = allowedCategories()
+      const plan = await requestTidyPlan(llm, { groups, allowed, current: UNCATEGORIZED, model })
+      return { ok: true, plan }
+    },
+    /** Write the rows the user confirmed. */
+    tidyApply({ suggestions }: ApiParams = {}) {
+      const rows = Array.isArray(suggestions) ? suggestions : []
+      const clean = rows.filter((row): row is { group: string, suggested: string } =>
+        typeof row === 'object' && row !== null && typeof (row as { group?: unknown }).group === 'string' && typeof (row as { suggested?: unknown }).suggested === 'string')
+      if (clean.length === 0) return { ok: false, message: 'no suggestions to apply' }
+      const allowed = new Set(allowedCategories())
+      const rejected = clean.filter((row) => !allowed.has(row.suggested)).map((row) => row.group)
+      const usable = clean.filter((row) => allowed.has(row.suggested))
+      const result = applyTidyPlan(catalog, usable)
+      return { ok: true, ...result, rejected }
+    },
   }
 }
 
@@ -340,8 +423,8 @@ function broadcast(clients: Set<SseClient>, event: string, data: unknown): void 
  * `webServer` (and, when present, `webRuntime` for the trusted-host list).
  * Returns a disposer that unmounts all of them.
  */
-export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { logger }: { logger?: Logger } = {}): Disposer {
-  const api = createApi(catalog)
+export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { logger, tidy = {} }: { logger?: Logger, tidy?: TidyRuntime } = {}): Disposer {
+  const api = createApi(catalog, tidy)
   // `webRuntime` is optional: read it through get() so a context that injected
   // only `webServer` does not throw on service access.
   const trustedHosts = () => {
@@ -442,13 +525,31 @@ const API_WHITELIST = new Map<unknown, (api: PanelApi, params: ApiParams) => obj
   ['extensions', (api) => api.extensions()],
   ['search', (api, params) => api.search(params)],
   ['toolNames', (api) => api.toolNames()],
+  ['tidyStatus', (api) => api.tidyStatus()],
+  ['tidyPreview', (api) => api.tidyPreview()],
+  ['tidyApply', (api, params) => api.tidyApply(params)],
 ])
 
-export function apply(ctx: ExtensionContext & { inject(deps: string[], fn: (wctx: WebContext) => void): void }, config: { enabled?: boolean } = {}) {
+export function apply(ctx: ExtensionContext & Pick<HostContext, 'get'> & { inject(deps: string[], fn: (wctx: WebContext) => void): void }, config: PanelConfig = {}) {
   const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-panel') : ctx.logger) ?? console
   if (config.enabled === false) return
+  // Both the model and the LLM service are read per call: the panel loads before
+  // any of them is guaranteed to exist, and a host without a model must keep the
+  // panel working (the tidy button just says why it is disabled).
+  const read = (name: string) => (typeof ctx.get === 'function' ? ctx.get(name) : undefined)
+  const tidy: TidyRuntime = {
+    llm: () => read('llm') as TidyLlm | undefined,
+    model: () => {
+      if (config.model?.provider && config.model.model) return { provider: config.model.provider, model: config.model.model }
+      const current = (read('agentDefaultModel') as { currentSelection?: () => { provider?: unknown, model?: unknown } } | undefined)?.currentSelection?.()
+      if (typeof current?.provider === 'string' && typeof current.model === 'string' && current.provider && current.model) {
+        return { provider: current.provider, model: current.model }
+      }
+      return null
+    },
+  }
   ctx.inject(['webServer'], (wctx) => {
-    wctx.effect(() => mountWebRoutes(wctx, ctx.toolCatalog, { logger }), 'tool-manager-panel.routes()')
+    wctx.effect(() => mountWebRoutes(wctx, ctx.toolCatalog, { logger, tidy }), 'tool-manager-panel.routes()')
     logger.info?.('tool-manager-panel: mounted /tool-manager/api and /tool-manager/events')
   })
 }

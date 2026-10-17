@@ -466,3 +466,98 @@ test('http: api and events answer over a real socket behind the fence', async ()
     await new Promise((resolve) => server.close(resolve))
   }
 })
+
+// --- one-click tidy -----------------------------------------------------------
+/** A catalog stub with an uncategorized group, for the tidy endpoints. */
+function makeTidyCatalog() {
+  const written = []
+  const tools = [
+    { name: 'adb_install', short: 'install', summary: 'Install an APK.', tokens: 10, highRisk: false, category: 'uncategorized', group: 'adb', description: 'Install an APK.' },
+    { name: 'maps_search', short: 'search', summary: 'Search places.', tokens: 10, highRisk: false, category: 'uncategorized', group: 'maps', description: 'Search places.' },
+  ]
+  const groups = new Map([
+    ['adb', { name: 'adb', category: 'uncategorized', tools: [tools[0]] }],
+    ['maps', { name: 'maps', category: 'uncategorized', tools: [tools[1]] }],
+  ])
+  const categories = new Map([
+    ['device', { name: 'device', description: 'Devices', groups: [] }],
+    ['maps', { name: 'maps', description: 'Maps', groups: [] }],
+    ['uncategorized', { name: 'uncategorized', description: '', groups: [...groups.values()] }],
+  ])
+  const service = {
+    get: () => ({ tools: new Map(tools.map((t) => [t.name, t])), groups, categories }),
+    updateToolMeta: (name, meta) => { written.push([name, meta]); return { name } },
+  }
+  return { service, written }
+}
+
+const stopChunk = { type: 'finish', reason: { kind: 'stop' } }
+const okLlm = { stream: async function* () { yield { type: 'text-delta', text: 'adb => device\nmaps => maps' }; yield stopChunk } }
+
+test('tidy: status reports the pending groups and the model in force', () => {
+  const { service } = makeTidyCatalog()
+  const api = createApi(service, { model: () => ({ provider: 'p', model: 'm' }) })
+  const status = api.tidyStatus()
+  assert.equal(status.groups, 2)
+  assert.equal(status.tools, 2)
+  assert.deepEqual(status.allowed, ['device', 'maps'])
+  assert.deepEqual(status.model, { provider: 'p', model: 'm' })
+})
+
+test('tidy: no model configured is a refusal with a reason, not a throw', async () => {
+  const { service } = makeTidyCatalog()
+  const api = createApi(service, { model: () => null, llm: () => okLlm })
+  assert.equal(api.tidyStatus().model, null)
+  const result = await api.tidyPreview()
+  assert.equal(result.ok, false)
+  assert.match(result.message, /no model configured/)
+})
+
+test('tidy: no llm service is a refusal with its own reason', async () => {
+  const { service } = makeTidyCatalog()
+  const api = createApi(service, { model: () => ({ provider: 'p', model: 'm' }) })
+  const result = await api.tidyPreview()
+  assert.equal(result.ok, false)
+  assert.match(result.message, /llm service is not available/)
+})
+
+test('tidy: preview writes nothing', async () => {
+  const { service, written } = makeTidyCatalog()
+  const api = createApi(service, { model: () => ({ provider: 'p', model: 'm' }), llm: () => okLlm })
+  const result = await api.tidyPreview()
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.plan.suggestions.map((s) => [s.group, s.suggested]), [['adb', 'device'], ['maps', 'maps']])
+  assert.deepEqual(written, [])
+})
+
+test('tidy: a failing model rejects with its message', async () => {
+  const { service } = makeTidyCatalog()
+  const failing = { stream: async function* () { yield { type: 'finish', reason: { kind: 'error', failure: { code: 'AUTH', message: 'bad key' } } } } }
+  const api = createApi(service, { model: () => ({ provider: 'p', model: 'm' }), llm: () => failing })
+  await assert.rejects(api.tidyPreview(), /AUTH: bad key/)
+})
+
+test('tidy: apply writes only the confirmed rows', () => {
+  const { service, written } = makeTidyCatalog()
+  const api = createApi(service, { model: () => ({ provider: 'p', model: 'm' }), llm: () => okLlm })
+  const result = api.tidyApply({ suggestions: [{ group: 'adb', suggested: 'device' }] })
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.applied, [{ group: 'adb', category: 'device', tools: 1 }])
+  assert.deepEqual(written.map(([name, meta]) => [name, meta.category]), [['adb_install', 'device']])
+})
+
+test('tidy: apply refuses a category the catalog does not have', () => {
+  const { service, written } = makeTidyCatalog()
+  const api = createApi(service, { model: () => ({ provider: 'p', model: 'm' }) })
+  const result = api.tidyApply({ suggestions: [{ group: 'adb', suggested: 'made-up' }, { group: 'maps', suggested: 'maps' }] })
+  assert.deepEqual(result.rejected, ['adb'])
+  assert.deepEqual(written.map(([name]) => name), ['maps_search'])
+})
+
+test('tidy: apply with nothing confirmed writes nothing', () => {
+  const { service, written } = makeTidyCatalog()
+  const api = createApi(service, { model: () => ({ provider: 'p', model: 'm' }) })
+  const result = api.tidyApply({ suggestions: [] })
+  assert.equal(result.ok, false)
+  assert.deepEqual(written, [])
+})
