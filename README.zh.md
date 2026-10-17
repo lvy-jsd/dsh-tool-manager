@@ -32,7 +32,7 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 | [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | 按内置规则和你的配置覆盖，把分组放进分类。 |
 | [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | 通过 DSH 的审批通道确认高危工具的加载，并支持按会话的白名单。 |
 | [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | DSH 重启后保留已加载的工具，每个会话一个状态文件。 |
-| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | 网页面板：浏览目录树、查看每个活动会话已加载的工具和 token 开销，并在界面上加载 / 卸载。 |
+| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | 网页面板：浏览目录树、查看每个活动会话已加载的工具和 token 开销，在界面上加载 / 卸载，编辑常驻工具和高危名单，编辑单个工具的元数据，以及豁免某个会话。 |
 | [`@lvy-jsd/dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | 用小模型给分组分类，每个分组一次请求，按分组及其工具描述的哈希缓存结果。 |
 | [`@lvy-jsd/dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | 一次调用加载一组具名工具：`tools_load(["cap:android-debug"])`。 |
 | [`@lvy-jsd/dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | 按定义这些工具的源码所属的插件包来分组。 |

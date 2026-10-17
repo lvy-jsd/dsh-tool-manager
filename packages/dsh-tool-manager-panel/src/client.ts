@@ -65,6 +65,8 @@ interface ClientContext {
       id: string
       parentId: string | null
       exempt: boolean
+      /** 'file:provider' | 'file:session' | 'config:provider' | '' */
+      exemptSource?: string
       visible: number | null
       wireTokens: number
       loadedTools: string[]
@@ -78,6 +80,10 @@ interface ClientContext {
       highRisk?: string[]
       settingsFile?: string
       hasSettings?: boolean
+      exemptProviders?: string[]
+      exemptSessions?: string[]
+      exemptFile?: string
+      hasExemptFile?: boolean
     }
     /** The four editable metadata fields, as stored and as applied. */
     interface ToolMetaFields {
@@ -111,6 +117,7 @@ interface ClientContext {
     type SaveSettings = (patch: { pinned?: string[], unpin?: string[], highRisk?: string[] }, label: string) => Promise<void>
     type SaveMeta = (name: string, meta: ToolMetaFields, label: string) => Promise<ToolMetaJson>
     type DropMeta = (name: string) => Promise<ToolMetaJson>
+    type SetExempt = (sessionId: string, exempt: boolean) => Promise<void>
 
     const ID = 'tool-manager'
     const NS = 'tool-manager.panel'
@@ -155,8 +162,18 @@ interface ClientContext {
       subagentOf: 'subagent of {id}',
       visible: '{n} visible',
       exempt: 'exempt',
-      exemptHint: 'Model route listed in exemptProviders: this session is never narrowed.',
-      exemptNote: 'Exempt route (exemptProviders): every tool is visible; nothing is narrowed.',
+      exemptHint: 'This session is never narrowed: its model route is listed in the exemption list.',
+      exemptSessionHint: 'This one session is listed in the exemption file; it is never narrowed.',
+      exemptNote: 'Exempt session: every tool is visible; nothing is narrowed.',
+      exemptOn: 'Exempt session',
+      exemptOff: 'Narrow it',
+      'config.exemptFile': 'Exemption file',
+      'config.hasExemptFile': 'The exemption file is in effect: its providers and sessions replace exemptProviders from the plugin config.',
+      'config.noExemptFile': 'No exemption file yet; exemptProviders from the plugin config is in effect. Exempting a session here creates the file.',
+      'config.exemptProviders': 'Exempt routes',
+      'config.exemptSessions': 'Exempt sessions',
+      'config.exemptSaved': 'Exemptions saved.',
+      'config.exemptFailed': 'Saving the exemption failed: {message}',
       sent: '{tokens} sent',
       groups: 'Groups',
       loadedTools: 'Tools',
@@ -262,8 +279,18 @@ interface ClientContext {
       subagentOf: '{id} 的子 agent',
       visible: '可见 {n} 个',
       exempt: '豁免',
-      exemptHint: '该会话的模型路线在 exemptProviders 中，不做收窄。',
-      exemptNote: '豁免路线（exemptProviders）：所有工具都可见，不做收窄。',
+      exemptHint: '该会话不做收窄：它的模型路线在豁免名单中。',
+      exemptSessionHint: '该会话单独列在豁免文件里，不做收窄。',
+      exemptNote: '豁免会话：所有工具都可见，不做收窄。',
+      exemptOn: '豁免此会话',
+      exemptOff: '恢复收窄',
+      'config.exemptFile': '豁免文件',
+      'config.hasExemptFile': '豁免文件正在生效：其中的 providers 和 sessions 取代插件配置里的 exemptProviders。',
+      'config.noExemptFile': '尚未生成豁免文件；当前使用插件配置里的 exemptProviders。在这里豁免某个会话会创建该文件。',
+      'config.exemptProviders': '豁免路线',
+      'config.exemptSessions': '豁免会话',
+      'config.exemptSaved': '已保存豁免设置。',
+      'config.exemptFailed': '保存豁免设置失败：{message}',
       sent: '已发送 {tokens}',
       groups: '组',
       loadedTools: '工具',
@@ -534,7 +561,7 @@ interface ClientContext {
         })))
     }
 
-    function Sessions({ t, sessions, selected, setSelected, unload }: { t: Translate, sessions: SessionRow[] | null, selected: string | null, setSelected: (id: string) => void, unload: Unload }) {
+    function Sessions({ t, sessions, selected, setSelected, unload, setExempt }: { t: Translate, sessions: SessionRow[] | null, selected: string | null, setSelected: (id: string) => void, unload: Unload, setExempt: SetExempt }) {
       if (!sessions) return h('div', { className: 'tmp-empty' }, t('loading'))
       if (sessions.length === 0) return h('div', { className: 'tmp-empty' }, t('noSessions'))
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, sessions.map((s) =>
@@ -543,10 +570,13 @@ interface ClientContext {
             h('span', { className: 'tmp-name' }, s.id.replace(/^session-/, '').slice(0, 8)),
             s.parentId ? h(Chip, null, format(t, 'subagentOf', { id: s.parentId.replace(/^session-/, '').slice(0, 8) })) : null,
             s.exempt
-              ? h(Chip, { tone: 'warn', title: t('exemptHint') }, t('exempt'))
+              ? h(Chip, { tone: 'warn', title: s.exemptSource === 'file:session' ? t('exemptSessionHint') : t('exemptHint') }, t('exempt'))
               : h(Chip, null, format(t, 'visible', { n: s.visible ?? 0 })),
             h(Chip, { tone: 'ok' }, format(t, 'sent', { tokens: format(t, 'tokens', { n: tokNumber(s.wireTokens) }) })),
             h('span', { className: 'tmp-grow' }),
+            // Per-session exemption is reversible from here: an emptied file
+            // restores the plugin config list.
+            h(Button, { ghost: !s.exempt, onClick: () => setExempt(s.id, !s.exempt) }, s.exempt ? t('exemptOff') : t('exemptOn')),
             h(Button, { ghost: s.id !== selected, onClick: () => setSelected(s.id) }, s.id === selected ? t('selected') : t('select')),
           ),
           s.groups.length
@@ -636,6 +666,15 @@ interface ClientContext {
           h('p', { className: 'tmp-muted' }, t('config.storedIn')),
           h('p', { className: 'tmp-mono' }, config.settingsFile ?? ''),
           h('p', { className: 'tmp-muted' }, config.hasSettings ? t('config.hasSettings') : t('config.noSettings'))),
+        // The exemption list lives in its own file, edited per session from the
+        // Sessions tab; this card only shows what is in force and where from.
+        h('div', { className: 'tmp-card' }, h('h3', null, t('config.exemptFile')),
+          h('table', { className: 'tmp-table' }, h('tbody', null,
+            row(t('config.exemptProviders'), list(config.exemptProviders)),
+            row(t('config.exemptSessions'), list(config.exemptSessions)),
+          )),
+          h('p', { className: 'tmp-mono' }, config.exemptFile ?? ''),
+          h('p', { className: 'tmp-muted' }, config.hasExemptFile ? t('config.hasExemptFile') : t('config.noExemptFile'))),
         h('div', { className: 'tmp-card' }, h('h3', null, t('ext.title')),
           h('table', { className: 'tmp-table' }, h('tbody', null,
             ...(ext.classifiers ?? []).map((c) => row(t('ext.classifier'), `${c.name} · ${format(t, 'ext.priority', { n: c.priority })}`, `c:${c.name}`)),
@@ -851,6 +890,16 @@ interface ClientContext {
         if (!target) return say(t('noSession'))
         await unload(target, targets)
       }
+      const setExempt: SetExempt = async (sessionId, exempt) => {
+        try {
+          await api<object>('setExemptSession', { sessionId, exempt })
+          say(t('config.exemptSaved'))
+          setSettingsVersion((v) => v + 1)
+          refreshSessions()
+        } catch (e) {
+          say(format(t, 'config.exemptFailed', { message: (e as Error).message }))
+        }
+      }
       const save: SaveSettings = async (patch, label) => {
         try {
           await api<object>('updateConfig', { settings: patch })
@@ -898,7 +947,7 @@ interface ClientContext {
             offline ? t('offline') : format(t, 'stat', { n: (sessions ?? []).length, tokens: format(t, 'tokens', { n: tokNumber(totalTokens) }) }))),
         h('div', { className: 'tmp-flash', role: 'status', title: flash?.detail }, flash?.message ?? ''),
         tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, inspect, version })
-          : tab === 'sessions' ? h(Sessions, { t, sessions, selected: target, setSelected, unload })
+          : tab === 'sessions' ? h(Sessions, { t, sessions, selected: target, setSelected, unload, setExempt })
             : tab === 'meta' ? h(MetaEditor, { key: inspectTick, t, initial: inspectName, tools, save: saveMeta, drop: dropMeta })
               : h(Config, { t, save, external: settingsVersion }),
       )

@@ -369,6 +369,9 @@ service. Auto-load-on-attach (§11.6 original design) needs the host event that
 | risk-gate | `defaultHighRisk` | include the built-in list (GitHub write tools…) | `true` |
 | risk-gate | `allow` | `{ <session id>: true \| "*" \| [tool, …] }` — sessions that skip the prompt | `{}` |
 | panel | `enabled` | mount the API and event routes | `true` |
+| core | `settingsFile` | where the panel's edited lists are written | `$DSH_HOME/tool-manager/settings.json` |
+| core | `metadataFile` | where the panel's per-tool metadata edits are written | `$DSH_HOME/tool-manager/metadata.json` |
+| core | `exemptFile` | route/session exemptions; **replaces** `exemptProviders` when present | `$DSH_HOME/tool-manager/exempt.json` |
 | capability-bridge | `prefix` | target prefix marking a pack | `"cap:"` |
 | capability-bridge | `packs` | `{ <name>: [targets] }` — what each pack expands to | `{}` |
 | capability-bridge | `listInDirectory` | add a `capabilities` category | `true` |
@@ -631,6 +634,42 @@ dialog leaves no leftovers and no duplicate row; switching DSH to Chinese rename
 the row and the panel. Screenshots cropped to the dialog only. Unit tests load
 both browser modules under a stub module loader (export present, one overlay
 registered with the panel namespace, silent when the panel is absent).
+
+### 11.15 Panel interactions: metadata editing and the exemption file (implemented, 2026-10-17)
+
+Requested by the user via the manager: browse and edit a tool's API metadata,
+edit the settings lists, and let a file replace the config `exemptProviders`.
+
+- **Editable settings (item 1).** The Configuration view is no longer read-only:
+  the always-on list and the high-risk list take additions and removals and save
+  through `updateConfig`, which writes `settings.json` and rebuilds the catalog.
+  These are exactly the lists `cordis.patch.yml` cannot be edited for from a
+  browser.
+- **Tool metadata (item 2).** A new `Metadata` tab: pick a tool (or open one from
+  the Directory), see three layers — the package/classifier declaration, the
+  panel's own edit, and what the model actually receives — and edit group,
+  category, risk and summary. `metadata.json` holds
+  `{ "<tool>": { group?, category?, risk?, summary? } }`; an edit is the whole
+  entry, so a blank field falls back to the declaration. The panel edits only
+  what the core already exposes: **not** `parameters` or `description`. DSH has
+  no public interception point for the schema sent to the model (`dsh-tools`
+  exposes only the execution-time `tools/pre-execute`, `tools/execute`,
+  `tools/post-execute` hooks, and `view`/`schemaOf` are host-private), so
+  touching it would break across versions.
+- **Exemption file (item 4).** `<DSH_HOME>/tool-manager/exempt.json` replaces
+  `exemptProviders` the same way `settings.json` does: present → file wins as a
+  whole; absent → the config list applies. Shape
+  `{ "providers": [...], "sessions": [...] }`. `sessions` exempts a single
+  session by id for its remaining lifetime, toggled by a button in the Sessions
+  view without de-exempting the route. Reading the agent's session id falls back
+  to the agent id, so an entry can be removed by hand either way.
+
+**Verification**: 11 unit tests for the exemption store (file-vs-config
+precedence, corrupt file warns instead of restoring config, `reasonFor` sources,
+first edit preserves the visible list, reload, atomic write, `DSH_HOME`
+default), 6 panel API tests (report, set, missing id → 400, reload, whitelist)
+plus the metadata tests from item 2; `tsc -b` clean, 172 unit tests and the
+full e2e suite pass.
 
 ## 12. Web panel and onboarding (design; implementation is phase 2 item ③)
 

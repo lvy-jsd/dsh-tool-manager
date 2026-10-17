@@ -71,14 +71,16 @@ function makeCatalog() {
     unload: async (a, targets) => `Unloaded ${targets.length} target(s)`,
     config: () => ({
       pinned: ['bash'], entryTools: ['tools_ls'], extraPinned: [], unpinned: [], highRisk: [],
-      exemptProviders: ['claude-code'], defaults: ['bash'], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false,
+      exemptProviders: ['claude-code'], exemptSessions: [], exemptFile: '/tmp/dsh/tool-manager/exempt.json',
+      hasExemptFile: false, defaults: ['bash'], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false,
     }),
     updateConfig: (patch) => ({
       pinned: ['bash', ...(patch.pinned ?? [])], entryTools: ['tools_ls'],
       extraPinned: patch.pinned ?? [], unpinned: patch.unpin ?? [], highRisk: patch.highRisk ?? [],
-      exemptProviders: [], defaults: ['bash'], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: true,
+      exemptProviders: [], exemptSessions: [], exemptFile: '/tmp/dsh/tool-manager/exempt.json', hasExemptFile: false,
+      defaults: ['bash'], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: true,
     }),
-    reloadConfig: () => ({ pinned: [], entryTools: [], extraPinned: [], unpinned: [], highRisk: [], exemptProviders: [], defaults: [], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false }),
+    reloadConfig: () => ({ pinned: [], entryTools: [], extraPinned: [], unpinned: [], highRisk: [], exemptProviders: [], exemptSessions: [], exemptFile: '/tmp/dsh/tool-manager/exempt.json', hasExemptFile: false, defaults: [], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false }),
     extensions: () => ({ classifiers: [{ name: 'rules:defaults', priority: 100 }], filters: ['testkit'], annotations: [], categories: ['device', 'code'], riskGates: ['risk-gate'], stateProviders: ['persist'] }),
     find: () => [{ ...tools[0], path: '/device/adb/install' }],
     toolMeta: (name) => ({
@@ -95,6 +97,19 @@ function makeCatalog() {
     }),
     clearToolMeta: (name) => ({ ...service.toolMeta(name), edited: {} }),
     metadataFile: () => '/tmp/dsh/tool-manager/metadata.json',
+    exemptionOf: () => ({ exempt: false, source: '' }),
+    setExemptSession: (sessionId, exempt) => ({
+      pinned: [], entryTools: [], extraPinned: [], unpinned: [], highRisk: [],
+      exemptProviders: ['claude-code'], exemptSessions: exempt ? [String(sessionId)] : [],
+      exemptFile: '/tmp/dsh/tool-manager/exempt.json', hasExemptFile: true,
+      defaults: [], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false,
+    }),
+    reloadExempt: () => ({
+      pinned: [], entryTools: [], extraPinned: [], unpinned: [], highRisk: [],
+      exemptProviders: ['claude-code'], exemptSessions: [],
+      exemptFile: '/tmp/dsh/tool-manager/exempt.json', hasExemptFile: false,
+      defaults: [], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false,
+    }),
   }
   return service
 }
@@ -138,9 +153,10 @@ test('api: sessions report loaded state and real token usage', () => {
 
 test('api: an exempt session is flagged instead of showing 0 visible tools', () => {
   const catalog = makeCatalog()
-  const api = createApi({ ...catalog, isExempt: () => true, allowFor: () => null })
+  const api = createApi({ ...catalog, isExempt: () => true, exemptionOf: () => ({ exempt: true, source: 'config:provider' }), allowFor: () => null })
   const [session] = api.sessions().sessions
   assert.equal(session.exempt, true)
+  assert.equal(session.exemptSource, 'config:provider')
   assert.equal(session.visible, null)
   const [normal] = createApi(catalog).sessions().sessions
   assert.equal(normal.exempt, false)
@@ -286,6 +302,68 @@ test('api: metadata is reachable through the whitelist and reports failures as 4
 test('api: toolNames lists the catalog for the metadata picker', () => {
   const { tools } = createApi(makeCatalog()).toolNames()
   assert.deepEqual(tools, ['adb_install', 'merge_pull_request'])
+})
+
+test('api: config reports the exemption file and whether it is in charge', () => {
+  const body = createApi(makeCatalog()).config()
+  assert.deepEqual(body.config.exemptProviders, ['claude-code'])
+  assert.deepEqual(body.config.exemptSessions, [])
+  assert.match(body.config.exemptFile, /exempt\.json$/)
+  assert.equal(body.config.hasExemptFile, false)
+})
+
+test('api: setExemptSession exempts one session and reports the file', () => {
+  const api = createApi(makeCatalog())
+  const body = api.setExemptSession({ sessionId: 'sess-1', exempt: true })
+  assert.equal(body.ok, true)
+  assert.deepEqual(body.config.exemptSessions, ['sess-1'])
+  assert.equal(body.config.hasExemptFile, true)
+  const lifted = api.setExemptSession({ sessionId: 'sess-1', exempt: false })
+  assert.deepEqual(lifted.config.exemptSessions, [])
+})
+
+test('api: an exemption call without a session id is refused', () => {
+  const result = createApi(makeCatalog()).setExemptSession({ exempt: true })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /sessionId is required/)
+})
+
+test('api: reloadExempt re-reads the file from disk', () => {
+  const body = createApi(makeCatalog()).reloadExempt()
+  assert.equal(body.config.hasExemptFile, false)
+  assert.deepEqual(body.config.exemptProviders, ['claude-code'])
+})
+
+test('api: the exemption methods are reachable through the whitelist', async () => {
+  const routes = []
+  const ctx = {
+    webRuntime: { trustedHosts: [] },
+    webServer: { register: (route) => { routes.push(route); return () => {} } },
+    on: () => () => {},
+    logger: () => ({ warn() {}, info() {} }),
+  }
+  const dispose = mountWebRoutes(ctx, makeCatalog())
+  const server = createServer((req, res) => routes[0].handler(req, res))
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const base = `http://127.0.0.1:${server.address().port}`
+  try {
+    const call = async (method, params) => (await fetch(base, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method, params }),
+    })).json()
+    const saved = await call('setExemptSession', { sessionId: 'sess-1', exempt: true })
+    assert.equal(saved.ok, true)
+    assert.deepEqual(saved.config.exemptSessions, ['sess-1'])
+    const reloaded = await call('reloadExempt', {})
+    assert.equal(reloaded.ok, true)
+    // A route-level rejection must not arrive as a 200 with ok:true.
+    const refused = await call('setExemptSession', { exempt: true })
+    assert.equal(refused.ok, false)
+  } finally {
+    dispose()
+    await new Promise((resolve) => server.close(resolve))
+  }
 })
 
 // --- route mounting -----------------------------------------------------------

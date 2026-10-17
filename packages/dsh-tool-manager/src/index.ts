@@ -11,6 +11,7 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildCatalog, resolveTarget, toolsUnder, UNCATEGORIZED } from './catalog.js'
 import { createMetadataStore, defaultMetadataFile } from './metadata.js'
+import { createExemptStore, defaultExemptFile } from './exempt.js'
 import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
@@ -76,9 +77,28 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   // session and never refreshed (Claude Code receives DSH tools through an MCP
   // bridge at startup). Narrowing such a session hides tools it can then never
   // load, and the client already lazy-loads schemas itself (ToolSearch), so
-  // these agents are left unrestricted. Config `exemptProviders` replaces the
-  // default list; [] restricts every route.
-  const exemptProviders = new Set(config.exemptProviders ?? ['claude-code'])
+  // these agents are left unrestricted.
+  //
+  // The list in force comes from the exemption file when it exists, else from
+  // config `exemptProviders` (default ["claude-code"]; [] restricts every
+  // route). A file entry can also name a single session id, so one session can
+  // be exempted without touching the route it uses.
+  const exemptions = createExemptStore({
+    file: config.exemptFile ?? defaultExemptFile(),
+    configProviders: config.exemptProviders ?? ['claude-code'],
+    logger,
+  })
+
+  /** Session id used to match a per-session exemption, with the agent id as fallback. */
+  function sessionIdOf(agent: Agent): string | undefined {
+    const id = agent?.session?.id ?? agent?.id
+    return id === undefined || id === null || id === '' ? undefined : String(id)
+  }
+
+  /** Why this agent is not narrowed, if it is not. */
+  function exemptionOf(agent: Agent) {
+    return exemptions.reasonFor(providerOf(agent), sessionIdOf(agent))
+  }
 
   /** The route an agent's next request will use: latest model/selection, else its options. */
   const selectionScan = new WeakMap<object, { seq: number, provider: string | undefined }>() // session -> incremental scan
@@ -127,7 +147,10 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       extraPinned: [...current.pinned],
       unpinned: [...current.unpin],
       highRisk: [...current.highRisk],
-      exemptProviders: [...exemptProviders],
+      exemptProviders: [...exemptions.effective().providers],
+      exemptSessions: [...exemptions.effective().sessions],
+      exemptFile: exemptions.file,
+      hasExemptFile: exemptions.present(),
       defaults: [...DEFAULT_PINNED],
       settingsFile: settings.file,
       // An empty file is not an override, so count keys rather than existence.
@@ -242,10 +265,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     // The catalog is rebuilt lazily after any registry change.
     invalidate,
     onStateChange: (agent, state) => ctx.emit('tool-catalog/state-changed', { agent, state }),
-    isExempt: (agent) => {
-      const provider = providerOf(agent)
-      return provider !== undefined && exemptProviders.has(provider)
-    },
+    isExempt: (agent) => exemptionOf(agent).exempt,
     logger,
   })
 
@@ -314,6 +334,8 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     allowFor: (agent: Agent) => visibility.allowFor(agent),
     /** True when the agent's model route is in `exemptProviders` (never narrowed). */
     isExempt: (agent: Agent) => visibility.isExempt(agent),
+    /** Why an agent is exempt, so the panel can label a route-wide exemption. */
+    exemptionOf: (agent: Agent) => exemptionOf(agent),
     /**
      * Load/unload on behalf of an agent, through the same path as the entry
      * tools (hooks, vetoes, risk gates and persistence all apply). Returns the
@@ -348,6 +370,25 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     reloadConfig() {
       settings.reload()
       invalidate()
+      visibility.refresh()
+      ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
+      return configSnapshot()
+    },
+    /**
+     * Exempt one session from narrowing, or stop exempting it. Written to the
+     * exemption file, so the choice survives a restart and is reversible by
+     * editing or deleting that one file.
+     */
+    setExemptSession(sessionId: string, exempt: boolean) {
+      exemptions.setSession(String(sessionId), exempt)
+      // An exemption installs or lifts a restriction, so re-apply it now.
+      visibility.refresh()
+      ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
+      return configSnapshot()
+    },
+    /** Re-read the exemption file, for after an external edit. */
+    reloadExempt() {
+      exemptions.reload()
       visibility.refresh()
       ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
       return configSnapshot()

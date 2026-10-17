@@ -11,9 +11,19 @@ Optional — the core works without it. When the deployment has no web server
 
 | View | Shows | Actions |
 |---|---|---|
-| **Directory** | the same category → group → tool tree the model browses, with per-node tool counts and schema tokens, plus each tool's summary and high-risk mark | click to drill down; `load` on any node; search across the whole tree from the search box |
-| **Sessions** | every live agent (subagents marked with their parent), its loaded groups and tools, how many tools are visible (`exempt` for a route listed in `exemptProviders`, which is never narrowed), and the **schema tokens actually sent** for it | `load` / `unload` per agent |
-| **Configuration** | the effective always-on list, config additions, and the high-risk list, plus every registered extension point (classifiers with priorities, visibility filters, risk gates, state providers, categories) | read-only in v1 |
+| **Directory** | the same category → group → tool tree the model browses, with per-node tool counts and schema tokens, plus each tool's summary and high-risk mark | click to drill down; `load` on any node; search across the whole tree from the search box; **Metadata** on a tool opens its metadata editor |
+| **Sessions** | every live agent (subagents marked with their parent), its loaded groups and tools, how many tools are visible (`exempt` for a route listed in `exemptProviders`, which is never narrowed), and the **schema tokens actually sent** for it | `load` / `unload` per agent; **exempt this session** writes a per-session entry to the exemption file |
+| **Configuration** | the effective always-on list, config additions, and the high-risk list, plus every registered extension point (classifiers with priorities, visibility filters, risk gates, state providers, categories) and the exemption file in force | edit the always-on and high-risk lists; add/remove tools; saves to `settings.json` |
+| **Metadata** | one tool's three layers — what the package or a classifier declares, what the panel edited, and what the model actually receives — with its group, category, risk and summary | edit and save (writes `metadata.json`), or revert to the declaration |
+
+Editing is limited to metadata the core exposes: categories, groups, summaries
+and the risk mark. The JSON schema sent to the model (`description`,
+`parameters`) has no public interception point in DSH, so the panel does not
+touch it.
+
+Exemptions move to a file once you toggle one from the panel: see the core
+package's README for the precedence between `exempt.json` and the configured
+`exemptProviders`.
 
 Loading from the panel goes through the **same path as `tools_load`**, so
 `tool-catalog/before-load` hooks and vetoes apply. The risk gate's approval
@@ -51,8 +61,8 @@ Two halves:
 
   | Route | Purpose |
   |---|---|
-  | `POST /tool-manager/api` | JSON-RPC with a method whitelist (`tree`, `sessions`, `load`, `unload`, `config`, `extensions`, `search`) |
-  | `GET /tool-manager/events` | SSE: catalog rebuilt, per-session state changed |
+  | `POST /tool-manager/api` | JSON-RPC with a method whitelist (`tree`, `sessions`, `load`, `unload`, `config`, `updateConfig`, `reloadConfig`, `setExemptSession`, `reloadExempt`, `toolMeta`, `updateToolMeta`, `clearToolMeta`, `extensions`, `search`, `toolNames`) |
+  | `GET /tool-manager/events` | SSE: catalog rebuilt, per-session state changed, configuration saved, metadata edited |
 
 - **Browser half** (`src/client.ts`) is a small
   `window.__ModuleLoader__.load({...})` registration, compiled by `tsc` into a

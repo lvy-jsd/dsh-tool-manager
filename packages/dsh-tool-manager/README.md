@@ -56,6 +56,30 @@ built-in rules and config overrides, or write your own classifier.
     highRisk: []    # never included in group loads; load individually
 ```
 
+### Override files
+
+Three files under `$DSH_HOME/tool-manager/` override the config above. Each is
+read at startup and re-read when the settings panel saves through the API (or
+`reload*` is called); write them from the panel, or by hand and then reload.
+
+| File | Config key it replaces | What it holds |
+|---|---|---|
+| `settings.json` | `pinned`, `unpin`, `highRisk` | the lists an operator edits most often |
+| `metadata.json` | `annotate()` for the same tool | `{ "<tool>": { "group", "category", "risk", "summary" } }` |
+| `exempt.json` | `exemptProviders` | `{ "providers": [...], "sessions": [...] }` |
+
+The files win as a whole, not key by key: once `exempt.json` exists, the config
+list is ignored rather than merged, so what the file shows is what is in force.
+A missing file means "no opinion, use the config"; a corrupt file is reported as
+a warning and treated as empty rather than silently restoring the config.
+`sessions` exempts one session by id for its remaining lifetime, for checking
+whether a client handles late loading without de-exempting the whole route.
+
+A tool's `metadata.json` entry replaces the previous entry as a whole:
+submitting the form with a field blank drops that override, and the package
+declaration (or a classifier) applies again. `parameters` are deliberately not
+part of it — the host owns the schema sent to the model.
+
 ## Extending: the `toolCatalog` service
 
 Declare `inject: ['toolCatalog']` (or use `ctx.inject(['toolCatalog'], …)` for

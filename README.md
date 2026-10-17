@@ -33,7 +33,7 @@ missing. See [Extending](#extending) to write your own classifier.
 | [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | Places groups into categories from built-in rules and your config overrides. |
 | [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | Confirms loading high-risk tools through the DSH approval channel, with a per-session allowlist. |
 | [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | Keeps loaded tools across a DSH restart, one state file per session. |
-| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | Web panel: browse the tree, see each live session's loaded tools and token cost, load/unload from the UI. |
+| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | Web panel: browse the tree, see each live session's loaded tools and token cost, load/unload from the UI, edit the always-on and high-risk lists, edit one tool's metadata, exempt one session. |
 | [`@lvy-jsd/dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | Places groups with a small model, one request per group, cached by a hash of the group and its tool descriptions. |
 | [`@lvy-jsd/dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | Load a named bundle of tools in one call: `tools_load(["cap:android-debug"])`. |
 | [`@lvy-jsd/dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | Group tools by the plugin package whose source defines them. |

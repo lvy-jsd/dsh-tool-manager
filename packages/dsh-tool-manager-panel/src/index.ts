@@ -56,6 +56,8 @@ export interface ApiParams {
   tool?: unknown
   /** Edited metadata for the updateToolMeta method. */
   meta?: ToolMeta
+  /** True to exempt the session, false to stop exempting it. */
+  exempt?: unknown
 }
 
 interface SseClient {
@@ -226,11 +228,13 @@ export function createApi(catalog: ToolCatalogService) {
       for (const { agent, id, parentId } of catalog.agents()) {
         const state = catalog.stateOf(agent)
         // An exempt route is never narrowed, so it has no allowlist to count.
-        const exempt = catalog.isExempt?.(agent) === true
+        const exemption = catalog.exemptionOf?.(agent) ?? { exempt: catalog.isExempt?.(agent) === true, source: '' }
+        const exempt = exemption.exempt
         rows.push({
           id,
           parentId,
           exempt,
+          exemptSource: exemption.source,
           visible: exempt ? null : (catalog.allowFor(agent) ?? []).length,
           wireTokens: catalog.wireTokens(agent),
           loadedTools: [...state.loaded].sort(),
@@ -269,6 +273,19 @@ export function createApi(catalog: ToolCatalogService) {
     /** Re-read the settings file after an external edit. */
     reloadConfig() {
       return { config: catalog.reloadConfig() }
+    },
+    /**
+     * Exempt or un-exempt one session through the exemption file, so it takes
+     * effect at once and survives a restart.
+     */
+    setExemptSession({ sessionId, exempt }: ApiParams = {}) {
+      const id = String(sessionId ?? '')
+      if (!id) return { ok: false, message: 'sessionId is required' }
+      return { ok: true, config: catalog.setExemptSession(id, exempt === true) }
+    },
+    /** Re-read the exemption file after an external edit. */
+    reloadExempt() {
+      return { config: catalog.reloadExempt() }
     },
     /**
      * One tool with its metadata layers: what the package declares, what was
@@ -417,6 +434,8 @@ const API_WHITELIST = new Map<unknown, (api: PanelApi, params: ApiParams) => obj
   ['config', (api) => api.config()],
   ['updateConfig', (api, params) => api.updateConfig(params)],
   ['reloadConfig', (api) => api.reloadConfig()],
+  ['setExemptSession', (api, params) => api.setExemptSession(params)],
+  ['reloadExempt', (api) => api.reloadExempt()],
   ['toolMeta', (api, params) => api.toolMeta(params)],
   ['updateToolMeta', (api, params) => api.updateToolMeta(params)],
   ['clearToolMeta', (api, params) => api.clearToolMeta(params)],

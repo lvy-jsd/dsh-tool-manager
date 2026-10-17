@@ -268,6 +268,13 @@ export interface CoreConfig {
    * <DSH_HOME>/tool-manager/metadata.json).
    */
   metadataFile?: string
+  /**
+   * Where the exemption list is read from (default
+   * <DSH_HOME>/tool-manager/exempt.json). When the file exists its `providers`
+   * and `sessions` win over `exemptProviders` above; when it does not, the
+   * config list is used.
+   */
+  exemptFile?: string
 }
 
 /** A plugin package the host loader knows. */
@@ -314,8 +321,14 @@ export interface ToolCatalogService {
   importState(agent: Agent, state: Partial<SerializedState>): void
   /** Names visible to the agent, or null when this plugin does not restrict it. */
   allowFor(agent: Agent): string[] | null
-  /** True when the agent's model route is in `exemptProviders` (never narrowed). */
+  /** True when the agent is never narrowed, by route or by its session id. */
   isExempt(agent: Agent): boolean
+  /**
+   * Why the agent is exempt, so the UI can tell a route-wide exemption from one
+   * session: { exempt, source } with source 'file:provider' | 'file:session' |
+   * 'config:provider' | ''.
+   */
+  exemptionOf(agent: Agent): { exempt: boolean, source: string }
   /** Load through the same path as tools_load; returns the model-facing text. */
   load(agent: Agent, targets: readonly string[], options?: { forSubagents?: boolean }): Promise<string>
   unload(agent: Agent, targets: readonly string[]): Promise<string>
@@ -329,12 +342,26 @@ export interface ToolCatalogService {
     unpinned: string[]
     highRisk: string[]
     exemptProviders: string[]
+    /** Session ids exempted for their own lifetime by the exemption file. */
+    exemptSessions: string[]
     defaults: string[]
     /** Where UI edits are persisted. */
     settingsFile: string
     /** True when a settings file exists and overrides the plugin config. */
     hasSettings: boolean
+    /** Where the exemption list is read from. */
+    exemptFile: string
+    /** True when the exemption file exists and overrides `exemptProviders`. */
+    hasExemptFile: boolean
   }
+  /**
+   * Add or remove one session id in the exemption file and apply it at once.
+   * The first call creates the file from the lists already in force, so entries
+   * visible in the UI are never dropped by a write.
+   */
+  setExemptSession(sessionId: string, exempt: boolean): ReturnType<ToolCatalogService['config']>
+  /** Re-read the exemption file, for after an external edit. */
+  reloadExempt(): ReturnType<ToolCatalogService['config']>
   /**
    * Persist UI-edited settings (merged per key) and apply them at once. The
    * values win over the plugin config from the next call on. Returns the new
