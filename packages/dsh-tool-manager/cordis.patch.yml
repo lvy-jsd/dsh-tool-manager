@@ -14,3 +14,6 @@
         # Loading high-risk tools also needs a risk gate plugin
         # (@lvy-jsd/dsh-tool-manager-risk-gate) to confirm them.
         highRisk: []
+        # The catalog as text, for a client that cannot lazy-load (Claude Code
+        # reads it through a ~/.claude/CLAUDE.md `@` line). '' turns it off.
+        # manifestFile: ~/.claude/dsh-tool-catalog.md

@@ -269,6 +269,11 @@ export interface CoreConfig {
    */
   metadataFile?: string
   /**
+   * Where the plain-text tool manifest is written (default
+   * ~/.claude/dsh-tool-catalog.md). Set to '' to turn it off.
+   */
+  manifestFile?: string
+  /**
    * Where the exemption list is read from (default
    * <DSH_HOME>/tool-manager/exempt.json). When the file exists its `providers`
    * and `sessions` win over `exemptProviders` above; when it does not, the

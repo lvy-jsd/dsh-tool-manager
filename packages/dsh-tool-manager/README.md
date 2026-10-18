@@ -68,6 +68,36 @@ read at startup and re-read when the settings panel saves through the API (or
 | `metadata.json` | `annotate()` for the same tool | `{ "<tool>": { "group", "category", "risk", "summary" } }` |
 | `exempt.json` | `exemptProviders` | `{ "providers": [...], "sessions": [...] }` |
 
+### The tool manifest
+
+A client that receives its tool list once per session — Claude Code, driven by
+`dsh-oh-my-claude` — cannot discover the directory by asking, because nothing
+tells it the directory exists. So the catalog is also written out as text, to
+`~/.claude/dsh-tool-catalog.md`, after every rebuild:
+
+```
+## device (14 tools, Devices)
+
+### adb — load with `tools_load({ targets: ["/device/adb"] })`
+- adb_install — Install an APK on a device.
+- adb_shell ! — Run a shell command on a device.
+```
+
+The file opens by saying the listed tools are **not callable yet**, then gives
+the two calls that change that (`tools_ls`, `tools_load`) and the rule to load
+the smallest thing that covers the task. A `!` marks a high-risk tool. Reading
+it runs nothing.
+
+Add one line to `~/.claude/CLAUDE.md` so every Claude session reads it:
+
+```
+@~/.claude/dsh-tool-catalog.md
+```
+
+The write is skipped when the text did not change, so a rebuild that moves
+nothing does not cost a prompt re-read. `manifestFile` points it elsewhere, and
+`''` turns it off.
+
 The files win as a whole, not key by key: once `exempt.json` exists, the config
 list is ignored rather than merged, so what the file shows is what is in force.
 A missing file means "no opinion, use the config"; a corrupt file is reported as

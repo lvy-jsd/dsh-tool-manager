@@ -12,6 +12,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildCatalog, resolveTarget, toolsUnder, UNCATEGORIZED } from './catalog.js'
 import { createMetadataStore, defaultMetadataFile } from './metadata.js'
 import { createExemptStore, defaultExemptFile } from './exempt.js'
+import { defaultManifestFile, syncManifest } from './manifest.js'
 import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
@@ -253,6 +254,12 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       highRisk: settings.effective().highRisk,
     })
     catalogs.set(key, catalog)
+    // A client that receives its tool list once per session cannot discover the
+    // directory by asking, so it gets the index as a file instead. Written here,
+    // after every rebuild, so it cannot drift from what tools_load would answer.
+    // An empty path turns it off.
+    const manifestFile = config.manifestFile ?? defaultManifestFile()
+    if (manifestFile) syncManifest(catalog, manifestFile, logger)
     ctx.emit('tool-catalog/after-rebuild', { catalog })
     return catalog
   }
