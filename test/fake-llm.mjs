@@ -8,13 +8,43 @@
 //
 // Usage: node fake-llm.mjs <port> <script.json> <log.jsonl>
 //   script: [{ "tool_calls": [{ "name": "...", "arguments": {...} }] } | { "text": "..." }, ...]
+//
+// Subagents run concurrently with their parent (DSH 0.2.1 never waits for a
+// child), so requests from different agents interleave. A step with
+// `"agent": "<marker>"` belongs to the conversation whose first user message
+// contains that marker; every other step belongs to the main conversation.
+// Each conversation takes its own steps in script order. A step with
+// `"skipUnless": "<regex>"` is skipped when the last message does not match,
+// so one script covers DSH versions that differ in what a tool returns.
+// The log records `step` as the index into the script (-1 once it runs out).
 import { createServer } from 'node:http'
 import { readFileSync, appendFileSync } from 'node:fs'
 
 const [port, scriptPath, logPath] = process.argv.slice(2)
 const script = JSON.parse(readFileSync(scriptPath, 'utf8'))
-let step = 0
+const markers = [...new Set(script.map((s) => s.agent).filter(Boolean))]
+const cursors = new Map()
 let callSeq = 0
+
+const textOf = (m) => (typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? ''))
+
+function agentOf(messages) {
+  const first = textOf(messages.find((m) => m.role === 'user'))
+  return markers.find((marker) => first.includes(marker)) ?? 'main'
+}
+
+// Index of the next step for `agent`, or -1 when its steps are used up.
+function nextStep(agent, last) {
+  let i = cursors.get(agent) ?? 0
+  for (; i < script.length; i += 1) {
+    const s = script[i]
+    if ((s.agent ?? 'main') !== agent) continue
+    if (s.skipUnless && !new RegExp(s.skipUnless).test(last)) continue
+    break
+  }
+  cursors.set(agent, i + 1)
+  return i < script.length ? i : -1
+}
 
 function systemText(messages) {
   return messages.filter((m) => m.role === 'system' || m.role === 'developer')
@@ -56,15 +86,17 @@ createServer((req, res) => {
       sse(res, completion(payload.model, { content: isClassifier ? (process.env.FAKE_CLASSIFIER_CATEGORY ?? 'maps') : 'Test session' }, 'stop'))
       return
     }
-    const current = script[step] ?? { text: 'done' }
     const sys = systemText(messages)
+    const agent = agentOf(messages)
+    const lastContent = textOf(messages.at(-1))
+    const step = nextStep(agent, lastContent)
+    const current = script[step] ?? { text: 'done' }
     appendFileSync(logPath, JSON.stringify({
-      kind: 'turn', step, tools,
+      kind: 'turn', step, agent, tools,
       subagent: /delegat|subagent/i.test(sys.slice(0, 20000)) && /You are a subagent|delegated/i.test(sys),
       lastRole: messages.at(-1)?.role,
-      lastContent: String(typeof messages.at(-1)?.content === 'string' ? messages.at(-1).content : JSON.stringify(messages.at(-1)?.content ?? '')).slice(0, 6000),
+      lastContent: lastContent.slice(0, 6000),
     }) + '\n')
-    step += 1
     // `delayMs` holds the answer back, so background work (a source scan, a
     // classifier) can finish before the next step.
     setTimeout(() => reply(current, payload.model), current.delayMs ?? 0)

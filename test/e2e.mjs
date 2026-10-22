@@ -146,7 +146,14 @@ async function run(profile, label, script, args) {
   const result = spawnSync(dsh, ['--profile', profile, '--json', ...args], { env, cwd: work, encoding: 'utf8', timeout: 180_000 })
   llm.kill()
   if (result.status !== 0) throw new Error(`${label}: dsh exited ${result.status}\n${result.stderr}`)
-  return readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((d) => d.kind === 'turn')
+  // Indexed by script step, so concurrent agents and skipped steps keep the
+  // indexes the scenario comments give. Requests past the script are dropped.
+  const turns = []
+  for (const line of readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean)) {
+    const d = JSON.parse(line)
+    if (d.kind === 'turn' && d.step >= 0) turns[d.step] = d
+  }
+  return turns
 }
 const fakeTools = (turn, prefix = 'mcp__fake__') => turn.tools.filter((n) => n.startsWith(prefix)).sort()
 
@@ -175,16 +182,22 @@ const main = await run('core', 'core-main', [
   call('testkit_reconnect'),                                  // 4
   call('tools_load', { targets: ['mcp__fake__ping'] }),       // 5
   call('testkit_reconnect'),                                  // 6
-  call('subagent', { description: 'child one', prompt: 'hi', run_in_background: false }), // 7 -> child req 8
-  { text: 'child one done' },                                 // 8 (child)
-  call('tools_load', { targets: ['/uncategorized/fake'], forSubagents: true }), // 9
-  call('subagent', { description: 'child two', prompt: 'hi', run_in_background: false }), // 10 -> child req 11
-  { text: 'child two done' },                                 // 11 (child)
-  call('tools_ls', { path: '/uncategorized' }),               // 12
-  call('tools_load', { targets: ['veto-me'] }),               // 13
-  call('tools_load', { targets: ['adb_fake_two'] }),          // 14 declared high risk, no gate installed
-  call('testkit_service_load', { targets: ['/uncategorized/phone'] }), // 15 the panel path
-  { text: 'all done' },                                       // 16
+  // Children run concurrently from DSH 0.2.1 on. The child answers late, so the
+  // parent ends its turn first (8) and resumes on the completion notice (10);
+  // DSH 0.2.0 honours run_in_background: false and waits instead, so step 8
+  // does not match and is skipped.
+  call('subagent', { description: 'child one', prompt: 'child-one: hi', run_in_background: false }), // 7
+  { text: 'waiting for child one', skipUnless: '^started subagent' }, // 8
+  { agent: 'child-one', text: 'child one done', delayMs: 1500 },     // 9 (child)
+  call('tools_load', { targets: ['/uncategorized/fake'], forSubagents: true }), // 10
+  call('subagent', { description: 'child two', prompt: 'child-two: hi', run_in_background: false }), // 11
+  { text: 'waiting for child two', skipUnless: '^started subagent' }, // 12
+  { agent: 'child-two', text: 'child two done', delayMs: 1500 },     // 13 (child)
+  call('tools_ls', { path: '/uncategorized' }),               // 14
+  call('tools_load', { targets: ['veto-me'] }),               // 15
+  call('tools_load', { targets: ['adb_fake_two'] }),          // 16 declared high risk, no gate installed
+  call('testkit_service_load', { targets: ['/uncategorized/phone'] }), // 17 the panel path
+  { text: 'all done' },                                       // 18
 ], ['run the scenario'])
 const m = main.map((t) => fakeTools(t))
 
@@ -197,14 +210,14 @@ expect('unload group: hidden again', m[4], [])
 expect('T4 reconnect, nothing loaded: old and new names stay hidden', m[5], [])
 expect('load by exact tool name', m[6], [P])
 expect('T4 reconnect, single tool loaded: it survives, others hidden', m[7], [P])
-expect('T7 child without handoff: starts from pinned only', m[8], [])
-expect('parent unaffected by child', m[9], [P])
-expect('T7 child after forSubagents handoff: gets the group', m[11], [E, F, P])
-contains('no classifier: fake and phone groups are uncategorized', main[13].lastContent, 'fake/', 'phone/')
-contains('hook: before-load listener can veto a load', main[14].lastContent, 'Load refused: vetoed by testkit hook')
-contains('no gate installed: high-risk load is refused, not silently allowed', main[15].lastContent, 'no risk gate is installed')
+expect('T7 child without handoff: starts from pinned only', m[9], [])
+expect('parent unaffected by child', m[10], [P])
+expect('T7 child after forSubagents handoff: gets the group', m[13], [E, F, P])
+contains('no classifier: fake and phone groups are uncategorized', main[15].lastContent, 'fake/', 'phone/')
+contains('hook: before-load listener can veto a load', main[16].lastContent, 'Load refused: vetoed by testkit hook')
+contains('no gate installed: high-risk load is refused, not silently allowed', main[17].lastContent, 'no risk gate is installed')
 // The testkit visibility filter still narrows the panel path.
-expect('toolCatalog.load (the panel path) exposes the group it loaded', fakeTools(main[16], 'phone_fake_'), ['phone_fake_tap'])
+expect('toolCatalog.load (the panel path) exposes the group it loaded', fakeTools(main[18], 'phone_fake_'), ['phone_fake_tap'])
 
 // --- persist profile: T14b, loaded state survives a DSH restart ---------------
 console.log('# persist profile')
