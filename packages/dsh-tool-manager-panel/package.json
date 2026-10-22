@@ -1,6 +1,6 @@
 {
   "name": "@lvy-jsd/dsh-tool-manager-panel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Web panel for dsh-tool-manager: browse the tool directory, see what each live session has loaded and what it costs, and load or unload from the UI.",
   "license": "MIT",
   "author": "lvy-jsd",
@@ -42,7 +42,7 @@
     "web"
   ],
   "peerDependencies": {
-    "@lvy-jsd/dsh-tool-manager": ">=0.2.0"
+    "@lvy-jsd/dsh-tool-manager": ">=0.3.0"
   },
   "dsh": {
     "bundle": {

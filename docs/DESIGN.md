@@ -1,4 +1,4 @@
-# dsh-tool-manager — Design v0.5
+# dsh-tool-manager — Design v0.6
 
 > Status: phase 1 implemented as a core + extension plugins (monorepo) and tested in throwaway `DSH_HOME` instances.
 > Code: `~/dsh-plugins/dsh-tool-manager` (git monorepo: `packages/dsh-tool-manager`, `packages/dsh-tool-manager-classifier-rules`). Date: 2026-10-15.
@@ -177,8 +177,8 @@ Loading cannot "append at the end": the host orders tools lexicographically. A l
 
 ## 7. Relation to existing mechanisms (decision 6)
 
-- **Connector governance `deny`**: unchanged; intersects with our allowlist and is enforced at execution by its guard → always wins. Denied tools will be marked `[denied]` in listings (phase 2).
-- **`session-injection` (experimental, in `dsh-mcp-connector`)**: functionality absorbed, its code untouched. All connectors stay in "always inject" mode so only this plugin narrows; on startup the plugin should warn if any connector is in per-session mode (phase 2). Reason: it is third-party code (forking it means maintaining a fork), two narrowing layers intersect and are hard to debug, and its per-call confirmation + 30-minute TTL conflict with this design.
+- **Connector governance `deny`**: unchanged; intersects with our allowlist and is enforced at execution by its guard → always wins. Denied tools are marked `[denied]` in listings (0.3.0, §11.16).
+- **`session-injection` (experimental, in `dsh-mcp-connector`)**: functionality absorbed, its code untouched. All connectors stay in "always inject" mode so only this plugin narrows. The planned start-up warning became a runtime one (0.3.0, §11.16): the connector exposes no service to read its records, so the plugin detects the effect instead — a loaded tool still hidden — and warns then. Reason: it is third-party code (forking it means maintaining a fork), two narrowing layers intersect and are hard to debug, and its per-call confirmation + 30-minute TTL conflict with this design.
 - **`mcp_connector_tool_search/detail`**: kept; complementary.
 
 ## 8. Decisions (user, 2026-10-15)
@@ -227,7 +227,7 @@ Harness: `test/e2e.mjs` boots the shipped `headless` profile in a temp `DSH_HOME
 
 Bug found and fixed in phase 1: `restrict()` re-enters `install()` via the synchronous `tools/change`; the nested call stacked a second restriction whose disposer was lost, permanently hiding later loads. Fixed with a per-agent busy/dirty loop (§3.2).
 
-Not yet covered: the real web profile (many plugins, live MCP connectors), PTC mode, the startup window when the plugin loads after agents already started (mount-time sync handles it; headless does not exercise it).
+Not yet covered: the real web profile (many plugins, live MCP connectors), PTC mode, the startup window when the plugin loads after agents already started (mount-time sync handles it; headless does not exercise it). **All three covered since** — the production-profile copy in §13 and a real box profile in §11.16 (real profile), the `ptc` e2e run and the start-up unit test (§11.16).
 
 **Superseded in phase 2 item ②**: the suite now runs five profiles (`core`, `rules`, `preset`, `persist`, `gate`) with 25 end-to-end assertions and 26 unit tests; T14b moved to the `persist` profile now that persistence is a plugin. See §11.8. The production-copy trial and T12 are in §13.
 
@@ -261,7 +261,7 @@ Done after installation (2026-10-15):
 - `dsh-tool-manager-attribution-scan` — tool → plugin package from source (§2.2, §11.12).
 - Panel: an exempt session shows `exempt` instead of "0 visible" (§11.12).
 
-Core follow-ups: `[denied]` marks and per-session-mode connector warning (§7); upstream DSH tool-ordering TODO (§6) — deprioritised by the T12 measurement (§13).
+Core follow-ups: `[denied]` marks and per-session-mode connector warning (§7) — done in 0.3.0 (§11.16); upstream DSH tool-ordering TODO (§6) — deprioritised by the T12 measurement (§13).
 
 Licence: **MIT** (user, 2026-10-15).
 
@@ -670,6 +670,17 @@ first edit preserves the visible list, reload, atomic write, `DSH_HOME`
 default), 6 panel API tests (report, set, missing id → 400, reload, whitelist)
 plus the metadata tests from item 2; `tsc -b` clean, 172 unit tests and the
 full e2e suite pass.
+
+### 11.16 Release 0.3.0 (2026-10-22)
+
+- **DSH 0.2.1.** The plugin code needed no change. The e2e harness did: from 0.2.1 the `subagent` tool never waits (it returns `started subagent <id>` and the child runs beside its parent), so the scripted fake model handed the parent's next step to the child. `fake-llm` now keeps one step queue per conversation (picked by a marker in its first user message) and can skip a step whose trigger does not match (`skipUnless`), so one script covers 0.2.0 and 0.2.1. The suite passes on both.
+- **`[denied]` marks.** `deniedFor(agent)` = names this plugin allows (pinned or loaded) that the host's final view (`tools.view(agent).visible`) still lacks — a connector governance deny, its per-session injection, or any other plugin's `restrict()`. `tools_ls` marks them `[denied]`; a tool node says "denied by another plugin … not callable"; `tools_load` lists only the callable additions and names the denied ones. Without `view().visible` nothing is reported. Unloaded tools are not marked: our own restriction hides them too, and the host offers no public way to evaluate one layer without another. e2e: `testkit_deny` installs a connector-style `restrict({ deny })`.
+- **Per-session injection warning.** The connector keeps its records in its own storage and exposes no service, so a start-up check would depend on its internals. Its effect is the same as a deny, so the first time a loaded tool turns out hidden the core logs one warning per tool naming both causes (governance rules, per-session injection).
+- **PTC mode.** Found by the new `ptc` e2e run (`DSH_TOOLS_MODE=ptc`): the host's global schema list contains the reserved `run_code` transport, the core catalogued it as an ordinary hidden tool, and the hidden-call rescue then refused every `run_code` call ("not available in this session") — PTC mode was unusable with the plugin installed. `run_code` is now `HOST_RESERVED`: never catalogued, listed, loaded or restricted (the host refuses to restrict it anyway). Verified: only `run_code` is offered, the SDK section names no unloaded tool, `tools_ls`/`tools_load` work from inside a program, and a loaded tool is callable from the next program.
+- **Start-up window.** Unit test: agents that exist before mount get exactly one restriction (pinned only) even though the fake host emits `tools/change` synchronously from `restrict()`; a later load replaces it; an agent created after mount is restricted; unmount releases all.
+- **Default rules for MCP server names** (`classifier-rules` 0.2.0): `search`, `searxng`, `web-search`, `brave-search`, `tavily`, `exa` → `search`; `email`, `mail`, `gmail`, `imap`, `outlook` → `mail` (a category the plugin defines itself, so it works with any core); `playwright`, `puppeteer`, `chrome-devtools` → `browser`. Found on a real deployment: a SearXNG server named `search` sat in `/uncategorized`, so the model's first guess, `/search`, loaded only the X search tool.
+- **Real profile.** Installed from npm on a home server's `box` profile (local 27B model, 10 plugins, live browser/email/search MCP servers). Same prompt, first request: 20.9k → 6.9k prompt tokens with the email server down; its 52 tools (~10.8k tok) are now behind `/mail` as well. The model found tools through `tools_ls` with a query and loaded single tools by path.
+- **Versions.** core 0.3.0, `panel` 0.2.0 (its settings-page editing needs core ≥ 0.3.0), `classifier-rules` 0.2.0; the other packages are unchanged.
 
 ## 12. Web panel and onboarding (design; implementation is phase 2 item ③)
 

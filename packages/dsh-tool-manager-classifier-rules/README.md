@@ -7,7 +7,11 @@ It registers up to two classifiers on the `toolCatalog` service:
 | Classifier | Priority | Source |
 |---|---|---|
 | `rules:user` | 1000 (override) | your `groupRules` and `categories` config; beats plugin declarations |
-| `rules:defaults` | 100 | built-in rules for tools common on DSH hosts (adb, phone, desktop, gork, github, nix, amap, bilibili, browser, engram, bots, groups, team, automation, schedule, MCP connector, secrets, x search…); plugin declarations beat it |
+| `rules:defaults` | 100 | built-in rules for tools common on DSH hosts (adb, phone, desktop, gork, github, nix, amap, bilibili, browser, engram, bots, groups, team, automation, schedule, MCP connector, secrets, x search…) and for common MCP server names (search, searxng, brave-search, tavily, exa → `search`; email, mail, gmail, imap, outlook → `mail`; playwright, puppeteer, chrome-devtools → `browser`); plugin declarations beat it |
+
+The defaults also define the `mail` category ("Email: read, search, draft and
+send mail"), which the core vocabulary does not have, so they work with any
+core version. Your own `categories` entry with a description wins over it.
 
 ## Configuration
 

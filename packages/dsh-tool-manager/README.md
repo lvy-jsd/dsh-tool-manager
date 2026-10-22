@@ -35,7 +35,15 @@ built-in rules and config overrides, or write your own classifier.
 - Loading a group subscribes to it: tools the group gains later become visible
   too.
 - Restrictions from other plugins intersect with this one, so a hard deny (for
-  example the MCP connector's governance policy) always wins.
+  example the MCP connector's governance policy) always wins. A pinned or
+  loaded tool that another layer still hides is marked `[denied]` in
+  `tools_ls`, and `tools_load` reports it as not callable instead of listing it
+  (with one log warning per tool, pointing at connector governance rules and
+  per-session injection).
+- DSH's PTC mode (`DSH_TOOLS_MODE=ptc`) works unchanged: the model gets only
+  `run_code`, and the SDK the host declares for it is built from the same
+  narrowed view, so loads show up there from the next step. `run_code` itself
+  is a host transport and never enters the directory.
 - Every agent is restricted separately. A subagent starts from the pinned set
   plus whatever the parent loaded with `forSubagents: true`.
 - Loaded state is in memory. Install
@@ -247,7 +255,8 @@ ctx.effect(() => ctx.toolCatalog.registerVisibilityFilter({
 ### Reading the catalog
 
 `ctx.toolCatalog.get()` returns `{ tools, groups, categories }`;
-`resolve(target)`, `stateOf(agent)`, `allowFor(agent)`, `isExempt(agent)`,
+`resolve(target)`, `stateOf(agent)`, `allowFor(agent)`, `deniedFor(agent)`
+(allowed here but hidden by another layer), `isExempt(agent)`,
 `packages()` (enabled plugin packages: `{ name, dir, manifest }`) and
 `refresh()` are also available.
 
