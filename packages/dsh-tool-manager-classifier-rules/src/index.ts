@@ -58,13 +58,22 @@ export const DEFAULT_GROUP_CATEGORIES: Record<string, string> = {
   github: 'code', nix: 'code', nixos: 'code',
   'bilibili-mcp': 'media', image: 'media', video: 'media',
   amap: 'maps',
-  browser: 'browser',
+  browser: 'browser', playwright: 'browser', puppeteer: 'browser', 'chrome-devtools': 'browser',
   engram: 'memory', memory: 'memory',
   bots: 'collaboration', groups: 'collaboration', team: 'collaboration', agent: 'collaboration',
   automation: 'automation', schedule: 'automation',
   mcp: 'connectors', mcp_connector: 'connectors', 'mcp-connector': 'connectors', 'mcp-resources': 'connectors',
   x: 'search',
+  // MCP servers are grouped by server name; these are the names their READMEs suggest.
+  search: 'search', searxng: 'search', 'web-search': 'search', 'brave-search': 'search', tavily: 'search', exa: 'search',
+  email: 'mail', mail: 'mail', gmail: 'mail', imap: 'mail', outlook: 'mail',
   secrets: 'system', capability: 'system',
+}
+
+// Categories the default rules use that the core's vocabulary lacks. Defined by
+// this plugin so the rules work with any core version.
+export const DEFAULT_EXTRA_CATEGORIES: Record<string, string> = {
+  mail: 'Email: read, search, draft and send mail',
 }
 
 /** Build a classifier from rule tables. Pure; exported for tests and reuse. */
@@ -96,6 +105,9 @@ export function apply(ctx: ExtensionContext, config: RulesConfig = {}) {
   ctx.effect(() => {
     const disposers: Disposer[] = []
     if (config.defaults !== false) {
+      for (const [category, description] of Object.entries(DEFAULT_EXTRA_CATEGORIES)) {
+        disposers.push(catalog.defineCategory(category, description))
+      }
       disposers.push(catalog.registerClassifier(rulesClassifier({
         name: 'rules:defaults',
         priority: DEFAULT_PRIORITY,

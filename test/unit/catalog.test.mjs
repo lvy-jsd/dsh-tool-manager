@@ -7,8 +7,10 @@ import { pathToFileURL } from 'node:url'
 import { buildCatalog, resolveTarget, estimateTokens, UNCATEGORIZED } from '../../packages/dsh-tool-manager/lib/catalog.js'
 import { createRegistries, listPluginPackages, packageNameOf, readManifestAnnotations } from '../../packages/dsh-tool-manager/lib/service.js'
 import {
-  rulesClassifier, groupCategoriesFrom, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, USER_PRIORITY, DEFAULT_PRIORITY,
+  rulesClassifier, groupCategoriesFrom, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, DEFAULT_EXTRA_CATEGORIES, USER_PRIORITY, DEFAULT_PRIORITY,
+  apply as applyRules,
 } from '../../packages/dsh-tool-manager-classifier-rules/lib/index.js'
+import { DEFAULT_CATEGORIES } from '../../packages/dsh-tool-manager/lib/catalog.js'
 
 const schemas = [
   'adb_install', 'adb_logcat', 'create_bot', 'list_bots', 'mcp__amap__maps_weather',
@@ -35,6 +37,37 @@ test('rules plugin defaults place known groups', () => {
   assert.equal(category(cat, 'list_bots'), 'collaboration')
   assert.equal(category(cat, 'mcp__amap__maps_weather'), 'maps')
   assert.equal(category(cat, 'lingshu_cg'), UNCATEGORIZED, 'unknown groups stay uncategorized')
+})
+
+test('rules plugin defaults place common MCP server names', () => {
+  const mcp = ['mcp__search__searxng_web_search', 'mcp__email__list_emails', 'mcp__email__send_email', 'mcp__playwright__browser_click', 'mcp__brave-search__web']
+    .map((name) => ({ name, description: `${name} does things.` }))
+  const cat = buildCatalog(mcp, { classifiers: [defaults], categories: { ...DEFAULT_CATEGORIES, ...DEFAULT_EXTRA_CATEGORIES } })
+  assert.equal(category(cat, 'mcp__search__searxng_web_search'), 'search')
+  assert.equal(category(cat, 'mcp__brave-search__web'), 'search')
+  assert.equal(category(cat, 'mcp__email__send_email'), 'mail')
+  assert.equal(category(cat, 'mcp__playwright__browser_click'), 'browser')
+})
+
+test('rules plugin defines the categories its defaults use, and only with defaults on', () => {
+  const run = (config) => {
+    const defined = new Map()
+    const ctx = {
+      toolCatalog: {
+        registerClassifier: () => () => {},
+        defineCategory: (name, description) => { defined.set(name, description); return () => defined.delete(name) },
+      },
+      effect: (fn) => fn(),
+    }
+    const dispose = applyRules(ctx, config) ?? undefined
+    return { defined, dispose }
+  }
+  const on = run({})
+  for (const name of Object.keys(DEFAULT_EXTRA_CATEGORIES)) assert.ok(on.defined.has(name), name)
+  assert.equal(on.defined.get('mail'), DEFAULT_EXTRA_CATEGORIES.mail)
+  assert.equal(run({ defaults: false }).defined.size, 0)
+  const own = run({ categories: { mail: { description: 'My mail', groups: ['post'] } } })
+  assert.equal(own.defined.get('mail'), 'My mail', 'a user description wins over the default one')
 })
 
 test('plugin declaration beats default rules', () => {
