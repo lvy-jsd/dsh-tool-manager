@@ -11,6 +11,8 @@
 // - `testkit_capability_pack`, which declares a cap:<name> pack when the
 //   capability-bridge plugin is present;
 // - when the toolCatalog service exists, a visibility filter hiding phone_fake_swipe;
+// - `testkit_deny`, which hides names from the calling agent with its own
+//   restrict({ deny }), the way MCP connector governance does;
 // - with config simulatePresetLayer, tools that exist only in a preset layer.
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { simulatePresetLayer } from './preset.js'
@@ -113,6 +115,18 @@ export function apply(ctx, config = {}) {
       },
     }))
   })
+
+  // Another plugin's deny on top of tool-manager's allowlist (connector governance).
+  ctx.tools.register(defineTool({
+    name: 'testkit_deny',
+    description: 'Test helper: hide the given tool names from the calling agent with restrict({ deny }).',
+    parameters: { names: { type: 'array', items: { type: 'string' } } },
+    output: TEXT,
+    async execute(args, exec) {
+      exec.agent.ctx.tools.restrict({ deny: args.names ?? [] })
+      return `denied ${(args.names ?? []).join(', ')}`
+    },
+  }))
 
   ctx.on('tool-catalog/before-load', ({ targets }) => {
     if (targets.includes('veto-me')) throw new Error('vetoed by testkit hook')

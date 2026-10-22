@@ -200,7 +200,8 @@ export interface ToolLayer {
 export interface HostTools {
   schemas(agent?: Agent): ToolSchema[]
   register(definition: unknown): Disposer | void
-  view?(agent: Agent): { restrictableNames: Iterable<string> }
+  /** `visible` is what the agent ends up with after every layer's restrictions. */
+  view?(agent: Agent): { restrictableNames: Iterable<string>, visible?: { has(name: string): boolean } }
   schemaOf?(definition: unknown, deferred: boolean): ToolSchema
   layers?: {
     chainLayers?(agent: Agent): Iterable<ToolLayer>
@@ -326,6 +327,13 @@ export interface ToolCatalogService {
   importState(agent: Agent, state: Partial<SerializedState>): void
   /** Names visible to the agent, or null when this plugin does not restrict it. */
   allowFor(agent: Agent): string[] | null
+  /**
+   * Names this plugin lets the agent see (pinned or loaded) that another layer
+   * still hides: an MCP connector governance `deny` rule, the connector's
+   * per-session injection, or any other plugin's `restrict()`. Empty when the
+   * host cannot report the agent's final view.
+   */
+  deniedFor(agent: Agent): string[]
   /** True when the agent is never narrowed, by route or by its session id. */
   isExempt(agent: Agent): boolean
   /**

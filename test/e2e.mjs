@@ -136,14 +136,14 @@ makeProfile('llm', ['dsh-tool-manager', 'dsh-tool-manager-classifier-llm'], `
 
 
 // --- runner --------------------------------------------------------------------
-async function run(profile, label, script, args) {
+async function run(profile, label, script, args, extraEnv = {}) {
   const scriptPath = join(root, `${label}.script.json`)
   const logPath = join(root, `${label}.log.jsonl`)
   writeFileSync(scriptPath, JSON.stringify(script))
   writeFileSync(logPath, '')
   const llm = spawn(process.execPath, [join(here, 'fake-llm.mjs'), String(port), scriptPath, logPath], { stdio: 'ignore' })
   await new Promise((r) => setTimeout(r, 400))
-  const result = spawnSync(dsh, ['--profile', profile, '--json', ...args], { env, cwd: work, encoding: 'utf8', timeout: 180_000 })
+  const result = spawnSync(dsh, ['--profile', profile, '--json', ...args], { env: { ...env, ...extraEnv }, cwd: work, encoding: 'utf8', timeout: 180_000 })
   llm.kill()
   if (result.status !== 0) throw new Error(`${label}: dsh exited ${result.status}\n${result.stderr}`)
   // Indexed by script step, so concurrent agents and skipped steps keep the
@@ -218,6 +218,39 @@ contains('hook: before-load listener can veto a load', main[16].lastContent, 'Lo
 contains('no gate installed: high-risk load is refused, not silently allowed', main[17].lastContent, 'no risk gate is installed')
 // The testkit visibility filter still narrows the panel path.
 expect('toolCatalog.load (the panel path) exposes the group it loaded', fakeTools(main[18], 'phone_fake_'), ['phone_fake_tap'])
+
+// --- core profile: a tool another plugin denies is marked, not offered --------
+console.log('# deny (core profile)')
+const dn = await run('core', 'core-deny', [
+  call('tools_load', { targets: ['/uncategorized/fake'] }),      // 0
+  call('testkit_deny', { names: ['mcp__fake__echo'] }),          // 1 connector-style deny
+  call('tools_ls', { path: '/uncategorized/fake' }),             // 2
+  call('tools_unload', { targets: ['/uncategorized/fake'] }),    // 3
+  call('tools_load', { targets: ['/uncategorized/fake'] }),      // 4
+  { text: 'done' },                                               // 5
+], ['deny'])
+expect('deny: the other plugin\'s deny wins over a load', fakeTools(dn[2]), [P])
+contains('deny: tools_ls marks the denied tool', dn[3].lastContent, /\[denied\][^\n]*mcp__fake__echo|echo[^\n]*\[denied\]/)
+check('deny: tools_ls leaves the callable tool unmarked', !/ping[^\n]*\[denied\]/.test(dn[3].lastContent), dn[3].lastContent)
+contains('deny: tools_load reports the denied tool as not callable', dn[5].lastContent, /Denied by another plugin[^\n]*mcp__fake__echo/)
+check('deny: tools_load does not list the denied tool as callable', !/callable from your next step:[^]*\n  mcp__fake__echo\n/.test(`${dn[5].lastContent}\n`), dn[5].lastContent)
+
+// --- core profile in PTC mode: the model calls tools from run_code -----------
+// The host offers only run_code and declares the callable tools as an SDK in
+// the system prompt; that SDK comes from the same restricted view.
+console.log('# ptc (core profile, DSH_TOOLS_MODE=ptc)')
+const code = (body) => call('run_code', { code: body, description: 'test step' })
+const pt = await run('core', 'core-ptc', [
+  code("return await tools.tools_ls({ path: '/uncategorized' })"),        // 0
+  code("return await tools.tools_load({ targets: ['/uncategorized/fake'] })"), // 1
+  code("return await tools.mcp__fake__ping({ text: 'x' })"),               // 2
+  { text: 'done' },                                                         // 3
+], ['ptc'], { DSH_TOOLS_MODE: 'ptc' })
+check('ptc: only run_code is offered as a schema', pt.every((t) => t.tools.length === 1 && t.tools[0] === 'run_code'), JSON.stringify(pt.map((t) => t.tools)))
+expect('ptc: the SDK hides unloaded tools', pt[0].systemFake, [])
+contains('ptc: tools_ls works from inside run_code', pt[1].lastContent, 'fake/')
+expect('ptc: a load adds the group to the SDK from the next step', pt[2].systemFake, [E, P])
+contains('ptc: the loaded tool is callable from run_code', pt[3].lastContent, 'mcp__fake__ping:x')
 
 // --- persist profile: T14b, loaded state survives a DSH restart ---------------
 console.log('# persist profile')

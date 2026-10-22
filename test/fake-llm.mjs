@@ -16,7 +16,9 @@
 // Each conversation takes its own steps in script order. A step with
 // `"skipUnless": "<regex>"` is skipped when the last message does not match,
 // so one script covers DSH versions that differ in what a tool returns.
-// The log records `step` as the index into the script (-1 once it runs out).
+// The log records `step` as the index into the script (-1 once it runs out),
+// and `systemFake`: the fake MCP tools the system prompt names (in PTC mode the
+// callable tools are SDK declarations there, not tool schemas).
 import { createServer } from 'node:http'
 import { readFileSync, appendFileSync } from 'node:fs'
 
@@ -93,6 +95,7 @@ createServer((req, res) => {
     const current = script[step] ?? { text: 'done' }
     appendFileSync(logPath, JSON.stringify({
       kind: 'turn', step, agent, tools,
+      systemFake: [...new Set(sys.match(/mcp__fake__\w+/g) ?? [])].sort(),
       subagent: /delegat|subagent/i.test(sys.slice(0, 20000)) && /You are a subagent|delegated/i.test(sys),
       lastRole: messages.at(-1)?.role,
       lastContent: lastContent.slice(0, 6000),

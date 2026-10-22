@@ -29,6 +29,12 @@ export const inject = ['tools']
 
 export const ENTRY_TOOLS = ['tools_ls', 'tools_load', 'tools_unload']
 
+// Host transports that are not capabilities: never listed, loaded or restricted.
+// `run_code` carries every call in DSH's PTC mode; the host refuses to restrict
+// it and adds it to the view after all restrictions, so treating it as a hidden
+// tool would block PTC mode outright.
+export const HOST_RESERVED = ['run_code']
+
 // Always visible and never listed in the directory. Names the host does not
 // have are ignored, so this list survives DSH renames. Config `pinned` adds to
 // it; config `unpin` removes from it.
@@ -239,7 +245,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     for (const a of agent ? [agent] : visibility.agents()) {
       for (const s of inheritedSchemas(a)) if (!byName.has(s.name)) byName.set(s.name, s)
     }
-    const schemas = [...byName.values()].filter((s) => !pinned.has(s.name))
+    const schemas = [...byName.values()].filter((s) => !pinned.has(s.name) && !HOST_RESERVED.includes(s.name))
     const key = schemas.map((s) => s.name).sort().join('\n')
     const cached = catalogs.get(key)
     if (cached) return cached
@@ -339,6 +345,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     /** Replace an agent's loaded state (e.g. restored after a restart). */
     importState: (agent: Agent, state: Partial<SerializedState>) => visibility.importState(agent, state),
     allowFor: (agent: Agent) => visibility.allowFor(agent),
+    deniedFor: (agent: Agent) => [...deniedFor(agent)],
     /** True when the agent's model route is in `exemptProviders` (never narrowed). */
     isExempt: (agent: Agent) => visibility.isExempt(agent),
     /** Why an agent is exempt, so the panel can label a route-wide exemption. */
@@ -518,19 +525,46 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     return undefined
   }
 
+  // --- tools another layer hides ---------------------------------------------------
+  // Our allowlist intersects with every other restriction on the agent (MCP
+  // connector governance, its per-session injection, other plugins), so a tool
+  // can be pinned or loaded here and still never reach the model. The host's
+  // final view tells them apart; without it nothing is reported.
+  function deniedFor(agent: Agent | undefined): Set<string> {
+    const allow = agent ? visibility.allowFor(agent) : null
+    if (!agent || !allow || typeof ctx.tools.view !== 'function') return new Set()
+    let visible: { has(name: string): boolean } | undefined
+    try {
+      visible = ctx.tools.view(agent).visible
+    } catch {
+      return new Set()
+    }
+    if (!visible) return new Set()
+    const cat = getCatalog(agent)
+    return new Set(allow.filter((name) => cat.tools.has(name) && !visible!.has(name)))
+  }
+
+  const warnedDenied = new Set<string>()
+  function warnDenied(names: readonly string[]) {
+    const fresh = names.filter((name) => !warnedDenied.has(name))
+    if (!fresh.length) return
+    for (const name of fresh) warnedDenied.add(name)
+    logger?.warn?.(`tool-manager: loaded but hidden by another restriction: ${fresh.join(', ')}. If these are MCP tools, check the connector's governance rules and set the connection to "always inject" (per-session injection narrows on top of this plugin).`)
+  }
+
   // --- listing -------------------------------------------------------------------
   function visibleSetFor(agent: Agent | undefined): Set<string> | null {
     const allow = agent ? visibility.allowFor(agent) : null
     return allow ? new Set(allow) : null
   }
 
-  function toolLine(tool: ToolEntry, visible: Set<string> | null, withPath = false): string {
+  function toolLine(tool: ToolEntry, visible: Set<string> | null, denied: Set<string>, withPath = false): string {
     const marks = `${visible?.has(tool.name) ? '*' : ' '}${tool.highRisk ? '!' : ' '}`
     const label = withPath ? `/${tool.category}/${tool.group}/${tool.short}` : tool.short
-    return `  ${marks} ${pad(label, withPath ? 48 : 34)}${pad(fmtTokens(tool.tokens), 11)}${tool.summary}`
+    return `  ${marks} ${pad(label, withPath ? 48 : 34)}${pad(fmtTokens(tool.tokens), 11)}${denied.has(tool.name) ? '[denied] ' : ''}${tool.summary}`
   }
 
-  function listing(cat: Catalog, node: CatalogNode, visible: Set<string> | null): string {
+  function listing(cat: Catalog, node: CatalogNode, visible: Set<string> | null, denied: Set<string> = new Set()): string {
     const count = (tools: readonly ToolEntry[]) => ({
       n: tools.length,
       loaded: tools.filter((t) => visible?.has(t.name)).length,
@@ -538,7 +572,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     })
     const lines: string[] = []
     if (node.kind === 'root') {
-      lines.push('/  (categories; * = loaded, ! = high risk; tools_ls with query searches everything)')
+      lines.push('/  (categories; * = loaded, ! = high risk, [denied] = loaded but blocked by another plugin; tools_ls with query searches everything)')
       for (const category of cat.categories.values()) {
         const c = count(category.groups.flatMap((g) => g.tools))
         if (c.n === 0 && category.name !== UNCATEGORIZED) continue
@@ -552,10 +586,10 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       }
     } else if (node.kind === 'group') {
       lines.push(`/${node.group.category}/${node.group.name}/`)
-      for (const tool of node.group.tools) lines.push(toolLine(tool, visible))
+      for (const tool of node.group.tools) lines.push(toolLine(tool, visible, denied))
     } else if (node.kind === 'tool') {
       const t = node.tool
-      lines.push(`/${t.category}/${t.group}/${t.short}`, `  name: ${t.name}`, `  ${t.summary}`, `  schema ${fmtTokens(t.tokens)}${t.highRisk ? ' · high risk: load it on its own' : ''}${visible?.has(t.name) ? ' · loaded' : ''}`)
+      lines.push(`/${t.category}/${t.group}/${t.short}`, `  name: ${t.name}`, `  ${t.summary}`, `  schema ${fmtTokens(t.tokens)}${t.highRisk ? ' · high risk: load it on its own' : ''}${visible?.has(t.name) ? ' · loaded' : ''}${denied.has(t.name) ? ' · denied by another plugin (e.g. an MCP connector rule): not callable' : ''}`)
     }
     return lines.join('\n')
   }
@@ -570,11 +604,11 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     })
   }
 
-  function search(cat: Catalog, node: CatalogNode, query: string, visible: Set<string> | null): string {
+  function search(cat: Catalog, node: CatalogNode, query: string, visible: Set<string> | null, denied: Set<string> = new Set()): string {
     const hits = matchingTools(cat, node, query)
     if (!hits.length) return `No tools match "${query}".`
     const shown = hits.slice(0, 40)
-    return [`${hits.length} match(es) for "${query}" (load by path or full name):`, ...shown.map((t) => toolLine(t, visible, true)), hits.length > shown.length ? `  … ${hits.length - shown.length} more; narrow the query or the path` : ''].filter(Boolean).join('\n')
+    return [`${hits.length} match(es) for "${query}" (load by path or full name):`, ...shown.map((t) => toolLine(t, visible, denied, true)), hits.length > shown.length ? `  … ${hits.length - shown.length} more; narrow the query or the path` : ''].filter(Boolean).join('\n')
   }
 
   function agentOf(exec: { agent?: unknown } | undefined): Agent {
@@ -643,10 +677,15 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     const after = visibility.allowFor(agent) ?? []
     const added = after.filter((n) => !before.has(n))
     ctx.emit('tool-catalog/after-load', { agent, targets, added })
-    const tokens = added.reduce((sum, n) => sum + (cat.tools.get(n)?.tokens ?? 0), 0)
+    const denied = deniedFor(agent)
+    const blocked = added.filter((n) => denied.has(n))
+    const callable = added.filter((n) => !denied.has(n))
+    if (blocked.length) warnDenied(blocked)
+    const tokens = callable.reduce((sum, n) => sum + (cat.tools.get(n)?.tokens ?? 0), 0)
     return [
-      added.length ? `Loaded ${added.length} tool(s), ${fmtTokens(tokens)}; callable from your next step:` : 'Nothing new loaded.',
-      ...added.map((n) => `  ${n}`),
+      callable.length ? `Loaded ${callable.length} tool(s), ${fmtTokens(tokens)}; callable from your next step:` : 'Nothing new loaded.',
+      ...callable.map((n) => `  ${n}`),
+      ...(blocked.length ? [`Denied by another plugin (e.g. an MCP connector rule), not callable even when loaded: ${blocked.join(', ')}`] : []),
       ...notes,
     ].join('\n')
   }
@@ -708,8 +747,10 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       const cat = getCatalog(exec?.agent as Agent | undefined)
       const node = resolveTarget(cat, args.path ?? '/', [...registries.resolvers])
       if (node.kind === 'missing') return `No such path: ${node.target}. Start from tools_ls("/") or search with tools_ls({query}).`
-      const visible = visibleSetFor(exec?.agent as Agent | undefined)
-      return args.query ? search(cat, node, args.query, visible) : listing(cat, node, visible)
+      const agent = exec?.agent as Agent | undefined
+      const visible = visibleSetFor(agent)
+      const denied = deniedFor(agent)
+      return args.query ? search(cat, node, args.query, visible, denied) : listing(cat, node, visible, denied)
     },
   }))
 
