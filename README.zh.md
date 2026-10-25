@@ -28,7 +28,7 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 
 | 包 | 作用 |
 |---|---|
-| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | 核心：目录、`tools_ls` / `tools_load` / `tools_unload`、按 Agent 的可见白名单、`toolCatalog` 扩展服务。没有扩展时所有分组都在 `uncategorized` 下。 |
+| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | 核心：目录、`tools_ls` / `tools_load` / `tools_unload`、按 Agent 的可见白名单、`toolCatalog` 扩展服务，外加按意图的检索与路由（`tools_find` / `tools_route` / `skills_find` / `skills_route`，BM25 + Rust 侧车）。没有扩展时所有分组都在 `uncategorized` 下。 |
 | [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | 按内置规则和你的配置覆盖，把分组放进分类。 |
 | [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | 通过 DSH 的审批通道确认高危工具的加载，并支持按会话的白名单。 |
 | [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | DSH 重启后保留已加载的工具，每个会话一个状态文件。 |

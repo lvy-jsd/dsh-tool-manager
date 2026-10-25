@@ -90,7 +90,9 @@ for (const form of ['function', 'object']) {
         refresh() {},
       },
     }
-    apply(ctx, {})
+    // The scan feature does not exercise the router, so keep the sidecar out:
+    // a spawned sidecar child would keep the event loop alive past the test.
+    apply(ctx, { sidecar: { bin: '/nonexistent' } })
     listeners.get('tool-catalog/after-rebuild')()
     await new Promise((resolve) => setImmediate(resolve))
     assert.equal(warnings.length, 1)

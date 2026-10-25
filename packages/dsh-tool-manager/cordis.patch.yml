@@ -17,3 +17,13 @@
         # The catalog as text, for a client that cannot lazy-load (Claude Code
         # reads it through a ~/.claude/CLAUDE.md `@` line). '' turns it off.
         # manifestFile: ~/.claude/dsh-tool-catalog.md
+        # --- retrieval + routing (tools_find / tools_route / skills_find / skills_route) ---
+        # Model used to re-rank tools_route / skills_route candidates. Leave
+        # unset for pure BM25 (no model, works offline).
+        # model: { provider: deepseek, model: deepseek-chat }
+        # maxTokens: 24
+        # topK: 8
+        # maxBudget: 20000
+        # k1: 1.5
+        # b: 0.75
+        # sidecar: { bin: '', socket: '', timeoutMs: 2000 }

@@ -281,6 +281,20 @@ export interface CoreConfig {
    * config list is used.
    */
   exemptFile?: string
+  // --- retrieval + routing (tools_find / tools_route / skills_find / skills_route) ---
+  /** Model used to re-rank tools_route / skills_route candidates. */
+  model?: { provider?: string; model?: string }
+  /** Max tokens for the re-rank call. */
+  maxTokens?: number
+  /** Default number of results for the find/route tools. */
+  topK?: number
+  /** Token budget for loaded tool schemas, reported by tools_route. */
+  maxBudget?: number
+  /** BM25 parameters (JS fallback index). */
+  k1?: number
+  b?: number
+  /** Rust sidecar overrides. */
+  sidecar?: { bin?: string; socket?: string; timeoutMs?: number }
 }
 
 /** A plugin package the host loader knows. */

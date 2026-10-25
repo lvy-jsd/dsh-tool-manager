@@ -34,7 +34,9 @@ function coreHost(toolNames, metadataFile) {
     inject: (deps, fn) => fn({ agents: { list: () => [agent], get: () => undefined }, effect: (fn) => fn(), on }),
     get: () => undefined,
   }
-  apply(ctx, { metadataFile })
+  // The metadata feature does not exercise the router, so keep the sidecar out:
+  // a spawned sidecar child would keep the event loop alive past the test.
+  apply(ctx, { metadataFile, sidecar: { bin: '/nonexistent' } })
   return { catalog: services.toolCatalog, listeners }
 }
 

@@ -2,3 +2,5 @@ node_modules/
 # build output (and the tsc -b cache inside it)
 packages/*/lib/
 *.tsbuildinfo
+# Rust sidecar build output (the prebuilt binary under sidecar/bin/ is committed)
+packages/dsh-tool-manager/sidecar/target/

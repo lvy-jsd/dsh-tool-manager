@@ -1,7 +1,7 @@
 {
   "name": "@lvy-jsd/dsh-tool-manager",
-  "version": "0.3.0",
-  "description": "Browse every DeepSeek Harness tool as a directory (category -> group -> tool) and load tools on demand per agent. Provides the toolCatalog service for classifier, metadata, hook and visibility extensions.",
+  "version": "0.4.0",
+  "description": "Browse every DeepSeek Harness tool as a directory (category -> group -> tool), load tools on demand per agent, and find/route tools and skills by intent (BM25 retrieval with a Rust sidecar). Provides the toolCatalog service for classifier, metadata, hook and visibility extensions.",
   "license": "MIT",
   "author": "lvy-jsd",
   "type": "module",
@@ -20,7 +20,8 @@
     "src",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "sidecar/bin/*"
   ],
   "publishConfig": {
     "access": "public"
@@ -34,7 +35,10 @@
     "deepseek-harness",
     "tools",
     "mcp",
-    "lazy-loading"
+    "lazy-loading",
+    "retrieval",
+    "bm25",
+    "routing"
   ],
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2 <0.3.0-0"

@@ -29,7 +29,7 @@ missing. See [Extending](#extending) to write your own classifier.
 
 | Package | What it does |
 |---|---|
-| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | Core: directory, `tools_ls` / `tools_load` / `tools_unload`, per-agent allowlist, the `toolCatalog` extension service. Without extensions every group is `uncategorized`. |
+| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | Core: directory, `tools_ls` / `tools_load` / `tools_unload`, per-agent allowlist, the `toolCatalog` extension service, plus intent retrieval + routing (`tools_find` / `tools_route` / `skills_find` / `skills_route`, BM25 with a Rust sidecar). Without extensions every group is `uncategorized`. |
 | [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | Places groups into categories from built-in rules and your config overrides. |
 | [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | Confirms loading high-risk tools through the DSH approval channel, with a per-session allowlist. |
 | [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | Keeps loaded tools across a DSH restart, one state file per session. |

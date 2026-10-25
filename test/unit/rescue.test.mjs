@@ -29,7 +29,9 @@ function coreHost(toolNames) {
     inject: (deps, fn) => fn({ agents: { list: () => [agent], get: () => undefined }, effect, on }),
     get: () => undefined,
   }
-  apply(ctx, {})
+  // The rescue feature does not exercise the router, so keep the sidecar out:
+  // a spawned sidecar child would keep the event loop alive past the test.
+  apply(ctx, { sidecar: { bin: '/nonexistent' } })
   const catalog = services.toolCatalog
   const preExecute = (name) => listeners.get('tools/pre-execute')[0]({ agent, name, arguments: {} }, async () => ({ kind: 'allow' }))
   return { ctx, on, agent, catalog, preExecute }

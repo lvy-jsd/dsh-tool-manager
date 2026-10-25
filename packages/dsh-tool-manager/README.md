@@ -14,6 +14,8 @@ tools_ls({ query: "pull request" }) # search the whole tree in one step
 tools_load(["/code/github"])        # callable from the next step, for the rest of the session
 tools_load(["mcp__github__get_me"]) # or one tool by exact name
 tools_unload(["/code/github"])
+tools_find("send an email")         # ranked matches by intent (BM25), no loading
+tools_route("send an email")        # retrieve, re-rank with the model, then load
 ```
 
 Loaded tools are **native**: the model receives their full parameter schema
@@ -51,6 +53,38 @@ built-in rules and config overrides, or write your own classifier.
   session and restore it when the session resumes.
 - If the plugin is unloaded, all its restrictions are lifted (fail open to
   "every tool visible", never to "no tools").
+
+## Finding and routing by intent
+
+The directory above is browsable, but the model still has to guess the right
+keywords and spend turns searching. The core now ships a retrieval + routing
+layer that makes an unbounded catalog usable without that guesswork:
+
+```
+tools_find("send an email")     # ranked matches (BM25), no loading
+tools_route("send an email")    # retrieve, re-rank with the model, then load
+skills_find("write a PR")       # ranked skills, no loading
+skills_route("write a PR")      # retrieve, re-rank, then load the top skill's body
+```
+
+Retrieval is BM25 by default: no model, no network, works offline, and scales
+to a large catalog. The BM25 index lives in a Rust sidecar process
+(`sidecar/`, tantivy over a Unix socket) for headroom — the hot path is native
+and the TypeScript here is a thin client. A dependency-free JS BM25 index is
+kept as the always-available fallback, so retrieval never breaks if the sidecar
+binary is missing or the process dies.
+
+When a model is configured (`config.model { provider, model }`), `tools_route`
+and `skills_route` re-rank the BM25 candidates with the model, so a
+natural-language intent that shares no words with a tool name still finds it —
+the RAG-MCP pattern: retrieve a small candidate set, then rank it. Any model
+failure falls back to the BM25 order, so the router never breaks on a model
+hiccup.
+
+The router reuses the core's `toolCatalog` service: it indexes the same
+catalog, loads through the same path, and reports the same token budget. The
+sidecar is spawned by the plugin and exits with it (a parent-process monitor
+kills it on a DSH restart).
 
 ## Configuration
 

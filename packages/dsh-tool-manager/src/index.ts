@@ -16,6 +16,7 @@ import { defaultManifestFile, syncManifest } from './manifest.js'
 import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
+import { registerRouter } from './router/index.js'
 import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolSchema } from './types.js'
 
 export type * from './types.js'
@@ -473,6 +474,14 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     },
   } satisfies ToolCatalogService
   ctx.provide('toolCatalog', service)
+
+  // --- the retrieval + routing layer ---------------------------------------------
+  //
+  // The router reuses the toolCatalog service just provided: it indexes the same
+  // catalog, loads through the same path, and reports the same token budget. It
+  // adds tools_find / tools_route / skills_find / skills_route on top of the
+  // directory tools above.
+  registerRouter(ctx, config, service)
 
   // --- direct calls of a hidden tool -----------------------------------------------
   //
