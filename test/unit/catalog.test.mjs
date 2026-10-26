@@ -14,7 +14,7 @@ import { DEFAULT_CATEGORIES } from '../../packages/dsh-tool-manager/lib/catalog.
 
 const schemas = [
   'adb_install', 'adb_logcat', 'create_bot', 'list_bots', 'mcp__amap__maps_weather',
-  'mcp__gork__android__mobile_tap', 'lingshu_cg', 'lingshu_stg', 'list_models',
+  'mcp__phone__android__mobile_tap', 'lingshu_cg', 'lingshu_stg', 'list_models',
 ].map((name) => ({ name, description: `${name} does things. More text.` }))
 
 const defaults = rulesClassifier({ name: 'rules:defaults', priority: DEFAULT_PRIORITY, groupRules: DEFAULT_GROUP_RULES, groupCategories: DEFAULT_GROUP_CATEGORIES })
@@ -26,7 +26,7 @@ test('core alone: structural groups, everything uncategorized', () => {
   for (const tool of cat.tools.values()) assert.equal(tool.category, UNCATEGORIZED)
   assert.equal(group(cat, 'adb_install'), 'adb')
   assert.equal(group(cat, 'mcp__amap__maps_weather'), 'amap')
-  assert.equal(group(cat, 'mcp__gork__android__mobile_tap'), 'gork-android')
+  assert.equal(group(cat, 'mcp__phone__android__mobile_tap'), 'phone-android')
   assert.equal(group(cat, 'create_bot'), 'misc', 'verb prefixes never form a group')
 })
 

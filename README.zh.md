@@ -1,10 +1,22 @@
-# dsh-tool-manager（monorepo）
+<p align="center">
+  <b>dsh-tool-manager</b><br>
+  为 DeepSeek Harness 按需加载工具 —— 所有工具组织成目录，只有 Agent 主动加载的才进入上下文。
+</p>
 
-[English](README.md) | 中文
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="许可证：MIT"></a>
+  <a href="https://www.npmjs.com/package/@lvy-jsd/dsh-tool-manager"><img src="https://img.shields.io/npm/v/@lvy-jsd/dsh-tool-manager.svg" alt="npm：@lvy-jsd/dsh-tool-manager"></a>
+</p>
 
-为 DeepSeek Harness 按需加载工具：所有工具都组织成一个目录
-（分类 → 分组 → 工具），只有 Agent 主动加载的部分才会进入模型上下文。
-整体是一个小的核心加若干可替换的扩展插件。
+<p align="center">
+  <a href="README.md">English</a> · 中文
+</p>
+
+---
+
+## 它是什么
+
+为 DeepSeek Harness 按需加载工具：所有工具都组织成一个目录（分类 → 分组 → 工具），只有 Agent 主动加载的部分才会进入模型上下文。整体是一个小的核心加若干可替换的扩展插件。
 
 ## 快速开始
 
@@ -25,6 +37,8 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 全新安装后，所有分组都归在 `uncategorized` 下，直到装上分类器 ——
 工具本身仍然可以浏览和加载，只是缺了分类。想自己写分类器见
 [扩展](#extending)。
+
+## 包
 
 | 包 | 作用 |
 |---|---|
@@ -69,7 +83,7 @@ cd my-ext && npm test
 [`examples/`](examples) 里有两个完整的例子，完整接口列表在核心包的
 README 和 [docs/DESIGN.md](docs/DESIGN.md) 第 11 节。
 
-## 开发与测试
+## 开发
 
 所有包都用 TypeScript 编写（`src/`），编译到 `lib/`（JavaScript 加 `.d.ts` 类型声明）；
 `lib/` 是构建产物，不进 git。根目录 `tsconfig.json` 列出所有包（项目引用）；两个浏览器端模块
@@ -86,12 +100,6 @@ node test/e2e.mjs                  # 启动一次性 DSH 实例；绝不碰你�
 宿主包（`@deepseek-ai/*`）是 peer 依赖，永远不从 npm 安装（`.npmrc` 设了
 `legacy-peer-deps`）：插件旁边多一份 npm 的副本，会遮蔽你实际运行的 DSH。
 `npm install` 会改为从 `$DSH_APP`（默认 `~/.local/share/deepseek-harness/app`）链接。
-
-端到端测试在临时 `DSH_HOME` 里为每个 profile 启动仓库自带的 `headless`
-profile（`core`、`rules`、`preset`、`persist`、`attr`、`attr-rules`、
-`exempt`、`gate`、`cap`、`llm`），挂上一个测试配套插件和一个写好脚本的、
-兼容 OpenAI 的假模型，记录每次模型请求的确切工具列表。面板的服务端半边由单元测试覆盖，在真实的 HTTP socket
-上跑它的路由。
 
 ## 许可
 

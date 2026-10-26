@@ -1,10 +1,22 @@
-# dsh-tool-manager (monorepo)
+<p align="center">
+  <b>dsh-tool-manager</b><br>
+  On-demand tool loading for DeepSeek Harness — every tool as a directory, loaded only when an agent asks.
+</p>
 
-English | [中文](README.zh.md)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.npmjs.com/package/@lvy-jsd/dsh-tool-manager"><img src="https://img.shields.io/npm/v/@lvy-jsd/dsh-tool-manager.svg" alt="npm: @lvy-jsd/dsh-tool-manager"></a>
+</p>
 
-On-demand tool loading for DeepSeek Harness: every tool is browsable as a
-directory (category → group → tool) and only what an agent loads reaches the
-model's context. Built as a small core plus replaceable extension plugins.
+<p align="center">
+  English · <a href="README.zh.md">中文</a>
+</p>
+
+---
+
+## What It Is
+
+On-demand tool loading for DeepSeek Harness: every tool is browsable as a directory (category → group → tool) and only what an agent loads reaches the model's context. Built as a small core plus replaceable extension plugins.
 
 ## Quick start
 
@@ -26,6 +38,8 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 On a fresh install every group is `uncategorized` until a classifier is
 installed — the tools are still browsable and loadable, only the categories are
 missing. See [Extending](#extending) to write your own classifier.
+
+## Packages
 
 | Package | What it does |
 |---|---|
@@ -71,13 +85,13 @@ cd my-ext && npm test
 Two worked examples live in [`examples/`](examples), and the full interface list
 is in the core README and [docs/DESIGN.md](docs/DESIGN.md) §11.
 
-## Develop and test
+## Development
 
 Every package is written in TypeScript (`src/`) and compiled to `lib/`
 (JavaScript plus `.d.ts` type declarations); `lib/` is build output and not
-committed. The root `tsconfig.json` lists the packages (project references);
-the two browser halves (`client.ts`) have their own `tsconfig.client.json`,
-because DSH loads them as classic scripts, not modules.
+committed. The root `tsconfig.json` lists the packages (project references); the
+two browser halves (`client.ts`) have their own `tsconfig.client.json`, because
+DSH loads them as classic scripts, not modules.
 
 ```sh
 npm install                        # also links your local DSH host packages (scripts/link-host.mjs)
@@ -91,13 +105,6 @@ Host packages (`@deepseek-ai/*`) are peers and are never installed from the
 registry (`.npmrc` sets `legacy-peer-deps`): a registry copy next to the plugin
 would shadow the DSH you actually run. `npm install` links them from
 `$DSH_APP` (default `~/.local/share/deepseek-harness/app`) instead.
-
-The end-to-end test boots the shipped `headless` profile in a temporary
-`DSH_HOME` once per profile (`core`, `rules`, `preset`, `persist`, `attr`,
-`attr-rules`, `exempt`, `gate`, `cap`, `llm`), with
-a test kit plugin and a scripted fake OpenAI-compatible model that records the
-exact tool list of every model request. The panel's server half is covered by
-unit tests that serve its routes over a real HTTP socket.
 
 ## License
 

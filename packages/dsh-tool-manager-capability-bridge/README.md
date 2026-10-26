@@ -34,7 +34,7 @@ approval, because the alias expands to the tool's own name.
     prefix: "cap:"          # change only if it collides with a real name
     listInDirectory: true   # add a "capabilities" category
     packs:
-      android-debug: ["/device/adb", "/device/gork-android", "adb_logcat"]
+      android-debug: ["/device/adb", "/device/phone", "adb_logcat"]
       review:        [gh_get_file, merge_pull_request]
 ```
 

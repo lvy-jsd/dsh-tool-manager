@@ -56,7 +56,7 @@ Resolution order for a group's category (the core itself has no rules):
 
 1. **User overrides** — `classifier-rules` config `categories.<name>.groups`, registered at priority 1000.
 2. **Plugin declarations** — the tool's own plugin says where it belongs.
-3. **Built-in defaults** — `classifier-rules` priority 100 (adb/phone/desktop/gork → device, github/nix → code, …).
+3. **Built-in defaults** — `classifier-rules` priority 100 (adb/phone/desktop → device, github/nix → code, …).
 4. **Small-model classification (phase 2, `classifier-llm`)** — see §2.4.
 5. `uncategorized` — always listed; never dropped. Without any classifier plugin, everything not self-declared lands here.
 
@@ -733,7 +733,7 @@ Goal: run the real `web` profile (all tool-registering plugins, real connectors)
 - New `DSH_HOME` with a copied `profiles/web` (`package.json`, `cordis.patch.yml`; `node_modules` symlinked read-only) plus this repo's packages linked in. No `sessions/`, no credential store copy.
 - New `HOME` for the process (temp dir), because `dsh-engram` (`~/.dsh/engram`), `dsh-memory` (`~/.dsh/...`) and `dsh-adb` (`~/.dsh/storages/dsh-adb`) write outside `DSH_HOME`. Read-only caches (`~/.npm`, nix profile) are symlinked so stdio connectors start without re-downloading.
 - Web server on a different loopback port; no tunnel.
-- `mcp_connector.json` reduced to the three enabled read-only connectors (amap, bilibili-mcp, nixos); grants directory not copied.
+- `mcp_connector.json` reduced to the three enabled read-only connectors; grants directory not copied.
 
 **Disabled in the copy** (outward-facing, stateful or irrelevant): chat/messaging bridges and bots, schedulers and automation, cross-session messaging, local model gateways, plugins that launch other agents, subscription accounts, voice input, the device-tunnel MCP client, and UI-only plugins (themes, widgets).
 
@@ -745,11 +745,11 @@ Goal: run the real `web` profile (all tool-registering plugins, real connectors)
 
 1. Scripted fake model (no cost): baseline tool count/tokens without the plugin vs. with it; directory over the real catalog; load/unload of real groups; subagent; resume.
 2. **Gap fixed before the trial** (done): in the web profile most tools are registered in the **preset** layer, not globally. The catalog read only global `ctx.tools.schemas()`, so a non-pinned preset-layer tool was hidden yet absent from the directory. The catalog is now built per agent from global tools plus the agent's ancestor (preset) layers; agents with the same tool set share a cached catalog. Regression test: the `preset` e2e profile (headless does not compose presets, so the test kit reproduces a preset exactly as the registry does — `createScope` + `bindScopeParent`); it fails on the old code and passes on the fix.
-3. T12 cache measurement with a real provider (DeepSeek proposed: reports cache-hit tokens per request, cheap; key passed by environment variable to the copy only). Because a real model may call real tools: tasks are limited to browsing the directory, loading, and read-only amap queries; the copy's approval policy is deny-by-default with only `tools_*` and `mcp__amap__*` allowed; device isolation as above. Same conversation with and without a mid-session load; compare provider-reported cached prompt tokens per request.
+3. T12 cache measurement with a real provider (DeepSeek proposed: reports cache-hit tokens per request, cheap; key passed by environment variable to the copy only). Because a real model may call real tools: tasks are limited to browsing the directory, loading, and read-only maps queries; the copy's approval policy is deny-by-default with only `tools_*` and `mcp__maps__*` allowed; device isolation as above. Same conversation with and without a mid-session load; compare provider-reported cached prompt tokens per request.
 
 ### 13.1 Trial results (2026-10-15, production `web` profile copy, `flagship` preset, DeepSeek `deepseek-flash`)
 
-Setup as above. Sessions were started through the host webhook runtime (the same path as a web session: preset mounted before the first request), by `test/trial/driver`; requests went through `test/trial/record-proxy.mjs`, which logged the offered tools and the provider's usage. A global guard allowed only `tools_*` and `mcp__amap__*`. The key lived only in the proxy process's environment.
+Setup as above. Sessions were started through the host webhook runtime (the same path as a web session: preset mounted before the first request), by `test/trial/driver`; requests went through `test/trial/record-proxy.mjs`, which logged the offered tools and the provider's usage. A global guard allowed only `tools_*` and `mcp__maps__*`. The key lived only in the proxy process's environment.
 
 **Start-up cost (same prompt, first request)**
 
@@ -768,15 +768,15 @@ The 36 visible tools: the pinned set, the three entry tools, and `send_message`,
 | 1 | 11,392 / 11,966 | 11,392 / 11,975 |
 | 2 | 11,904 / 12,294 | 11,904 / 12,506 |
 | 3 | 12,160 / 12,371 | 12,416 / 12,602 (`tools_load` called) |
-| 4 | 12,288 / 12,826 | **6,912 / 14,171** (first request with 12 amap tools) |
+| 4 | 12,288 / 12,826 | **6,912 / 14,171** (first request with 12 maps tools) |
 | 5 | 12,672 / 12,920 | 14,208 / 14,704 |
 
-- A load costs **one** partial cache miss: ≈ 7,259 missed tokens at the next request instead of ≈ 500 — the prefix breaks where the new tools sort in (lexicographic order; `mcp__amap__*` lands mid-list), so everything after that point is re-read once. The following request is back to 97% hit.
-- The loaded group itself adds ≈ 1.3k prompt tokens per request (12 amap schemas).
+- A load costs **one** partial cache miss: ≈ 7,259 missed tokens at the next request instead of ≈ 500 — the prefix breaks where the new tools sort in (lexicographic order; `mcp__maps__*` lands mid-list), so everything after that point is re-read once. The following request is back to 97% hit.
+- The loaded group itself adds ≈ 1.3k prompt tokens per request (12 maps schemas).
 - Net: one load ≈ 6.7k extra uncached tokens once, versus ≈ 29k tokens saved on **every** request. Break-even within the first request after the load. The upstream ordering TODO (§6) would shrink the one-off miss but is low priority.
 
 **Findings outside this plugin**
 
 - The trial surfaced a misplaced credential in a **historical** connector-policy snapshot of the host configuration (not in this plugin). It was rotated and removed; no action needed for users of this plugin.
 - Trial lesson: when scanning a copied connector store, distinguish live connections from snapshots before drawing conclusions, and never copy credential stores into a trial home.
-- Tool *results* are not in the session projection cache, so the trial did not inspect the amap answer's content; the call was made (the run continued to the final step).
+- Tool *results* are not in the session projection cache, so the trial did not inspect the maps answer's content; the call was made (the run continued to the final step).
