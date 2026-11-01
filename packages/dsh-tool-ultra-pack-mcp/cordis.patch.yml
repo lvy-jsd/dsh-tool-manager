@@ -1,0 +1,18 @@
+# @lvy-jsd/dsh-tool-ultra-pack-mcp bundle patch: one loader entry.
+- insert:
+    - id: tool-ultra-pack-mcp
+      name: '@lvy-jsd/dsh-tool-ultra-pack-mcp'
+      config:
+        # Start every preset that needs nothing (memory, thinking, context7,
+        # playwright). Presets that need a key start once it is set, either in
+        # the environment or under presets.<id>.env. Set false to start only
+        # presets with enabled: true.
+        defaults: true
+        presets:
+          # filesystem starts once it has directories to work in.
+          filesystem:
+            roots: []
+          # Examples:
+          # github: { env: { GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN } }
+          # searxng: { env: { SEARXNG_URL: 'http://127.0.0.1:8888' } }
+          # playwright: { enabled: false }
