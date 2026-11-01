@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.0 — unreleased: renamed to Tool Ultra
+
+Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
+`@lvy-jsd/dsh-tool-ultra-<name>`, all at 0.5.0; the core is
+`@lvy-jsd/dsh-tool-ultra-core` and the scaffolder is
+`@lvy-jsd/create-dsh-tool-ultra-plugin`. The repository is now
+`lvy-jsd/dsh-tool-ultra`.
+
+### Changed
+
+- **License: Apache-2.0** from this release on. Releases up to 0.4.1 stay MIT.
+- The core also provides its service as `toolUltra`; `toolCatalog` stays.
+
+### Compatibility
+
+- Unchanged: plugin name `tool-manager`, loader id, config keys, entry tools
+  (`tools_ls` / `tools_load` / `tools_unload` / `tools_find` / `tools_route` /
+  `skills_find` / `skills_route`), `tool-catalog/*` hooks, and the state
+  directory `<DSH_HOME>/tool-manager/`.
+- `@lvy-jsd/dsh-tool-manager` 0.5.0 re-exports the new core, so a profile that
+  loads it keeps working. Do not load it and `@lvy-jsd/dsh-tool-ultra-core` together.
+- Older `dsh-tool-manager-*` extension releases work with the new core through
+  the unchanged `toolCatalog` service.
+- `@lvy-jsd/dsh-tool-manager-dsbot-entry` is deprecated and not released again.
+
 ## 0.4.1 — 2026-11-01
 
 Packages: `@lvy-jsd/dsh-tool-manager` 0.4.1. The other packages are unchanged.

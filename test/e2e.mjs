@@ -6,18 +6,18 @@
 // the exact tool list and tool results of every model request.
 //
 // Two profiles:
-//   core    dsh-tool-manager only (no classifier plugin)
-//   rules   dsh-tool-manager + dsh-tool-manager-classifier-rules with a user override
+//   core    Tool Ultra only (no classifier plugin)
+//   rules   Tool Ultra + dsh-tool-ultra-classifier-rules with a user override
 //   preset  core + tools that exist only in a preset (ancestor) layer of the
 //           agent, which is how the DSH web profile registers most tools
-//   persist core + dsh-tool-manager-persist (T14b: state survives a restart)
-//   gate    core + dsh-tool-manager-risk-gate (high-risk loads ask)
-//   llm     core + dsh-tool-manager-classifier-llm: the small-model classifier
+//   persist core + dsh-tool-ultra-persist (T14b: state survives a restart)
+//   gate    core + dsh-tool-ultra-risk-gate (high-risk loads ask)
+//   llm     core + dsh-tool-ultra-classifier-llm: the small-model classifier
 //           asks the fake model and caches the answer
-//   cap     core + dsh-tool-manager-capability-bridge: tools_load("cap:<name>")
+//   cap     core + dsh-tool-ultra-capability-bridge: tools_load("cap:<name>")
 //   attr-rules rules + scan + a declaration-free device package: renamed groups
 //           keep their category
-//   attr    core + dsh-tool-manager-attribution-scan: tools are grouped by the
+//   attr    core + dsh-tool-ultra-attribution-scan: tools are grouped by the
 //           plugin package whose source defines them
 //
 // Usage: node test/e2e.mjs [path/to/dsh]   (default: ~/.local/bin/dsh)
@@ -73,51 +73,51 @@ function makeProfile(name, bundles, extraPatch = '') {
   name: '@deepseek-ai/dsh-agent-default-model'
   config: { provider: fake, model: fake-1 }
 - id: tool-manager
-  name: '@lvy-jsd/dsh-tool-manager'
+  name: '@lvy-jsd/dsh-tool-ultra-core'
   config:
     pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens]
 ${extraPatch}`)
 }
 
-makeProfile('core', ['dsh-tool-manager'])
-makeProfile('rules', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rules'], `
+makeProfile('core', ['dsh-tool-ultra-core'])
+makeProfile('rules', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-rules'], `
 - id: tool-manager-classifier-rules
-  name: '@lvy-jsd/dsh-tool-manager-classifier-rules'
+  name: '@lvy-jsd/dsh-tool-ultra-classifier-rules'
   config:
     defaults: true
     categories:
       maps: { groups: [fake] }
 `)
 
-makeProfile('preset', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rules'], `
+makeProfile('preset', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-rules'], `
 - id: tm-testkit
   name: dsh-tm-testkit
   config: { simulatePresetLayer: true }
 `)
 
-makeProfile('persist', ['dsh-tool-manager', 'dsh-tool-manager-persist'])
-makeProfile('attr', ['dsh-tool-manager', 'dsh-tool-manager-attribution-scan'])
+makeProfile('persist', ['dsh-tool-ultra-core', 'dsh-tool-ultra-persist'])
+makeProfile('attr', ['dsh-tool-ultra-core', 'dsh-tool-ultra-attribution-scan'])
 const devices = { name: 'dsh-tm-testkit-devices', dir: join(here, 'testkit-devices') }
-makeProfile('attr-rules', ['dsh-tool-manager', 'dsh-tool-manager-classifier-rules', 'dsh-tool-manager-attribution-scan', devices])
+makeProfile('attr-rules', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-rules', 'dsh-tool-ultra-attribution-scan', devices])
 // The fake model's route stands in for claude-code: an exempt route is never narrowed.
-makeProfile('exempt', ['dsh-tool-manager'], `
+makeProfile('exempt', ['dsh-tool-ultra-core'], `
 - id: tool-manager
-  name: '@lvy-jsd/dsh-tool-manager'
+  name: '@lvy-jsd/dsh-tool-ultra-core'
   config:
     pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens]
     exemptProviders: [fake]
 `)
 
-makeProfile('gate', ['dsh-tool-manager', 'dsh-tool-manager-risk-gate'], `
+makeProfile('gate', ['dsh-tool-ultra-core', 'dsh-tool-ultra-risk-gate'], `
 - id: tool-manager-risk-gate
-  name: '@lvy-jsd/dsh-tool-manager-risk-gate'
+  name: '@lvy-jsd/dsh-tool-ultra-risk-gate'
   config:
     highRisk: []
 `)
 
-makeProfile('cap', ['dsh-tool-manager', 'dsh-tool-manager-capability-bridge'], `
+makeProfile('cap', ['dsh-tool-ultra-core', 'dsh-tool-ultra-capability-bridge'], `
 - id: tool-manager-capability-bridge
-  name: '@lvy-jsd/dsh-tool-manager-capability-bridge'
+  name: '@lvy-jsd/dsh-tool-ultra-capability-bridge'
   config:
     packs:
       static: ['/uncategorized/fake']
@@ -126,9 +126,9 @@ makeProfile('cap', ['dsh-tool-manager', 'dsh-tool-manager-capability-bridge'], `
       pair: ['mcp__fake__ping', 'phone_fake_tap']
 `)
 
-makeProfile('llm', ['dsh-tool-manager', 'dsh-tool-manager-classifier-llm'], `
+makeProfile('llm', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-llm'], `
 - id: tool-manager-classifier-llm
-  name: '@lvy-jsd/dsh-tool-manager-classifier-llm'
+  name: '@lvy-jsd/dsh-tool-ultra-classifier-llm'
   config:
     model: { provider: fake, model: fake-1 }
     cacheFile: ${join(root, 'llm-cache.json')}

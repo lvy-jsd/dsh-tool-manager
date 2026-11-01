@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readdirSync, rmSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apply as applyPersist, defaultDir, name as persistName } from '../../packages/dsh-tool-manager-persist/lib/index.js'
-import { apply as applyGate, DEFAULT_HIGH_RISK, name as gateName } from '../../packages/dsh-tool-manager-risk-gate/lib/index.js'
-import { createRegistries } from '../../packages/dsh-tool-manager/lib/service.js'
-import { buildCatalog } from '../../packages/dsh-tool-manager/lib/catalog.js'
-import { createVisibilityController } from '../../packages/dsh-tool-manager/lib/visibility.js'
+import { apply as applyPersist, defaultDir, name as persistName } from '../../packages/dsh-tool-ultra-persist/lib/index.js'
+import { apply as applyGate, DEFAULT_HIGH_RISK, name as gateName } from '../../packages/dsh-tool-ultra-risk-gate/lib/index.js'
+import { createRegistries } from '../../packages/dsh-tool-ultra-core/lib/service.js'
+import { buildCatalog } from '../../packages/dsh-tool-ultra-core/lib/catalog.js'
+import { createVisibilityController } from '../../packages/dsh-tool-ultra-core/lib/visibility.js'
 
 /** Minimal Cordis-like context: effects, events, inject, provide. */
 function makeCtx(services = {}) {

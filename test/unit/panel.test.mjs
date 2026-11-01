@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
-import { isTrustedWebRequest, createApi, mountWebRoutes } from '../../packages/dsh-tool-manager-panel/lib/index.js'
+import { isTrustedWebRequest, createApi, mountWebRoutes } from '../../packages/dsh-tool-ultra-panel/lib/index.js'
 
 // --- trust fence --------------------------------------------------------------
 const req = (headers) => ({ headers })
@@ -397,7 +397,7 @@ test('routes: unmounting removes both', () => {
 })
 
 test('plugin: mounts only when a web server exists, and enabled:false skips it', async () => {
-  const { default: plugin } = await import('../../packages/dsh-tool-manager-panel/lib/index.js')
+  const { default: plugin } = await import('../../packages/dsh-tool-ultra-panel/lib/index.js')
   let injected = false
   const base = () => ({ inject: (deps, fn) => { injected = true; fn({ ...makeWebCtx().ctx }) }, logger: () => ({ info() {} }) })
   plugin.apply(base(), {})

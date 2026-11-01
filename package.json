@@ -1,7 +1,7 @@
 {
-  "name": "dsh-tool-manager-monorepo",
+  "name": "dsh-tool-ultra-monorepo",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "lvy-jsd",
   "type": "module",
   "workspaces": [

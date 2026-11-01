@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apply } from '../../packages/dsh-tool-manager/lib/index.js'
-import { rulesClassifier, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, DEFAULT_PRIORITY } from '../../packages/dsh-tool-manager-classifier-rules/lib/index.js'
+import { apply } from '../../packages/dsh-tool-ultra-core/lib/index.js'
+import { rulesClassifier, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, DEFAULT_PRIORITY } from '../../packages/dsh-tool-ultra-classifier-rules/lib/index.js'
 
 /**
  * The core on a minimal host, with its metadata file inside a temp directory so

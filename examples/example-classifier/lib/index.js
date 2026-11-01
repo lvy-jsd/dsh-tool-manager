@@ -1,4 +1,4 @@
-// example-classifier: the smallest useful dsh-tool-manager extension.
+// example-classifier: the smallest useful Tool Ultra extension.
 //
 // A classifier is `{ name, priority, group?(tool), categorize?(group) }`. It
 // runs while the directory is built and must answer synchronously.

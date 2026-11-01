@@ -4,13 +4,13 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { buildCatalog, resolveTarget, estimateTokens, UNCATEGORIZED } from '../../packages/dsh-tool-manager/lib/catalog.js'
-import { createRegistries, listPluginPackages, packageNameOf, readManifestAnnotations } from '../../packages/dsh-tool-manager/lib/service.js'
+import { buildCatalog, resolveTarget, estimateTokens, UNCATEGORIZED } from '../../packages/dsh-tool-ultra-core/lib/catalog.js'
+import { createRegistries, listPluginPackages, packageNameOf, readManifestAnnotations } from '../../packages/dsh-tool-ultra-core/lib/service.js'
 import {
   rulesClassifier, groupCategoriesFrom, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, DEFAULT_EXTRA_CATEGORIES, USER_PRIORITY, DEFAULT_PRIORITY,
   apply as applyRules,
-} from '../../packages/dsh-tool-manager-classifier-rules/lib/index.js'
-import { DEFAULT_CATEGORIES } from '../../packages/dsh-tool-manager/lib/catalog.js'
+} from '../../packages/dsh-tool-ultra-classifier-rules/lib/index.js'
+import { DEFAULT_CATEGORIES } from '../../packages/dsh-tool-ultra-core/lib/catalog.js'
 
 const schemas = [
   'adb_install', 'adb_logcat', 'create_bot', 'list_bots', 'mcp__amap__maps_weather',

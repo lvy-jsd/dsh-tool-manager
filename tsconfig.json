@@ -1,16 +1,16 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/dsh-tool-manager" },
-    { "path": "packages/dsh-tool-manager-risk-gate" },
-    { "path": "packages/dsh-tool-manager-persist" },
-    { "path": "packages/dsh-tool-manager-classifier-rules" },
-    { "path": "packages/dsh-tool-manager-capability-bridge" },
-    { "path": "packages/dsh-tool-manager-attribution-scan" },
-    { "path": "packages/dsh-tool-manager-classifier-llm" },
-    { "path": "packages/create-tool-manager-plugin" },
-    { "path": "packages/dsh-tool-manager-panel" },
-    { "path": "packages/dsh-tool-manager-panel/tsconfig.client.json" },
+    { "path": "packages/dsh-tool-ultra-core" },
+    { "path": "packages/dsh-tool-ultra-risk-gate" },
+    { "path": "packages/dsh-tool-ultra-persist" },
+    { "path": "packages/dsh-tool-ultra-classifier-rules" },
+    { "path": "packages/dsh-tool-ultra-capability-bridge" },
+    { "path": "packages/dsh-tool-ultra-attribution-scan" },
+    { "path": "packages/dsh-tool-ultra-classifier-llm" },
+    { "path": "packages/create-dsh-tool-ultra-plugin" },
+    { "path": "packages/dsh-tool-ultra-panel" },
+    { "path": "packages/dsh-tool-ultra-panel/tsconfig.client.json" },
     { "path": "packages/dsh-tool-manager-dsbot-entry" },
     { "path": "packages/dsh-tool-manager-dsbot-entry/tsconfig.client.json" }
   ]

@@ -1,4 +1,4 @@
-// Test-only plugin for dsh-tool-manager end-to-end tests.
+// Test-only plugin for Tool Ultra end-to-end tests.
 //
 // - fake MCP-style tools plus `testkit_reconnect`, which unregisters them and
 //   registers them again with one extra tool (an MCP server reconnecting);
@@ -25,7 +25,7 @@ const TEXT = { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', t
 function fakeTool(name) {
   return defineTool({
     name,
-    description: `Fake tool ${name} for dsh-tool-manager tests.`,
+    description: `Fake tool ${name} for Tool Ultra tests.`,
     parameters: { text: { type: 'string' } },
     output: TEXT,
     async execute(args) { return `${name}:${args.text ?? ''}` },

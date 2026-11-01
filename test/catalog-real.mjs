@@ -2,9 +2,9 @@
 // tool list (one name per line on stdin). No host needed.
 //   node test/catalog-real.mjs [--no-rules] < names.txt
 import { readFileSync } from 'node:fs'
-import { buildCatalog } from '../packages/dsh-tool-manager/lib/catalog.js'
-import { DEFAULT_PINNED } from '../packages/dsh-tool-manager/lib/index.js'
-import { rulesClassifier, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES } from '../packages/dsh-tool-manager-classifier-rules/lib/index.js'
+import { buildCatalog } from '../packages/dsh-tool-ultra-core/lib/catalog.js'
+import { DEFAULT_PINNED } from '../packages/dsh-tool-ultra-core/lib/index.js'
+import { rulesClassifier, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES } from '../packages/dsh-tool-ultra-classifier-rules/lib/index.js'
 
 const pinned = new Set(DEFAULT_PINNED)
 const names = readFileSync(0, 'utf8').split('\n').map((s) => s.trim()).filter((n) => n && !pinned.has(n))

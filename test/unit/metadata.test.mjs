@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createMetadataStore, defaultMetadataFile, pickMeta, pickMetadata, readMetadataFile, writeMetadataFile } from '../../packages/dsh-tool-manager/lib/metadata.js'
+import { createMetadataStore, defaultMetadataFile, pickMeta, pickMetadata, readMetadataFile, writeMetadataFile } from '../../packages/dsh-tool-ultra-core/lib/metadata.js'
 
 const tempFile = () => join(mkdtempSync(join(tmpdir(), 'tm-metadata-')), 'metadata.json')
 

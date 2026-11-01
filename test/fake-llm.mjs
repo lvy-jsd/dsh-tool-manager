@@ -4,7 +4,7 @@
 // logged with the exact tool names the model was offered. Requests without
 // tools (title generation and similar) get a plain text answer — except a
 // classifier prompt, which gets the category set by FAKE_CLASSIFIER_CATEGORY
-// (default "maps") so dsh-tool-manager-classifier-llm can be exercised.
+// (default "maps") so dsh-tool-ultra-classifier-llm can be exercised.
 //
 // Usage: node fake-llm.mjs <port> <script.json> <log.jsonl>
 //   script: [{ "tool_calls": [{ "name": "...", "arguments": {...} }] } | { "text": "..." }, ...]

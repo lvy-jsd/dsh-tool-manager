@@ -4,5 +4,5 @@ packages/*/lib/
 *.tsbuildinfo
 # Rust sidecar build output. sidecar/bin/ is filled by `npm run build:sidecar`
 # before publishing and is never committed.
-packages/dsh-tool-manager/sidecar/target/
-packages/dsh-tool-manager/sidecar/bin/
+packages/dsh-tool-ultra-core/sidecar/target/
+packages/dsh-tool-ultra-core/sidecar/bin/

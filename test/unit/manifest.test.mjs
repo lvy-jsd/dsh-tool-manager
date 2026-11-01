@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildCatalog } from '../../packages/dsh-tool-manager/lib/catalog.js'
-import { manifestImport, renderManifest, syncManifest, writeManifest, defaultManifestFile } from '../../packages/dsh-tool-manager/lib/manifest.js'
+import { buildCatalog } from '../../packages/dsh-tool-ultra-core/lib/catalog.js'
+import { manifestImport, renderManifest, syncManifest, writeManifest, defaultManifestFile } from '../../packages/dsh-tool-ultra-core/lib/manifest.js'
 
 const schemas = [
   { name: 'adb_install', description: 'Install an APK on a device.' },

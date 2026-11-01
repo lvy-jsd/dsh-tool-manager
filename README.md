@@ -1,11 +1,11 @@
 <p align="center">
-  <b>dsh-tool-manager</b><br>
+  <b>Tool Ultra</b><br>
   On-demand tool loading for DeepSeek Harness — every tool as a directory, loaded only when an agent asks.
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://www.npmjs.com/package/@lvy-jsd/dsh-tool-manager"><img src="https://img.shields.io/npm/v/@lvy-jsd/dsh-tool-manager.svg" alt="npm: @lvy-jsd/dsh-tool-manager"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://www.npmjs.com/package/@lvy-jsd/dsh-tool-ultra-core"><img src="https://img.shields.io/npm/v/@lvy-jsd/dsh-tool-ultra-core.svg" alt="npm: @lvy-jsd/dsh-tool-ultra-core"></a>
 </p>
 
 <p align="center">
@@ -18,17 +18,25 @@
 
 On-demand tool loading for DeepSeek Harness: every tool is browsable as a directory (category → group → tool) and only what an agent loads reaches the model's context. Built as a small core plus replaceable extension plugins.
 
+> **Renamed.** This project was `dsh-tool-manager`. Version 0.5.0 renames every
+> package from `@lvy-jsd/dsh-tool-manager-<name>` to `@lvy-jsd/dsh-tool-ultra-<name>`
+> (the core is `@lvy-jsd/dsh-tool-ultra-core`). Nothing else changes: the entry
+> tools, the `toolCatalog` service (now also provided as `toolUltra`), the hooks,
+> the config and the state directory `<DSH_HOME>/tool-manager/` stay the same.
+> An existing profile can keep `@lvy-jsd/dsh-tool-manager`: from 0.5.0 it only
+> re-exports the new core. Older extension releases keep working with the new core.
+
 ## Quick start
 
 ```sh
 # 1. install the core plus the rule-based classifier (optional but recommended)
-dsh plugin --profile web add @lvy-jsd/dsh-tool-manager @lvy-jsd/dsh-tool-manager-classifier-rules
+dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-core @lvy-jsd/dsh-tool-ultra-classifier-rules
 
 # 2. restart DSH, then ask the agent: "what tools do you have?"
 #    it answers with tools_ls("/") — a directory, not 200 tool schemas
 
 # 3. want the UI? add the panel, then open Settings → "Tool manager"
-dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
+dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-panel
 ```
 
 > **Install the scoped `@lvy-jsd/…` packages.** The unscoped `dsh-tool-manager`
@@ -43,16 +51,17 @@ missing. See [Extending](#extending) to write your own classifier.
 
 | Package | What it does |
 |---|---|
-| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | Core: directory, `tools_ls` / `tools_load` / `tools_unload`, per-agent allowlist, the `toolCatalog` extension service, plus intent retrieval + routing (`tools_find` / `tools_route` / `skills_find` / `skills_route`, BM25 with a Rust sidecar). Without extensions every group is `uncategorized`. |
-| [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | Places groups into categories from built-in rules and your config overrides. |
-| [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | Confirms loading high-risk tools through the DSH approval channel, with a per-session allowlist. |
-| [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | Keeps loaded tools across a DSH restart, one state file per session. |
-| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | Web panel: browse the tree, see each live session's loaded tools and token cost, load/unload from the UI, edit the always-on and high-risk lists, edit one tool's metadata, exempt one session. |
-| [`@lvy-jsd/dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | Places groups with a small model, one request per group, cached by a hash of the group and its tool descriptions. |
-| [`@lvy-jsd/dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | Load a named bundle of tools in one call: `tools_load(["cap:android-debug"])`. |
-| [`@lvy-jsd/dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | Group tools by the plugin package whose source defines them. |
-| [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | A "Tool manager" row in the ds-bot settings dialog that opens the panel. |
-| [`@lvy-jsd/create-tool-manager-plugin`](packages/create-tool-manager-plugin) | Scaffold your own extension: `npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier`. |
+| [`@lvy-jsd/dsh-tool-ultra-core`](packages/dsh-tool-ultra-core) | Core: directory, `tools_ls` / `tools_load` / `tools_unload`, per-agent allowlist, the `toolCatalog` extension service, plus intent retrieval + routing (`tools_find` / `tools_route` / `skills_find` / `skills_route`, BM25 with a Rust sidecar). Without extensions every group is `uncategorized`. |
+| [`@lvy-jsd/dsh-tool-ultra-classifier-rules`](packages/dsh-tool-ultra-classifier-rules) | Places groups into categories from built-in rules and your config overrides. |
+| [`@lvy-jsd/dsh-tool-ultra-risk-gate`](packages/dsh-tool-ultra-risk-gate) | Confirms loading high-risk tools through the DSH approval channel, with a per-session allowlist. |
+| [`@lvy-jsd/dsh-tool-ultra-persist`](packages/dsh-tool-ultra-persist) | Keeps loaded tools across a DSH restart, one state file per session. |
+| [`@lvy-jsd/dsh-tool-ultra-panel`](packages/dsh-tool-ultra-panel) | Web panel: browse the tree, see each live session's loaded tools and token cost, load/unload from the UI, edit the always-on and high-risk lists, edit one tool's metadata, exempt one session. |
+| [`@lvy-jsd/dsh-tool-ultra-classifier-llm`](packages/dsh-tool-ultra-classifier-llm) | Places groups with a small model, one request per group, cached by a hash of the group and its tool descriptions. |
+| [`@lvy-jsd/dsh-tool-ultra-capability-bridge`](packages/dsh-tool-ultra-capability-bridge) | Load a named bundle of tools in one call: `tools_load(["cap:android-debug"])`. |
+| [`@lvy-jsd/dsh-tool-ultra-attribution-scan`](packages/dsh-tool-ultra-attribution-scan) | Group tools by the plugin package whose source defines them. |
+| [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | Deprecated, no longer released. A "Tool manager" row in the ds-bot settings dialog that opens the panel. |
+| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | The old core name: re-exports `@lvy-jsd/dsh-tool-ultra-core` so existing profiles keep working. |
+| [`@lvy-jsd/create-dsh-tool-ultra-plugin`](packages/create-dsh-tool-ultra-plugin) | Scaffold your own extension: `npm create @lvy-jsd/dsh-tool-ultra-plugin@latest my-ext -- --type classifier`. |
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the design.
 
@@ -78,7 +87,7 @@ Hooks are plain events: `tool-catalog/before-load` (throw to veto),
 Start from a generated package — it comes with a passing test:
 
 ```sh
-npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier
+npm create @lvy-jsd/dsh-tool-ultra-plugin@latest my-ext -- --type classifier
 cd my-ext && npm test
 ```
 
@@ -108,4 +117,4 @@ would shadow the DSH you actually run. `npm install` links them from
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE). Releases before Tool Ultra (`@lvy-jsd/dsh-tool-manager*`) were MIT.

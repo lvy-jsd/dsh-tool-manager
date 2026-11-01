@@ -1,47 +1,31 @@
 {
   "name": "@lvy-jsd/dsh-tool-manager",
-  "version": "0.4.1",
-  "description": "Browse every DeepSeek Harness tool as a directory (category -> group -> tool), load tools on demand per agent, and find/route tools and skills by intent (BM25 retrieval with a Rust sidecar). Provides the toolCatalog service for classifier, metadata, hook and visibility extensions.",
-  "license": "MIT",
+  "version": "0.5.0",
+  "description": "Renamed to @lvy-jsd/dsh-tool-ultra-core. This package only re-exports it, so existing DSH profiles keep their loader entry and config.",
+  "license": "Apache-2.0",
   "author": "lvy-jsd",
   "type": "module",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "main": "index.js",
+  "types": "index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
-      "default": "./lib/index.js"
+      "types": "./index.d.ts",
+      "default": "./index.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "lib",
-    "!lib/.tsbuildinfo",
-    "src",
+    "index.js",
+    "index.d.ts",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE",
-    "sidecar/bin/*"
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
   },
-  "scripts": {
-    "build": "tsc -p .",
-    "prepack": "tsc -b ."
-  },
-  "keywords": [
-    "dsh",
-    "deepseek-harness",
-    "tools",
-    "mcp",
-    "lazy-loading",
-    "retrieval",
-    "bm25",
-    "routing"
-  ],
-  "peerDependencies": {
-    "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2 <0.3.0-0"
+  "dependencies": {
+    "@lvy-jsd/dsh-tool-ultra-core": "0.5.0"
   },
   "dsh": {
     "bundle": {
@@ -50,7 +34,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/lvy-jsd/dsh-tool-manager.git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-ultra.git",
     "directory": "packages/dsh-tool-manager"
   }
 }

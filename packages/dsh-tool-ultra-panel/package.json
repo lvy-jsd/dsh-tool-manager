@@ -1,0 +1,66 @@
+{
+  "name": "@lvy-jsd/dsh-tool-ultra-panel",
+  "version": "0.5.0",
+  "description": "Web panel for Tool Ultra: browse the tool directory, see what each live session has loaded and what it costs, and load or unload from the UI.",
+  "license": "Apache-2.0",
+  "author": "lvy-jsd",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "!lib/.tsbuildinfo",
+    "!lib/.client.tsbuildinfo",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b . tsconfig.client.json",
+    "prepack": "tsc -b . tsconfig.client.json"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-tool-ultra",
+    "panel",
+    "web"
+  ],
+  "peerDependencies": {
+    "@lvy-jsd/dsh-tool-ultra-core": ">=0.5.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-ultra.git",
+    "directory": "packages/dsh-tool-ultra-panel"
+  }
+}

@@ -1,11 +1,11 @@
 <p align="center">
-  <b>dsh-tool-manager</b><br>
+  <b>Tool Ultra</b><br>
   为 DeepSeek Harness 按需加载工具 —— 所有工具组织成目录，只有 Agent 主动加载的才进入上下文。
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="许可证：MIT"></a>
-  <a href="https://www.npmjs.com/package/@lvy-jsd/dsh-tool-manager"><img src="https://img.shields.io/npm/v/@lvy-jsd/dsh-tool-manager.svg" alt="npm：@lvy-jsd/dsh-tool-manager"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="许可证：Apache-2.0"></a>
+  <a href="https://www.npmjs.com/package/@lvy-jsd/dsh-tool-ultra-core"><img src="https://img.shields.io/npm/v/@lvy-jsd/dsh-tool-ultra-core.svg" alt="npm：@lvy-jsd/dsh-tool-ultra-core"></a>
 </p>
 
 <p align="center">
@@ -18,17 +18,22 @@
 
 为 DeepSeek Harness 按需加载工具：所有工具都组织成一个目录（分类 → 分组 → 工具），只有 Agent 主动加载的部分才会进入模型上下文。整体是一个小的核心加若干可替换的扩展插件。
 
+> **已改名。** 本项目原名 `dsh-tool-manager`。从 0.5.0 起，所有包从 `@lvy-jsd/dsh-tool-manager-<名字>`
+> 改名为 `@lvy-jsd/dsh-tool-ultra-<名字>`（核心是 `@lvy-jsd/dsh-tool-ultra-core`）。其他都不变：入口工具、
+> `toolCatalog` 服务（另外也以 `toolUltra` 的名字提供）、钩子、配置和状态目录 `<DSH_HOME>/tool-manager/`。
+> 已有的配置可以继续用 `@lvy-jsd/dsh-tool-manager`：从 0.5.0 起它只是转出新核心。旧版扩展也能和新核心一起用。
+
 ## 快速开始
 
 ```sh
 # 1. 安装核心包和基于规则的分类器（可选，但推荐）
-dsh plugin --profile web add @lvy-jsd/dsh-tool-manager @lvy-jsd/dsh-tool-manager-classifier-rules
+dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-core @lvy-jsd/dsh-tool-ultra-classifier-rules
 
 # 2. 重启 DSH，然后问 Agent："你有哪些工具？"
 #    它会用 tools_ls("/") 回答 —— 是一个目录，不是 200 个工具 schema
 
 # 3. 想要界面？装上面板，然后打开 设置 →"工具管理"
-dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
+dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-panel
 ```
 
 > **请安装带 scope 的 `@lvy-jsd/…` 包。** npm 上不带 scope 的 `dsh-tool-manager`
@@ -42,16 +47,17 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 
 | 包 | 作用 |
 |---|---|
-| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | 核心：目录、`tools_ls` / `tools_load` / `tools_unload`、按 Agent 的可见白名单、`toolCatalog` 扩展服务，外加按意图的检索与路由（`tools_find` / `tools_route` / `skills_find` / `skills_route`，BM25 + Rust 侧车）。没有扩展时所有分组都在 `uncategorized` 下。 |
-| [`@lvy-jsd/dsh-tool-manager-classifier-rules`](packages/dsh-tool-manager-classifier-rules) | 按内置规则和你的配置覆盖，把分组放进分类。 |
-| [`@lvy-jsd/dsh-tool-manager-risk-gate`](packages/dsh-tool-manager-risk-gate) | 通过 DSH 的审批通道确认高危工具的加载，并支持按会话的白名单。 |
-| [`@lvy-jsd/dsh-tool-manager-persist`](packages/dsh-tool-manager-persist) | DSH 重启后保留已加载的工具，每个会话一个状态文件。 |
-| [`@lvy-jsd/dsh-tool-manager-panel`](packages/dsh-tool-manager-panel) | 网页面板：浏览目录树、查看每个活动会话已加载的工具和 token 开销，在界面上加载 / 卸载，编辑常驻工具和高危名单，编辑单个工具的元数据，以及豁免某个会话。 |
-| [`@lvy-jsd/dsh-tool-manager-classifier-llm`](packages/dsh-tool-manager-classifier-llm) | 用小模型给分组分类，每个分组一次请求，按分组及其工具描述的哈希缓存结果。 |
-| [`@lvy-jsd/dsh-tool-manager-capability-bridge`](packages/dsh-tool-manager-capability-bridge) | 一次调用加载一组具名工具：`tools_load(["cap:android-debug"])`。 |
-| [`@lvy-jsd/dsh-tool-manager-attribution-scan`](packages/dsh-tool-manager-attribution-scan) | 按定义这些工具的源码所属的插件包来分组。 |
-| [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | 在 ds-bot 的设置弹窗里加一行"工具管理"，点开显示面板。 |
-| [`@lvy-jsd/create-tool-manager-plugin`](packages/create-tool-manager-plugin) | 生成你自己的扩展：`npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier`。 |
+| [`@lvy-jsd/dsh-tool-ultra-core`](packages/dsh-tool-ultra-core) | 核心：目录、`tools_ls` / `tools_load` / `tools_unload`、按 Agent 的可见白名单、`toolCatalog` 扩展服务，外加按意图的检索与路由（`tools_find` / `tools_route` / `skills_find` / `skills_route`，BM25 + Rust 侧车）。没有扩展时所有分组都在 `uncategorized` 下。 |
+| [`@lvy-jsd/dsh-tool-ultra-classifier-rules`](packages/dsh-tool-ultra-classifier-rules) | 按内置规则和你的配置覆盖，把分组放进分类。 |
+| [`@lvy-jsd/dsh-tool-ultra-risk-gate`](packages/dsh-tool-ultra-risk-gate) | 通过 DSH 的审批通道确认高危工具的加载，并支持按会话的白名单。 |
+| [`@lvy-jsd/dsh-tool-ultra-persist`](packages/dsh-tool-ultra-persist) | DSH 重启后保留已加载的工具，每个会话一个状态文件。 |
+| [`@lvy-jsd/dsh-tool-ultra-panel`](packages/dsh-tool-ultra-panel) | 网页面板：浏览目录树、查看每个活动会话已加载的工具和 token 开销，在界面上加载 / 卸载，编辑常驻工具和高危名单，编辑单个工具的元数据，以及豁免某个会话。 |
+| [`@lvy-jsd/dsh-tool-ultra-classifier-llm`](packages/dsh-tool-ultra-classifier-llm) | 用小模型给分组分类，每个分组一次请求，按分组及其工具描述的哈希缓存结果。 |
+| [`@lvy-jsd/dsh-tool-ultra-capability-bridge`](packages/dsh-tool-ultra-capability-bridge) | 一次调用加载一组具名工具：`tools_load(["cap:android-debug"])`。 |
+| [`@lvy-jsd/dsh-tool-ultra-attribution-scan`](packages/dsh-tool-ultra-attribution-scan) | 按定义这些工具的源码所属的插件包来分组。 |
+| [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | 已弃用，不再发版。在 ds-bot 的设置弹窗里加一行"工具管理"，点开显示面板。 |
+| [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | 旧的核心包名：转出 `@lvy-jsd/dsh-tool-ultra-core`，让已有配置继续可用。 |
+| [`@lvy-jsd/create-dsh-tool-ultra-plugin`](packages/create-dsh-tool-ultra-plugin) | 生成你自己的扩展：`npm create @lvy-jsd/dsh-tool-ultra-plugin@latest my-ext -- --type classifier`。 |
 
 设计说明见 [docs/DESIGN.md](docs/DESIGN.md)。
 
@@ -76,7 +82,7 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel
 从一个生成出来的包开始 —— 它自带一个能跑通的测试：
 
 ```sh
-npm create @lvy-jsd/tool-manager-plugin@latest my-ext -- --type classifier
+npm create @lvy-jsd/dsh-tool-ultra-plugin@latest my-ext -- --type classifier
 cd my-ext && npm test
 ```
 
@@ -103,4 +109,4 @@ node test/e2e.mjs                  # 启动一次性 DSH 实例；绝不碰你�
 
 ## 许可
 
-MIT —— 见 [LICENSE](LICENSE)。
+Apache-2.0 —— 见 [LICENSE](LICENSE)。改名为 Tool Ultra 之前的版本（`@lvy-jsd/dsh-tool-manager*`）是 MIT。

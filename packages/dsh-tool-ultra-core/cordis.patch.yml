@@ -1,0 +1,29 @@
+# @lvy-jsd/dsh-tool-ultra-core bundle patch: one loader entry.
+- insert:
+    - id: tool-manager
+      name: '@lvy-jsd/dsh-tool-ultra-core'
+      config:
+        # Extra always-visible tools on top of the built-in core list.
+        pinned: []
+        # Built-in always-visible tools to move into the directory instead.
+        unpin: []
+        # Model routes never narrowed: their tool list is handed to an external
+        # client once per session and not refreshed (Claude Code's MCP bridge).
+        exemptProviders: [claude-code]
+        # Tools excluded from group loads; must be loaded on their own.
+        # Loading high-risk tools also needs a risk gate plugin
+        # (@lvy-jsd/dsh-tool-ultra-risk-gate) to confirm them.
+        highRisk: []
+        # The catalog as text, for a client that cannot lazy-load (Claude Code
+        # reads it through a ~/.claude/CLAUDE.md `@` line). '' turns it off.
+        # manifestFile: ~/.claude/dsh-tool-catalog.md
+        # --- retrieval + routing (tools_find / tools_route / skills_find / skills_route) ---
+        # Model used to re-rank tools_route / skills_route candidates. Leave
+        # unset for pure BM25 (no model, works offline).
+        # model: { provider: deepseek, model: deepseek-chat }
+        # maxTokens: 24
+        # topK: 8
+        # maxBudget: 20000
+        # k1: 1.5
+        # b: 0.75
+        # sidecar: { bin: '', socket: '', timeoutMs: 2000 }

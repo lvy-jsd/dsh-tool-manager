@@ -21,7 +21,7 @@ if (process.platform !== 'linux') {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const crate = join(root, 'packages', 'dsh-tool-manager', 'sidecar')
+const crate = join(root, 'packages', 'dsh-tool-ultra-core', 'sidecar')
 const target = process.env.SIDECAR_TARGET
 const args = ['build', '--release', '--manifest-path', join(crate, 'Cargo.toml')]
 if (target) args.push('--target', target)

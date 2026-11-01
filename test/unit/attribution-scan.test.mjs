@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apply, scanPackages, attribute, attributionClassifier, groupNameOf } from '../../packages/dsh-tool-manager-attribution-scan/lib/index.js'
+import { apply, scanPackages, attribute, attributionClassifier, groupNameOf } from '../../packages/dsh-tool-ultra-attribution-scan/lib/index.js'
 
 function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), 'tm-attr-'))
@@ -25,7 +25,7 @@ const packages = fixture({
   'ds-bot': { 'lib/team.js': "const TEAM_TOOLS = ['note_add', 'weather_now', 'shared_name']" },
   'dsh-other': { 'lib/x.js': "const a = 'shared_name'", 'test/x.test.js': "const t = { name: 'weather_week' }" },
   'dsh-big': { 'node_modules/dep/lib/y.js': "const t = { name: 'hidden_dep_tool' }" },
-  '@lvy-jsd/dsh-tool-manager-classifier-rules': { 'lib/index.js': "const t = { name: 'weather_week' }" },
+  '@lvy-jsd/dsh-tool-ultra-classifier-rules': { 'lib/index.js': "const t = { name: 'weather_week' }" },
 })
 
 test('a single definer wins over packages that only mention the name', async () => {

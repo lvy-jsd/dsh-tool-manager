@@ -9,7 +9,7 @@
 //   - When a .bt-settings dialog with the expected nav appears, it inserts one
 //     row (styled with ds-bot's own .bt-settings-item class) above ds-bot's
 //     "Harness settings" row, and one host element over the page area.
-//   - Clicking the row renders dsh-tool-manager-panel's ToolManagerSection into
+//   - Clicking the row renders dsh-tool-ultra-panel's ToolManagerSection into
 //     that host through a React portal; clicking any other row closes it.
 //
 // If the expected DOM is not there (ds-bot changed, or is not installed), the
@@ -35,7 +35,7 @@ interface ClientContext {
   get(name: string): unknown
   effect(fn: () => void | (() => void), label?: string): void
 }
-/** What this module reads of dsh-tool-manager-panel's client exports. */
+/** What this module reads of dsh-tool-ultra-panel's client exports. */
 interface PanelClientExports {
   ToolManagerSection?: SectionComponent
   NS?: string
@@ -181,11 +181,17 @@ interface PanelClientExports {
       const slots = ctx.get('slots') as OverlaySlots | undefined
       if (slots === undefined) return
       let panel: PanelClientExports | undefined
-      try {
-        panel = require('@lvy-jsd/dsh-tool-manager-panel') as PanelClientExports | undefined
-      } catch {
-        return // the panel plugin is not loaded: nothing to show
+      // The panel was renamed from dsh-tool-manager-panel to dsh-tool-ultra-panel;
+      // accept either so this entry keeps working across the rename.
+      for (const id of ['@lvy-jsd/dsh-tool-ultra-panel', '@lvy-jsd/dsh-tool-manager-panel']) {
+        try {
+          panel = require(id) as PanelClientExports | undefined
+          if (panel) break
+        } catch {
+          // not loaded under this name
+        }
       }
+      if (!panel) return // the panel plugin is not loaded: nothing to show
       if (typeof panel?.ToolManagerSection !== 'function') return
       const Entry = makeEntry(panel.ToolManagerSection)
       ctx.effect(() => slots.inject('shell.overlay', () => slots.register({

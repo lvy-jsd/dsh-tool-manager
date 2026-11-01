@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: clippy and tests
-        working-directory: packages/dsh-tool-manager/sidecar
+        working-directory: packages/dsh-tool-ultra-core/sidecar
         run: |
           cargo clippy --release -- -D warnings
           cargo test --release

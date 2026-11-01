@@ -12,7 +12,7 @@ export function apply(ctx) {
   for (const toolName of TOOLS) {
     ctx.tools.register(defineTool({
       name: toolName,
-      description: `Fake tool ${toolName} for dsh-tool-manager tests.`,
+      description: `Fake tool ${toolName} for Tool Ultra tests.`,
       parameters: {},
       output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: String(v) }] },
       async execute() { return toolName },
