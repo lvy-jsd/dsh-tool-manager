@@ -1,4 +1,5 @@
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -6,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { scaffold, parseArgs, TYPES, USAGE } from '../../packages/create-tool-manager-plugin/lib/cli.js'
 
-const cli = new URL('../../packages/create-tool-manager-plugin/lib/index.js', import.meta.url).pathname
+const cli = fileURLToPath(new URL('../../packages/create-tool-manager-plugin/lib/index.js', import.meta.url))
 
 function scratch() {
   return mkdtempSync(join(tmpdir(), 'dsh-tm-scaffold-'))

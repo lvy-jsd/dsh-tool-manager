@@ -101,7 +101,7 @@ test('exempt: defaultExemptFile follows DSH_HOME', () => {
   const previous = process.env.DSH_HOME
   process.env.DSH_HOME = '/tmp/dsh-home'
   try {
-    assert.equal(defaultExemptFile(), '/tmp/dsh-home/tool-manager/exempt.json')
+    assert.equal(defaultExemptFile(), join('/tmp/dsh-home', 'tool-manager', 'exempt.json'))
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous

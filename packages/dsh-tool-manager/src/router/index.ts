@@ -47,8 +47,9 @@ import type {
 
 const pluginDir = dirname(fileURLToPath(import.meta.url))
 // This module compiles to lib/router/index.js; the package root is two levels
-// up. The npm package ships a prebuilt binary under sidecar/bin/; a source
-// checkout has a dev build under sidecar/target/release/. Prefer the shipped one.
+// up. A published package carries the binary under sidecar/bin/ (filled by
+// `npm run build:sidecar`, never committed); a source checkout has a dev build
+// under sidecar/target/release/. Prefer the packaged one.
 const sidecarBin = [
   join(pluginDir, '..', '..', 'sidecar', 'bin', 'tool-router-sidecar'),
   join(pluginDir, '..', '..', 'sidecar', 'target', 'release', 'tool-router-sidecar'),

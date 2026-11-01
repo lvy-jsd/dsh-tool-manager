@@ -106,7 +106,7 @@ test('persist: default dir follows DSH_HOME', () => {
   const before = process.env.DSH_HOME
   process.env.DSH_HOME = '/tmp/dsh-home-example'
   try {
-    assert.equal(defaultDir(), '/tmp/dsh-home-example/tool-manager/sessions')
+    assert.equal(defaultDir(), join('/tmp/dsh-home-example', 'tool-manager', 'sessions'))
   } finally {
     if (before === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = before

@@ -73,7 +73,7 @@ test('settings: defaultSettingsFile follows DSH_HOME', () => {
   const before = process.env.DSH_HOME
   process.env.DSH_HOME = '/tmp/dsh-home-test'
   try {
-    assert.equal(defaultSettingsFile(), '/tmp/dsh-home-test/tool-manager/config.json')
+    assert.equal(defaultSettingsFile(), join('/tmp/dsh-home-test', 'tool-manager', 'config.json'))
   } finally {
     if (before === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = before
