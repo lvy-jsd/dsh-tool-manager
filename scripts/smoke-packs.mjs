@@ -34,7 +34,7 @@ await check('wiki_summary (en)', () => ess.wiki_summary.execute({ title: 'Rust (
 
 const w = Object.fromEntries(web().map((t) => [t.name, t]))
 await check('web_read (article)', () => w.web_read.execute({ url: 'https://en.wikipedia.org/wiki/Markdown', max_chars: 3000 }), /^# .*Markdown[\s\S]*URL: https:\/\/en\.wikipedia\.org/)
-await check('web_links', () => w.web_links.execute({ url: 'https://example.com/', limit: 5 }), /link\(s\) on https:\/\/example\.com/)
+await check('web_links', () => w.web_links.execute({ url: 'https://en.wikipedia.org/wiki/Markdown', same_site: true, limit: 5 }), /^5 link\(s\) on https:\/\/en\.wikipedia\.org/)
 await check('web_read refuses LAN', () => w.web_read.execute({ url: 'http://192.168.1.1/' }).catch((e) => e.message), /private address/)
 
 /** Start one stdio MCP server, initialize, list tools, stop. */
