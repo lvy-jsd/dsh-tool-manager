@@ -35,7 +35,8 @@ for (const pkgDir of pkgDirs) {
     const link = join(pkgDir, 'node_modules', peer)
     mkdirSync(dirname(link), { recursive: true })
     if (existsSync(link) || isLink(link)) rmSync(link, { recursive: true, force: true })
-    symlinkSync(target, link)
+    // 'junction' lets Windows link a directory without admin rights; POSIX ignores it.
+    symlinkSync(target, link, 'junction')
     console.log(`link-host: ${dir} -> ${peer}`)
   }
 }

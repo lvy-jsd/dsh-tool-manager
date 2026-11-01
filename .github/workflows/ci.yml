@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: unit (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [24]
+        include:
+          - os: ubuntu-latest
+            node: 22
+    env:
+      # scripts/link-host.mjs links the DSH host packages from here, the same
+      # way it links a real DSH install on a developer machine.
+      DSH_APP: ${{ github.workspace }}/../dsh-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install DSH host packages
+        shell: bash
+        run: |
+          mkdir -p "$DSH_APP"
+          cd "$DSH_APP"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund \
+            @deepseek-ai/dsh-tools@0.2.1-rc.5 \
+            @deepseek-ai/dsh-llm \
+            @deepseek-ai/dsh-scope
+
+      - name: Build the Rust sidecar
+        if: runner.os == 'Linux'
+        run: npm run build:sidecar
+
+      # npm install also runs the link-host postinstall and the TypeScript build.
+      - run: npm install --no-audit --no-fund
+
+      - run: npm run typecheck
+
+      # The e2e run (test/e2e.mjs) boots a full DSH and is not run here yet.
+      - run: node --test test/unit/*.test.mjs
+
+  sidecar:
+    name: sidecar (cargo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: clippy and tests
+        working-directory: packages/dsh-tool-manager/sidecar
+        run: |
+          cargo clippy --release -- -D warnings
+          cargo test --release

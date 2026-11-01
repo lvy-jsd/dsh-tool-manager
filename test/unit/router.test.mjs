@@ -9,7 +9,12 @@ import { Sidecar } from '../../packages/dsh-tool-manager/lib/router/sidecar.js'
 import { registerRouter } from '../../packages/dsh-tool-manager/lib/router/index.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const SIDECAR_BIN = join(here, '../../packages/dsh-tool-manager/sidecar/bin/tool-router-sidecar')
+// The same lookup as the plugin: a packaged binary first, then a local cargo build.
+// Neither is committed, so these tests run where `npm run build:sidecar` ran.
+const SIDECAR_BIN = [
+  join(here, '../../packages/dsh-tool-manager/sidecar/bin/tool-router-sidecar'),
+  join(here, '../../packages/dsh-tool-manager/sidecar/target/release/tool-router-sidecar'),
+].find(existsSync) ?? '/nonexistent/tool-router-sidecar'
 
 // --- BM25 ------------------------------------------------------------------
 
