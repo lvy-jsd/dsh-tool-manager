@@ -1,6 +1,6 @@
 {
   "name": "@lvy-jsd/dsh-tool-manager",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Browse every DeepSeek Harness tool as a directory (category -> group -> tool), load tools on demand per agent, and find/route tools and skills by intent (BM25 retrieval with a Rust sidecar). Provides the toolCatalog service for classifier, metadata, hook and visibility extensions.",
   "license": "MIT",
   "author": "lvy-jsd",
