@@ -13,6 +13,8 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 - `@lvy-jsd/dsh-tool-ultra-pack-essentials`: the first native tool pack, with no API keys: `time_now`, `time_convert`, `date_diff`, `math_eval` (mathjs, with units), `weather_forecast` (Open-Meteo), `geo_search` (Nominatim) and `wiki_search` / `wiki_summary` (Wikimedia).
 - `@lvy-jsd/dsh-tool-ultra-pack-web`: `web_read` (main article as Markdown via Readability + turndown) and `web_links`. Private, loopback and link-local targets are refused by default, and the check runs again on every redirect hop.
 - `@lvy-jsd/dsh-tool-ultra-pack-mcp`: twelve MCP server presets started through `@deepseek-ai/dsh-mcp-client`. Keyless presets (memory, thinking, context7, playwright) start by default, keyed ones wait for their key, versions are pinned, and write tools are marked high risk. `mcp_presets` reports the status.
+- Tool packs: the core's `toolCatalog.registerToolPack()` / `toolPacks()` and the `pack:<id>` target, so `tools_load(["pack:web"])` loads a whole pack. The three packs register themselves, and the panel has a Packs tab with per-preset status and one-click load.
+- `scripts/smoke-packs.mjs`: a live check of the packs against the real services, including starting each keyless MCP preset.
 
 ### Changed
 

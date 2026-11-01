@@ -146,6 +146,14 @@ interface ClientContext {
       'tab.config': 'Configuration',
       'tab.meta': 'Tool metadata',
       'tab.tidy': 'Tidy',
+      'tab.packs': 'Packs',
+      'packs.none': 'No tool packs are installed. Add @lvy-jsd/dsh-tool-ultra-pack-essentials, -web or -mcp to the profile.',
+      'packs.tools': '{n} tools',
+      'packs.load': 'Load into session',
+      'packs.state.on': 'on',
+      'packs.state.waiting': 'waiting',
+      'packs.state.off': 'off',
+      'packs.state.failed': 'failed',
       'tidy.title': 'One-click tidy',
       'tidy.intro': 'Ask the model to place the groups that are still uncategorized. Nothing is written until you confirm the preview.',
       'tidy.model': 'Model',
@@ -290,6 +298,14 @@ interface ClientContext {
       'tab.config': '配置',
       'tab.meta': '工具元数据',
       'tab.tidy': '一键整理',
+      'tab.packs': '工具包',
+      'packs.none': '还没有安装工具包。在配置里加上 @lvy-jsd/dsh-tool-ultra-pack-essentials、-web 或 -mcp。',
+      'packs.tools': '{n} 个工具',
+      'packs.load': '加载到会话',
+      'packs.state.on': '运行中',
+      'packs.state.waiting': '等待配置',
+      'packs.state.off': '已关闭',
+      'packs.state.failed': '启动失败',
       'tidy.title': '一键整理',
       'tidy.intro': '让模型给还没分类的分组安排分类。预览确认之前不会写入任何东西。',
       'tidy.model': '模型',
@@ -759,6 +775,42 @@ interface ClientContext {
      * wrong answer is work to undo rather than something that clears itself; the
      * model only proposes, and every row is unticked-able before the write.
      */
+    interface ToolPackJson {
+      id: string
+      title: string
+      summary?: string
+      source?: string
+      tools: string[]
+      items: { id: string, title?: string, state: string, detail?: string }[]
+    }
+
+    /** Installed tool packs: what each brings, what is waiting for a key, one-click load. */
+    function Packs({ t, load, version }: { t: Translate, load: Load, version: number }) {
+      const [packs, setPacks] = useState<ToolPackJson[] | null>(null)
+      useEffect(() => {
+        api<{ packs: ToolPackJson[] }>('toolPacks').then((body) => setPacks(body.packs)).catch(() => setPacks([]))
+      }, [version])
+      if (!packs) return h('div', { className: 'tmp-empty' }, t('loading'))
+      if (packs.length === 0) return h('div', { className: 'tmp-empty' }, t('packs.none'))
+      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+        ...packs.map((pack) => h('div', { key: pack.id, className: 'tmp-card' },
+          h('div', { className: 'tmp-bar' },
+            h('h3', null, pack.title),
+            h('span', { className: 'tmp-mono tmp-muted' }, `pack:${pack.id}`),
+            h('span', { className: 'tmp-grow' }),
+            h('span', { className: 'tmp-muted' }, format(t, 'packs.tools', { n: pack.tools.length })),
+            h(Button, { onClick: () => { void load([`pack:${pack.id}`]) }, title: pack.tools.join(', ') }, t('packs.load'))),
+          pack.summary ? h('p', { className: 'tmp-muted' }, pack.summary) : null,
+          pack.items.length
+            ? h('table', { className: 'tmp-table' }, h('tbody', null,
+              ...pack.items.map((item) => h('tr', { key: item.id },
+                h('th', null, item.title ?? item.id),
+                h('td', null, t(`packs.state.${item.state}`)),
+                h('td', { className: 'tmp-muted' }, item.detail ?? '')))))
+            : null,
+          pack.source ? h('p', { className: 'tmp-muted tmp-mono' }, pack.source) : null)))
+    }
+
     function Tidy({ t, onApplied }: { t: Translate, onApplied: () => void }) {
       const [status, setStatus] = useState<{ groups: number, tools: number, allowed: string[], model: { provider: string, model: string } | null } | null>(null)
       const [plan, setPlan] = useState<TidyPlanJson | null>(null)
@@ -1044,6 +1096,7 @@ interface ClientContext {
           events.addEventListener('state', refreshSessions)
           events.addEventListener('catalog', () => setVersion((v) => v + 1))
           events.addEventListener('config', () => setSettingsVersion((v) => v + 1))
+          events.addEventListener('packs', () => setVersion((v) => v + 1))
           // An edit from another tab rebuilds the catalog, so the tool list and
           // the current entry are refreshed rather than left stale.
           events.addEventListener('metadata', () => { setVersion((v) => v + 1); refreshTools() })
@@ -1121,7 +1174,7 @@ interface ClientContext {
       const inspect = (name: string) => { setInspectName(name); setInspectTick((v) => v + 1); setTab('meta') }
 
       const totalTokens = (sessions ?? []).reduce((n, s) => n + (s.wireTokens ?? 0), 0)
-      const tabs = ['directory', 'sessions', 'config', 'meta', 'tidy']
+      const tabs = ['directory', 'packs', 'sessions', 'config', 'meta', 'tidy']
       return h('div', { className: 'tmp-section' },
         h('h2', { className: 'tmp-heading' }, t('title')),
         h('p', { className: 'tmp-intro' }, t('intro')),
@@ -1137,6 +1190,7 @@ interface ClientContext {
         tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, inspect, version })
           : tab === 'sessions' ? h(Sessions, { t, sessions, selected: target, setSelected, unload, setExempt })
             : tab === 'meta' ? h(MetaEditor, { key: inspectTick, t, initial: inspectName, tools, save: saveMeta, drop: dropMeta })
+              : tab === 'packs' ? h(Packs, { t, load, version })
               : tab === 'tidy' ? h(Tidy, { t, onApplied: () => { setVersion((v) => v + 1); refreshSessions() } })
                 : h(Config, { t, save, external: settingsVersion }),
       )

@@ -349,6 +349,19 @@ export function createTools(opts: CreateOptions = {}): ToolSpec[] {
 
 export function apply(ctx: any, config: Config = {}) {
   const disabled = new Set(config.disable ?? [])
+  // List the pack in Tool Ultra's panel and make it loadable as pack:essentials.
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['toolCatalog'], (c: any) => {
+      if (typeof c.toolCatalog?.registerToolPack !== 'function') return
+      c.effect(() => c.toolCatalog.registerToolPack({
+        id: 'essentials',
+        title: 'Essentials',
+        summary: 'Time zones, date math, a calculator with units, weather, place search and Wikipedia. No API keys.',
+        source: '@lvy-jsd/dsh-tool-ultra-pack-essentials',
+        tools: TOOL_NAMES.filter((n) => !disabled.has(n)),
+      }))
+    })
+  }
   for (const spec of createTools(config)) {
     if (disabled.has(spec.name)) continue
     ctx.tools.register(defineTool({

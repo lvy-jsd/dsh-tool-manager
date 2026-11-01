@@ -359,6 +359,10 @@ export function createApi(catalog: ToolCatalogService, tidy: TidyRuntime = {}) {
     search({ query, path }: ApiParams = {}) {
       return { results: catalog.find(query ?? '', path ?? '/') }
     },
+    /** Installed tool packs, their tools and per-part status. Older cores have none. */
+    toolPacks() {
+      return { packs: typeof catalog.toolPacks === 'function' ? catalog.toolPacks() : [] }
+    },
     /** Every tool name in the catalog, for a name picker in the UI. */
     toolNames() {
       return { tools: [...catalog.get().tools.keys()].sort() }
@@ -495,6 +499,7 @@ export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { 
     wctx.on?.('tool-catalog/settings-changed', ({ config }) => broadcast(clients, 'config', { config })),
     // Edited metadata moves a tool in the tree, so the Directory tab reloads.
     wctx.on?.('tool-catalog/metadata-changed', ({ name }) => broadcast(clients, 'metadata', { name: String(name ?? '') })),
+    wctx.on?.('tool-catalog/packs-changed', ({ id }) => broadcast(clients, 'packs', { id: String(id ?? '') })),
   ]
 
   return () => {
@@ -525,6 +530,7 @@ const API_WHITELIST = new Map<unknown, (api: PanelApi, params: ApiParams) => obj
   ['extensions', (api) => api.extensions()],
   ['search', (api, params) => api.search(params)],
   ['toolNames', (api) => api.toolNames()],
+  ['toolPacks', (api) => api.toolPacks()],
   ['tidyStatus', (api) => api.tidyStatus()],
   ['tidyPreview', (api) => api.tidyPreview()],
   ['tidyApply', (api, params) => api.tidyApply(params)],

@@ -19,6 +19,8 @@
 //           keep their category
 //   attr    core + dsh-tool-ultra-attribution-scan: tools are grouped by the
 //           plugin package whose source defines them
+//   packs   core + the essentials, web and mcp packs: pack:<id> loads a pack,
+//           pack tools run, mcp_presets reports keyless/keyed presets
 //
 // Usage: node test/e2e.mjs [path/to/dsh]   (default: ~/.local/bin/dsh)
 import { spawn, spawnSync } from 'node:child_process'
@@ -132,6 +134,14 @@ makeProfile('llm', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-llm'], `
   config:
     model: { provider: fake, model: fake-1 }
     cacheFile: ${join(root, 'llm-cache.json')}
+`)
+
+makeProfile('packs', ['dsh-tool-ultra-core', 'dsh-tool-ultra-pack-essentials', 'dsh-tool-ultra-pack-web', 'dsh-tool-ultra-pack-mcp'], `
+- id: tool-ultra-pack-mcp
+  name: '@lvy-jsd/dsh-tool-ultra-pack-mcp'
+  config:
+    # No servers start in the test: npx would download them.
+    defaults: false
 `)
 
 
@@ -324,6 +334,31 @@ expect('cap: unload all clears the pack', fakeTools(cap[2]), [])
 expect('cap: a pack loads exactly its tools, not their group siblings', fakeTools(cap[3]), [P])
 expect('cap: the same applies to the other group in the pack', fakeTools(cap[3], 'phone_fake_'), ['phone_fake_tap'])
 contains('cap: an unknown pack is a normal miss, not a crash', cap[4].lastContent, /skipped cap:nope/)
+
+// --- packs profile: tool packs register, load by pack:<id>, and run -----------
+console.log('# packs profile')
+const pk = await run('packs', 'packs-main', [
+  call('tools_ls', { path: '/' }),                                         // 0
+  call('tools_load', { targets: ['pack:essentials'] }),                    // 1
+  call('math_eval', { expression: '5 km to mile' }),                       // 2
+  call('time_convert', { time: '2026-11-01 15:30', from_tz: 'Asia/Shanghai', to_tz: 'UTC' }), // 3
+  call('tools_load', { targets: ['pack:mcp'] }),                           // 4
+  call('mcp_presets'),                                                     // 5
+  call('tools_load', { targets: ['pack:web'] }),                           // 6
+  call('web_read', { url: 'http://127.0.0.1:9/' }),                        // 7 private address refused
+  call('tools_load', { targets: ['pack:nope'] }),                          // 8
+  { text: 'done' },                                                        // 9
+], ['packs'])
+const ESS = ['date_diff', 'geo_search', 'math_eval', 'time_convert', 'time_now', 'weather_forecast', 'wiki_search', 'wiki_summary']
+check('packs: pack tools start hidden', !pk[0].tools.some((n) => ESS.includes(n) || n === 'web_read'), pk[0].tools.join(','))
+expect('packs: pack:essentials loads exactly the pack', pk[2].tools.filter((n) => ESS.includes(n)).sort(), ESS)
+contains('packs: math_eval runs with units', pk[3].lastContent, /3\.10685\d* mile/)
+contains('packs: time_convert converts zones', pk[4].lastContent, /UTC: 2026-11-01T07:30:00\+00:00/)
+check('packs: pack:mcp is registered (the bundle loaded on this DSH)', !/skipped pack:mcp/.test(pk[5].lastContent), pk[5].lastContent)
+contains('packs: mcp_presets lists keyless and keyed presets', pk[6].lastContent, /memory \[memory\] off/, /github \[code\] (off|waiting for GITHUB_TOKEN)/)
+check('packs: pack:web loads web_read and web_links', pk[7].tools.includes('web_read') && pk[7].tools.includes('web_links'), pk[7].tools.join(','))
+contains('packs: web_read refuses private addresses', pk[8].lastContent, /private address/)
+contains('packs: an unknown pack is a normal miss', pk[9].lastContent, /skipped pack:nope/)
 
 // --- llm profile: small-model classification, cached --------------------------
 console.log('# llm profile')
