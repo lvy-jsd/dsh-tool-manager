@@ -56,7 +56,7 @@ test('scaffold: the package.json is valid and points at the real entry', () => {
     assert.equal(manifest.main, 'lib/index.js')
     assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
     assert.ok(manifest.peerDependencies['@lvy-jsd/dsh-tool-ultra-core'], 'declares the scoped core as a peer')
-    assert.equal(manifest.peerDependencies['Tool Ultra'], undefined, 'never the unscoped name (another project)')
+    assert.equal(manifest.peerDependencies['dsh-tool-manager'], undefined, 'never the unscoped name (another project)')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

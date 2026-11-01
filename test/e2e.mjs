@@ -79,8 +79,8 @@ function makeProfile(name, bundles, extraPatch = '') {
 ${extraPatch}`)
 }
 
-makeProfile('core', ['Tool Ultra'])
-makeProfile('rules', ['Tool Ultra', 'dsh-tool-ultra-classifier-rules'], `
+makeProfile('core', ['dsh-tool-ultra-core'])
+makeProfile('rules', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-rules'], `
 - id: tool-manager-classifier-rules
   name: '@lvy-jsd/dsh-tool-ultra-classifier-rules'
   config:
@@ -89,18 +89,18 @@ makeProfile('rules', ['Tool Ultra', 'dsh-tool-ultra-classifier-rules'], `
       maps: { groups: [fake] }
 `)
 
-makeProfile('preset', ['Tool Ultra', 'dsh-tool-ultra-classifier-rules'], `
+makeProfile('preset', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-rules'], `
 - id: tm-testkit
   name: dsh-tm-testkit
   config: { simulatePresetLayer: true }
 `)
 
-makeProfile('persist', ['Tool Ultra', 'dsh-tool-ultra-persist'])
-makeProfile('attr', ['Tool Ultra', 'dsh-tool-ultra-attribution-scan'])
+makeProfile('persist', ['dsh-tool-ultra-core', 'dsh-tool-ultra-persist'])
+makeProfile('attr', ['dsh-tool-ultra-core', 'dsh-tool-ultra-attribution-scan'])
 const devices = { name: 'dsh-tm-testkit-devices', dir: join(here, 'testkit-devices') }
-makeProfile('attr-rules', ['Tool Ultra', 'dsh-tool-ultra-classifier-rules', 'dsh-tool-ultra-attribution-scan', devices])
+makeProfile('attr-rules', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-rules', 'dsh-tool-ultra-attribution-scan', devices])
 // The fake model's route stands in for claude-code: an exempt route is never narrowed.
-makeProfile('exempt', ['Tool Ultra'], `
+makeProfile('exempt', ['dsh-tool-ultra-core'], `
 - id: tool-manager
   name: '@lvy-jsd/dsh-tool-ultra-core'
   config:
@@ -108,14 +108,14 @@ makeProfile('exempt', ['Tool Ultra'], `
     exemptProviders: [fake]
 `)
 
-makeProfile('gate', ['Tool Ultra', 'dsh-tool-ultra-risk-gate'], `
+makeProfile('gate', ['dsh-tool-ultra-core', 'dsh-tool-ultra-risk-gate'], `
 - id: tool-manager-risk-gate
   name: '@lvy-jsd/dsh-tool-ultra-risk-gate'
   config:
     highRisk: []
 `)
 
-makeProfile('cap', ['Tool Ultra', 'dsh-tool-ultra-capability-bridge'], `
+makeProfile('cap', ['dsh-tool-ultra-core', 'dsh-tool-ultra-capability-bridge'], `
 - id: tool-manager-capability-bridge
   name: '@lvy-jsd/dsh-tool-ultra-capability-bridge'
   config:
@@ -126,7 +126,7 @@ makeProfile('cap', ['Tool Ultra', 'dsh-tool-ultra-capability-bridge'], `
       pair: ['mcp__fake__ping', 'phone_fake_tap']
 `)
 
-makeProfile('llm', ['Tool Ultra', 'dsh-tool-ultra-classifier-llm'], `
+makeProfile('llm', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-llm'], `
 - id: tool-manager-classifier-llm
   name: '@lvy-jsd/dsh-tool-ultra-classifier-llm'
   config:
