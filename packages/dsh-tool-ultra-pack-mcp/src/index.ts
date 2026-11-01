@@ -37,6 +37,16 @@ export function presetAnnotations(): { match: RegExp; meta: Record<string, strin
   return out
 }
 
+/** Per-preset status in the shape Tool Ultra's panel shows. */
+export function packItems(plan: PlannedPreset[], errors: Record<string, string> = {}) {
+  return plan.map(({ preset, status, missing }) => {
+    const error = errors[preset.id]
+    const state = error ? 'failed' : status === 'needs-key' ? 'waiting' : status
+    const detail = error ?? (status === 'needs-key' ? `needs ${missing.map((m) => `${m.env} (${m.hint})`).join(', ')}` : preset.summary)
+    return { id: preset.id, title: preset.title, state, detail }
+  })
+}
+
 export function apply(ctx: any, config: Config = {}, load: Loader = (s) => import(s)) {
   const logger = ctx.logger?.('tool-ultra-pack-mcp') ?? console
   const plan: PlannedPreset[] = planPresets(config)
@@ -46,6 +56,16 @@ export function apply(ctx: any, config: Config = {}, load: Loader = (s) => impor
   if (typeof ctx.inject === 'function') {
     ctx.inject(['toolCatalog'], (c: any) => {
       for (const { match, meta } of presetAnnotations()) c.effect(() => c.toolCatalog.annotate(match, meta))
+      if (typeof c.toolCatalog.registerToolPack === 'function') {
+        c.effect(() => c.toolCatalog.registerToolPack({
+          id: 'mcp',
+          title: 'MCP presets',
+          summary: 'Well-known MCP servers started through DSH\'s MCP client. Keyless presets run by default; the rest start once their key is set.',
+          source: '@lvy-jsd/dsh-tool-ultra-pack-mcp',
+          tools: ['mcp_presets', ...plan.filter((p) => p.status === 'on').map((p) => new RegExp(`^mcp__${p.preset.id}__`))],
+          items: () => packItems(plan, errors),
+        }))
+      }
     })
   }
 

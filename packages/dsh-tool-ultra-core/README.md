@@ -208,6 +208,18 @@ ctx.effect(() => ctx.toolCatalog.annotate('adb_install', { risk: 'high' }))
 Fields: `group`, `category`, `risk` (`"high"`), `summary`. Exact-name entries
 win over `match`; runtime annotations win over `package.json`.
 
+### Tool packs
+
+A package of tools can register itself as a pack. It is then listed in the panel's Packs tab, and it can be loaded in one call with `tools_load(["pack:<id>"])`:
+
+```js
+ctx.inject(['toolCatalog'], (c) => c.effect(() => c.toolCatalog.registerToolPack({
+  id: 'web', title: 'Web reading', source: '@lvy-jsd/dsh-tool-ultra-pack-web',
+  tools: ['web_read', 'web_links'],          // exact names or RegExps
+  items: () => [],                           // optional per-part status for the panel
+}))
+```
+
 ### New categories
 
 ```js

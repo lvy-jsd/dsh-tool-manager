@@ -17,7 +17,7 @@ import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
 import { registerRouter } from './router/index.js'
-import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolSchema } from './types.js'
+import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema } from './types.js'
 
 export type * from './types.js'
 export { buildCatalog, resolveTarget, toolsUnder, estimateTokens, summary, shortName, structuralGroup, DEFAULT_CATEGORIES, UNCATEGORIZED, MISC_GROUP, OVERRIDE_PRIORITY } from './catalog.js'
@@ -133,6 +133,21 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   // gate (e.g. dsh-tool-ultra-risk-gate) is registered; the gate confirms the
   // load before it executes. With no gate, high-risk loads are refused.
   const riskGates = new Set<{ name: string }>()
+
+  // Tool packs: installed packages of tools (essentials, web, MCP presets...).
+  // Each is listed in the panel and loadable in one call as `pack:<id>`.
+  const toolPacks = new Map<string, ToolPack>()
+  const packToolNames = (pack: ToolPack): string[] => {
+    const names = [...getCatalog().tools.keys()]
+    return names.filter((n) => pack.tools.some((m) => (typeof m === 'string' ? m === n : new RegExp(m.source, m.flags.replace('g', '')).test(n)))).sort()
+  }
+  const packItems = (pack: ToolPack): ToolPackItem[] => {
+    try {
+      return pack.items?.() ?? []
+    } catch (error) {
+      return [{ id: pack.id, state: 'failed', detail: `status unavailable: ${(error as Error).message}` }]
+    }
+  }
 
   const pinnedSet = () => {
     const current = settings.effective()
@@ -330,6 +345,25 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       return () => { riskGates.delete(entry) }
     },
     riskGates: () => [...riskGates].map((g) => g.name),
+    registerToolPack(pack: ToolPack): Disposer {
+      const id = String(pack?.id ?? '')
+      if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(id)) throw new Error(`tool pack id "${id}" must be lowercase letters, digits and dashes`)
+      const entry = { ...pack, id, tools: [...(pack.tools ?? [])] }
+      toolPacks.set(id, entry)
+      ctx.emit('tool-catalog/packs-changed', { id })
+      return () => {
+        if (toolPacks.get(id) === entry) toolPacks.delete(id)
+        ctx.emit('tool-catalog/packs-changed', { id })
+      }
+    },
+    toolPacks: () => [...toolPacks.values()].map((pack) => ({
+      id: pack.id,
+      title: pack.title,
+      summary: pack.summary,
+      source: pack.source,
+      tools: packToolNames(pack),
+      items: packItems(pack),
+    })),
     /** Re-read package declarations and rebuild. */
     refresh() {
       manifestAnnotations = null
@@ -473,6 +507,16 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       return tokens
     },
   } satisfies ToolCatalogService
+  // `pack:<id>` in tools_load / tools_unload resolves to the pack's current tools.
+  ctx.effect(() => registries.registerTargetResolver({
+    name: 'tool-packs',
+    prefix: 'pack:',
+    resolve(target) {
+      const pack = toolPacks.get(target.slice('pack:'.length).trim())
+      return pack ? packToolNames(pack) : undefined
+    },
+  }), 'tool-manager.tool-packs()')
+
   ctx.provide('toolCatalog', service)
   // Same service under the Tool Ultra name. Extensions may inject either;
   // `toolCatalog` stays the documented name so existing extensions keep working.
@@ -769,7 +813,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   ctx.tools.register(defineTool({
     name: 'tools_load',
     description:
-      'Make tools callable for the rest of this session. Each target is a group path ("/code/github"), a category ("/maps"), or one tool by path or exact name ("mcp__github__get_file_contents"). Loading a group also includes tools the group gains later. Prefer one group load over many single tools. Loaded tools are available from your next step. Set forSubagents to also hand these targets to subagents you start afterwards.',
+      'Make tools callable for the rest of this session. Each target is a group path ("/code/github"), a category ("/maps"), one tool by path or exact name ("mcp__github__get_file_contents"), or a whole tool pack ("pack:web"). Loading a group also includes tools the group gains later. Prefer one group load over many single tools. Loaded tools are available from your next step. Set forSubagents to also hand these targets to subagents you start afterwards.',
     parameters: {
       targets: { type: 'array', items: { type: 'string' }, required: true, description: 'Paths, group names or exact tool names.' },
       forSubagents: { type: 'boolean', description: 'Also give these targets to subagents started from now on.' },

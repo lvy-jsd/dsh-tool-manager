@@ -318,6 +318,40 @@ export interface FoundTool {
   highRisk: boolean
 }
 
+/** Status of one part of a tool pack (an MCP preset, say). */
+export interface ToolPackItem {
+  id: string
+  title?: string
+  /** on: running; waiting: needs a key or setting; off: switched off; failed: tried and failed. */
+  state: 'on' | 'waiting' | 'off' | 'failed'
+  /** What is missing or what went wrong, without secrets. */
+  detail?: string
+}
+
+/** An installed package of tools, registered with toolCatalog.registerToolPack(). */
+export interface ToolPack {
+  /** Short id, used as `pack:<id>` in tools_load. Lowercase letters, digits and dashes. */
+  id: string
+  title: string
+  summary?: string
+  /** npm package or URL the pack comes from. */
+  source?: string
+  /** Exact tool names or name patterns that belong to the pack. */
+  tools: (string | RegExp)[]
+  /** Optional per-part status, read each time a UI asks. */
+  items?(): ToolPackItem[]
+}
+
+/** A tool pack as UIs see it: the tools it currently has, and its parts' status. */
+export interface ToolPackSnapshot {
+  id: string
+  title: string
+  summary?: string
+  source?: string
+  tools: string[]
+  items: ToolPackItem[]
+}
+
 /** The service the core provides as `toolCatalog` (inject it to extend the catalog). */
 export interface ToolCatalogService {
   registerClassifier(classifier: Classifier): Disposer
@@ -331,6 +365,10 @@ export interface ToolCatalogService {
   /** Declare that a plugin confirms high-risk loads; without one they are refused. */
   registerRiskGate(gate?: RiskGate): Disposer
   riskGates(): string[]
+  /** Register a tool pack: listed in the panel and loadable as `pack:<id>`. */
+  registerToolPack(pack: ToolPack): Disposer
+  /** Registered tool packs with their current tools and status. */
+  toolPacks(): ToolPackSnapshot[]
   /** Re-read package declarations and rebuild. */
   refresh(): void
   /** Catalog as one agent sees it, or the union over live agents. */
