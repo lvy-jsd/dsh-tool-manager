@@ -48,6 +48,11 @@ export class Sidecar {
   }
 
   async start(): Promise<boolean> {
+    // The bundled sidecar is a Linux-only ELF binary (unix sockets, prctl).
+    if (process.platform !== 'linux') {
+      this.logger?.info?.(`tool-router: sidecar not supported on ${process.platform}; using JS BM25`)
+      return false
+    }
     if (!existsSync(this.bin)) {
       this.logger?.warn?.(`tool-router: sidecar binary not found at ${this.bin}; using JS BM25`)
       return false
@@ -55,6 +60,13 @@ export class Sidecar {
     try {
       this.child = spawn(this.bin, ['--socket', this.socket], { stdio: ['ignore', 'ignore', 'pipe'] })
       this.child.stderr?.on('data', (d) => this.logger?.debug?.(`tool-router sidecar: ${String(d).trim()}`))
+      // A failed spawn emits 'error' asynchronously; without a listener it
+      // becomes an uncaught exception that the try/catch below cannot see.
+      this.child.on('error', (err) => {
+        this.logger?.warn?.(`tool-router: sidecar spawn failed: ${err.message}; using JS BM25`)
+        this.ready = false
+        this.child = null
+      })
       this.child.on('exit', (code) => {
         this.logger?.warn?.(`tool-router: sidecar exited (code ${code}); falling back to JS BM25`)
         this.ready = false
@@ -62,6 +74,7 @@ export class Sidecar {
         this.sock = null
       })
       for (let attempt = 0; attempt < 50; attempt++) {
+        if (!this.child) break
         try {
           await this._connect()
           break
