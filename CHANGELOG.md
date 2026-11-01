@@ -8,6 +8,10 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 `@lvy-jsd/create-dsh-tool-ultra-plugin`. The repository is now
 `lvy-jsd/dsh-tool-ultra`.
 
+### Added
+
+- `@lvy-jsd/dsh-tool-ultra-pack-essentials`: the first native tool pack, with no API keys: `time_now`, `time_convert`, `date_diff`, `math_eval` (mathjs, with units), `weather_forecast` (Open-Meteo), `geo_search` (Nominatim) and `wiki_search` / `wiki_summary` (Wikimedia).
+
 ### Changed
 
 - **License: Apache-2.0** from this release on. Releases up to 0.4.1 stay MIT.

@@ -1,0 +1,14 @@
+# @lvy-jsd/dsh-tool-ultra-pack-essentials bundle patch: one loader entry.
+- insert:
+    - id: tool-ultra-pack-essentials
+      name: '@lvy-jsd/dsh-tool-ultra-pack-essentials'
+      config:
+        # Tools to leave out, by name (e.g. [geo_search]).
+        disable: []
+        # Sent to OpenStreetMap Nominatim, whose usage policy asks for an
+        # identifying User-Agent. Put a contact address in it if you can.
+        userAgent: 'dsh-tool-ultra (+https://github.com/lvy-jsd/dsh-tool-ultra)'
+        # Per-request timeout for the web services, in milliseconds.
+        timeoutMs: 10000
+        # Default Wikipedia language when the call does not name one.
+        wikiLang: en
