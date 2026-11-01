@@ -83,3 +83,10 @@ test('mcp presets: a missing client module is reported, not thrown', async () =>
   await new Promise((r) => setTimeout(r, 10))
   assert.ok(registered)
 })
+
+test('mcp presets: apply accepts a logger object as DSH passes it', () => {
+  const tools = []
+  const ctx = { tools: { register: (d) => tools.push(d) }, plugin() {}, logger: { info() {}, warn() {} } }
+  apply(ctx, { defaults: false }, async () => ({ default: {} }))
+  assert.equal(tools.length, 1, 'mcp_presets registered')
+})

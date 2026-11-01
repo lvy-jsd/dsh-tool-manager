@@ -48,7 +48,8 @@ export function packItems(plan: PlannedPreset[], errors: Record<string, string> 
 }
 
 export function apply(ctx: any, config: Config = {}, load: Loader = (s) => import(s)) {
-  const logger = ctx.logger?.('tool-ultra-pack-mcp') ?? console
+  // DSH passes a logger object; a plain cordis context passes a factory.
+  const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-ultra-pack-mcp') : ctx.logger) ?? console
   const plan: PlannedPreset[] = planPresets(config)
   const errors: Record<string, string> = {}
 
