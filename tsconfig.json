@@ -32,6 +32,9 @@
       "path": "packages/dsh-tool-ultra-pack-web"
     },
     {
+      "path": "packages/dsh-tool-ultra-pack-mcp"
+    },
+    {
       "path": "packages/dsh-tool-ultra-panel"
     },
     {
