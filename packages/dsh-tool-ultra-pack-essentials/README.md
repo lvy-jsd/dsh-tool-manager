@@ -20,14 +20,15 @@ Tool names do not collide with DSH's built-in `web_fetch` and `web_search`.
 The pack is a normal DSH plugin. With Tool Ultra installed, it shows up under `/system`, `/maps` and `/search` in `tools_ls`.
 
 ```yaml
-# cordis.patch.yml (also shipped in this package)
-- id: tool-ultra-pack-essentials
-  name: '@lvy-jsd/dsh-tool-ultra-pack-essentials'
-  config:
-    disable: []          # tool names to skip
-    userAgent: 'dsh-tool-ultra (+https://github.com/lvy-jsd/dsh-tool-ultra)'
-    timeoutMs: 10000
-    wikiLang: en         # default Wikipedia edition, e.g. zh
+# cordis.patch.yml (shipped in this package)
+- insert:
+    - id: tool-ultra-pack-essentials
+      name: '@lvy-jsd/dsh-tool-ultra-pack-essentials'
+      config:
+        disable: []          # tool names to skip
+        userAgent: 'dsh-tool-ultra (+https://github.com/lvy-jsd/dsh-tool-ultra)'
+        timeoutMs: 10000
+        wikiLang: en         # default Wikipedia edition, e.g. zh
 ```
 
 Nominatim's usage policy asks for at most one request per second and an identifying User-Agent. Set `userAgent` to something that names your deployment if you run it for many users.

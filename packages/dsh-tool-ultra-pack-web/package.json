@@ -1,0 +1,76 @@
+{
+  "name": "@lvy-jsd/dsh-tool-ultra-pack-web",
+  "version": "0.5.0",
+  "description": "Tool Ultra web-reading pack: fetch a page and return its main content as clean Markdown (Readability + turndown), or list its links. No API keys.",
+  "license": "Apache-2.0",
+  "author": "lvy-jsd",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "!lib/.tsbuildinfo",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b .",
+    "prepack": "tsc -b ."
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-tool-ultra",
+    "tools",
+    "readability",
+    "markdown",
+    "web"
+  ],
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "linkedom": "^0.18.0",
+    "turndown": "^7.2.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "toolCatalog": {
+      "tools": {
+        "web_read": {
+          "group": "web",
+          "category": "search",
+          "risk": "low"
+        },
+        "web_links": {
+          "group": "web",
+          "category": "search",
+          "risk": "low"
+        }
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-ultra.git",
+    "directory": "packages/dsh-tool-ultra-pack-web"
+  },
+  "devDependencies": {
+    "@types/turndown": "^5.0.5"
+  }
+}

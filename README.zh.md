@@ -56,6 +56,7 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-panel
 | [`@lvy-jsd/dsh-tool-ultra-capability-bridge`](packages/dsh-tool-ultra-capability-bridge) | 一次调用加载一组具名工具：`tools_load(["cap:android-debug"])`。 |
 | [`@lvy-jsd/dsh-tool-ultra-attribution-scan`](packages/dsh-tool-ultra-attribution-scan) | 按定义这些工具的源码所属的插件包来分组。 |
 | [`@lvy-jsd/dsh-tool-ultra-pack-essentials`](packages/dsh-tool-ultra-pack-essentials) | 原生工具包，无需 API key：时区与日期计算、带单位的计算器（mathjs）、天气（Open-Meteo）、地点搜索（Nominatim）、维基百科。 |
+| [`@lvy-jsd/dsh-tool-ultra-pack-web`](packages/dsh-tool-ultra-pack-web) | 原生工具包：`web_read` 把网页正文转成干净的 Markdown（Readability + turndown），`web_links` 列出页面链接。默认拒绝访问内网地址。 |
 | [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | 已弃用，不再发版。在 ds-bot 的设置弹窗里加一行"工具管理"，点开显示面板。 |
 | [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | 旧的核心包名：转出 `@lvy-jsd/dsh-tool-ultra-core`，让已有配置继续可用。 |
 | [`@lvy-jsd/create-dsh-tool-ultra-plugin`](packages/create-dsh-tool-ultra-plugin) | 生成你自己的扩展：`npm create @lvy-jsd/dsh-tool-ultra-plugin@latest my-ext -- --type classifier`。 |

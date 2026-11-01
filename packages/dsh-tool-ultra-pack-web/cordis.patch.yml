@@ -1,0 +1,17 @@
+# @lvy-jsd/dsh-tool-ultra-pack-web bundle patch: one loader entry.
+- insert:
+    - id: tool-ultra-pack-web
+      name: '@lvy-jsd/dsh-tool-ultra-pack-web'
+      config:
+        # Tools to leave out, by name (e.g. [web_links]).
+        disable: []
+        userAgent: 'Mozilla/5.0 (compatible; dsh-tool-ultra; +https://github.com/lvy-jsd/dsh-tool-ultra)'
+        # Per-request timeout, in milliseconds.
+        timeoutMs: 15000
+        # Largest response body read, in bytes.
+        maxBytes: 5000000
+        # Default cap on returned characters when the call does not set one.
+        maxChars: 20000
+        # Allow localhost, LAN and other private addresses. Off by default so a
+        # model cannot reach services on the DSH host or its network.
+        allowPrivate: false
