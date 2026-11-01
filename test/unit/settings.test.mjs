@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createSettingsStore, defaultSettingsFile, pickSettings, readSettingsFile, writeSettingsFile } from '../../packages/dsh-tool-manager/lib/settings.js'
+import { createSettingsStore, defaultSettingsFile, pickSettings, readSettingsFile, writeSettingsFile } from '../../packages/dsh-tool-ultra-core/lib/settings.js'
 
 const tempFile = () => join(mkdtempSync(join(tmpdir(), 'tm-settings-')), 'config.json')
 

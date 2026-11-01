@@ -5,9 +5,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'no
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { scaffold, parseArgs, TYPES, USAGE } from '../../packages/create-tool-manager-plugin/lib/cli.js'
+import { scaffold, parseArgs, TYPES, USAGE } from '../../packages/create-dsh-tool-ultra-plugin/lib/cli.js'
 
-const cli = fileURLToPath(new URL('../../packages/create-tool-manager-plugin/lib/index.js', import.meta.url))
+const cli = fileURLToPath(new URL('../../packages/create-dsh-tool-ultra-plugin/lib/index.js', import.meta.url))
 
 function scratch() {
   return mkdtempSync(join(tmpdir(), 'dsh-tm-scaffold-'))
@@ -55,8 +55,8 @@ test('scaffold: the package.json is valid and points at the real entry', () => {
     assert.equal(manifest.type, 'module')
     assert.equal(manifest.main, 'lib/index.js')
     assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
-    assert.ok(manifest.peerDependencies['@lvy-jsd/dsh-tool-manager'], 'declares the scoped core as a peer')
-    assert.equal(manifest.peerDependencies['dsh-tool-manager'], undefined, 'never the unscoped name (another project)')
+    assert.ok(manifest.peerDependencies['@lvy-jsd/dsh-tool-ultra-core'], 'declares the scoped core as a peer')
+    assert.equal(manifest.peerDependencies['Tool Ultra'], undefined, 'never the unscoped name (another project)')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

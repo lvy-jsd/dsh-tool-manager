@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildTidyPrompt, parseTidyAnswer, requestTidyPlan, applyTidyPlan } from '../../packages/dsh-tool-manager-panel/lib/tidy.js'
+import { buildTidyPrompt, parseTidyAnswer, requestTidyPlan, applyTidyPlan } from '../../packages/dsh-tool-ultra-panel/lib/tidy.js'
 
 // --- prompt -------------------------------------------------------------------
 

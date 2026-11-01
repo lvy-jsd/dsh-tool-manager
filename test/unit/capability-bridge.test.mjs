@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCatalog, resolveTarget, toolsUnder } from '../../packages/dsh-tool-manager/lib/catalog.js'
-import { apply as applyBridge, PREFIX, name as bridgeName } from '../../packages/dsh-tool-manager-capability-bridge/lib/index.js'
+import { buildCatalog, resolveTarget, toolsUnder } from '../../packages/dsh-tool-ultra-core/lib/catalog.js'
+import { apply as applyBridge, PREFIX, name as bridgeName } from '../../packages/dsh-tool-ultra-capability-bridge/lib/index.js'
 
 const schemas = [
   'adb_install', 'adb_logcat', 'phone_tap', 'gh_get_file', 'merge_pull_request',

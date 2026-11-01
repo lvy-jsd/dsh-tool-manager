@@ -1,5 +1,5 @@
 # @lvy-jsd/dsh-tool-manager-dsbot-entry bundle patch: one loader entry.
-# Needs @lvy-jsd/dsh-tool-manager-panel (it serves the data and the panel component).
+# Needs @lvy-jsd/dsh-tool-ultra-panel (it serves the data and the panel component).
 - insert:
     - id: tool-manager-dsbot-entry
       name: '@lvy-jsd/dsh-tool-manager-dsbot-entry'

@@ -1,8 +1,10 @@
 # @lvy-jsd/dsh-tool-manager-dsbot-entry
 
+> **Deprecated.** This entry targets the ds-bot settings dialog and is no longer released. It still finds the panel under its new name, `@lvy-jsd/dsh-tool-ultra-panel`.
+
 Adds a **Tool manager** row (工具管理 in Chinese) to the
 [ds-bot](https://www.npmjs.com/package/ds-bot) settings dialog. Clicking it
-shows the [`dsh-tool-manager-panel`](../dsh-tool-manager-panel) panel inside the
+shows the [`dsh-tool-ultra-panel`](../dsh-tool-ultra-panel) panel inside the
 dialog, in ds-bot's own colors.
 
 Use it when your DSH web UI runs in the ds-bot layout, where DSH's own Settings
@@ -11,10 +13,10 @@ page (and the panel's section in it) is one step further away
 
 ## Install
 
-Needs `@lvy-jsd/dsh-tool-manager-panel` (it serves the data and the panel component).
+Needs `@lvy-jsd/dsh-tool-ultra-panel` (it serves the data and the panel component).
 
 ```sh
-dsh plugin --profile web add @lvy-jsd/dsh-tool-manager-panel @lvy-jsd/dsh-tool-manager-dsbot-entry
+dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-panel @lvy-jsd/dsh-tool-manager-dsbot-entry
 ```
 
 ## How it works, and why it is safe to break
@@ -40,4 +42,4 @@ exists, this plugin should switch to it.
 
 ## License
 
-MIT
+Apache-2.0

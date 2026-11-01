@@ -1,8 +1,8 @@
 {
   "name": "@lvy-jsd/dsh-tool-manager-dsbot-entry",
   "version": "0.1.0",
-  "description": "Adds a \"Tool manager\" entry to the ds-bot settings dialog that opens the dsh-tool-manager panel, without changing ds-bot.",
-  "license": "MIT",
+  "description": "Adds a \"Tool manager\" entry to the ds-bot settings dialog that opens the Tool Ultra panel, without changing ds-bot.",
+  "license": "Apache-2.0",
   "author": "lvy-jsd",
   "type": "module",
   "main": "lib/index.js",
@@ -37,11 +37,11 @@
   "keywords": [
     "dsh",
     "deepseek-harness",
-    "dsh-tool-manager",
+    "dsh-tool-ultra",
     "ds-bot"
   ],
   "peerDependencies": {
-    "@lvy-jsd/dsh-tool-manager-panel": ">=0.1.0"
+    "@lvy-jsd/dsh-tool-ultra-panel": ">=0.5.0"
   },
   "dsh": {
     "bundle": {
@@ -53,13 +53,13 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-locale",
-        "@lvy-jsd/dsh-tool-manager-panel"
+        "@lvy-jsd/dsh-tool-ultra-panel"
       ]
     }
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/lvy-jsd/dsh-tool-manager.git",
+    "url": "https://github.com/lvy-jsd/dsh-tool-ultra.git",
     "directory": "packages/dsh-tool-manager-dsbot-entry"
   }
 }

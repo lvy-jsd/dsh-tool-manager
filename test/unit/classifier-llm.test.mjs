@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import {
   groupKey, readCache, writeCache, buildPrompt, parseCategory, createLlmClassifier,
   createLlmCaller, defaultCacheFile, CATEGORIES, DEFAULT_PRIORITY,
-} from '../../packages/dsh-tool-manager-classifier-llm/lib/index.js'
+} from '../../packages/dsh-tool-ultra-classifier-llm/lib/index.js'
 
 const group = (name, tools) => ({ name, tools: tools.map(([n, d]) => ({ name: n, description: d })) })
 
@@ -214,7 +214,7 @@ test('plugin: registers a classifier and pumps on rebuild', async () => {
     effect: (fn) => { const d = fn(); return d },
     toolCatalog: { registerClassifier: (c) => { registered.push(c); return () => {} }, refresh() {} },
   }
-  const { default: plugin } = await import('../../packages/dsh-tool-manager-classifier-llm/lib/index.js')
+  const { default: plugin } = await import('../../packages/dsh-tool-ultra-classifier-llm/lib/index.js')
   const api = plugin.apply(ctx, { classify: async () => 'code', cacheFile: scratchCache() })
   assert.equal(registered.length, 1)
   assert.equal(registered[0].name, 'llm:groups')
@@ -236,7 +236,7 @@ test('plugin: enabled:false registers nothing', async () => {
     effect: (fn) => fn(),
     toolCatalog: { registerClassifier: (c) => { registered.push(c); return () => {} }, refresh() {} },
   }
-  const { default: plugin } = await import('../../packages/dsh-tool-manager-classifier-llm/lib/index.js')
+  const { default: plugin } = await import('../../packages/dsh-tool-ultra-classifier-llm/lib/index.js')
   plugin.apply(ctx, { enabled: false, cacheFile: scratchCache() })
   assert.equal(registered.length, 0)
 })
@@ -250,7 +250,7 @@ test('plugin: with no model configured it registers but never calls anything', a
     effect: (fn) => fn(),
     toolCatalog: { registerClassifier: (c) => { registered.push(c); return () => {} }, refresh() {} },
   }
-  const { default: plugin } = await import('../../packages/dsh-tool-manager-classifier-llm/lib/index.js')
+  const { default: plugin } = await import('../../packages/dsh-tool-ultra-classifier-llm/lib/index.js')
   const api = plugin.apply(ctx, { cacheFile: scratchCache() })
   const g = group('adb', [['adb_install', 'Install an APK.']])
   assert.equal(registered[0].categorize(g), undefined)
@@ -280,7 +280,7 @@ test('plugin: answers are written to the configured cache file', async () => {
       effect: (fn) => fn(),
       toolCatalog: { registerClassifier: () => () => {}, refresh() {} },
     }
-    const { default: plugin } = await import('../../packages/dsh-tool-manager-classifier-llm/lib/index.js')
+    const { default: plugin } = await import('../../packages/dsh-tool-ultra-classifier-llm/lib/index.js')
     const api = plugin.apply(ctx, { cacheFile: file, classify: async () => 'device' })
     const g = group('adb', [['adb_install', 'Install an APK.']])
     api.classifier.categorize(g)

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCatalog } from '../../packages/dsh-tool-manager/lib/catalog.js'
+import { buildCatalog } from '../../packages/dsh-tool-ultra-core/lib/catalog.js'
 import exampleClassifier from '../../examples/example-classifier/lib/index.js'
 import exampleFilter from '../../examples/example-filter/lib/index.js'
 

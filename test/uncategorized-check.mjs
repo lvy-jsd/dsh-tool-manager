@@ -5,10 +5,10 @@
 // Exit 1 when the scan makes things worse.
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildCatalog, UNCATEGORIZED } from '../packages/dsh-tool-manager/lib/catalog.js'
-import { DEFAULT_PINNED } from '../packages/dsh-tool-manager/lib/index.js'
-import { rulesClassifier, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, DEFAULT_PRIORITY } from '../packages/dsh-tool-manager-classifier-rules/lib/index.js'
-import { scanPackages, attributionClassifier } from '../packages/dsh-tool-manager-attribution-scan/lib/index.js'
+import { buildCatalog, UNCATEGORIZED } from '../packages/dsh-tool-ultra-core/lib/catalog.js'
+import { DEFAULT_PINNED } from '../packages/dsh-tool-ultra-core/lib/index.js'
+import { rulesClassifier, DEFAULT_GROUP_RULES, DEFAULT_GROUP_CATEGORIES, DEFAULT_PRIORITY } from '../packages/dsh-tool-ultra-classifier-rules/lib/index.js'
+import { scanPackages, attributionClassifier } from '../packages/dsh-tool-ultra-attribution-scan/lib/index.js'
 
 const pinned = new Set(DEFAULT_PINNED)
 const names = readFileSync(0, 'utf8').split('\n').map((s) => s.trim()).filter((n) => n && !pinned.has(n))

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createVisibilityController } from '../../packages/dsh-tool-manager/lib/visibility.js'
+import { createVisibilityController } from '../../packages/dsh-tool-ultra-core/lib/visibility.js'
 
 // A host with several live agents: the panel's Sessions view asks for each
 // agent's parent. Regression: the core used to read `ctx.agents` there, which
@@ -34,7 +34,7 @@ test('parentOf resolves subagents through the injected agents API', () => {
 // narrowed at mount exactly like new ones, and the host's synchronous
 // tools/change from restrict() must not stack a second restriction.
 test('startup window: agents that exist before mount are restricted once, then follow loads', async () => {
-  const { buildCatalog } = await import('../../packages/dsh-tool-manager/lib/catalog.js')
+  const { buildCatalog } = await import('../../packages/dsh-tool-ultra-core/lib/catalog.js')
   const names = ['bash', 'mcp__x__a', 'mcp__x__b']
   const handlers = new Map()
   const fire = (event, ...args) => { for (const h of handlers.get(event) ?? []) h(...args) }

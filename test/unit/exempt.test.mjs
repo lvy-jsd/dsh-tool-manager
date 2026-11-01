@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createExemptStore, defaultExemptFile, pickExempt, readExemptFile, writeExemptFile } from '../../packages/dsh-tool-manager/lib/exempt.js'
+import { createExemptStore, defaultExemptFile, pickExempt, readExemptFile, writeExemptFile } from '../../packages/dsh-tool-ultra-core/lib/exempt.js'
 
 const tempFile = () => join(mkdtempSync(join(tmpdir(), 'tm-exempt-')), 'exempt.json')
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { apply } from '../../packages/dsh-tool-manager/lib/index.js'
+import { apply } from '../../packages/dsh-tool-ultra-core/lib/index.js'
 
 // The core applied to a minimal host: a tool registry, Cordis-like events with
 // serial(), one live agent that can be restricted, and the provided service.

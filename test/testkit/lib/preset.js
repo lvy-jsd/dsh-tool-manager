@@ -16,7 +16,7 @@ export function simulatePresetLayer(ctx, names = ['preset_only_ping', 'preset_on
   for (const n of names) {
     preset.ctx.tools.register(defineTool({
       name: n,
-      description: `Preset-layer tool ${n} for dsh-tool-manager tests.`,
+      description: `Preset-layer tool ${n} for Tool Ultra tests.`,
       parameters: { text: { type: 'string' } },
       output: TEXT,
       async execute(args) { return `${n}:${args.text ?? ''}` },
