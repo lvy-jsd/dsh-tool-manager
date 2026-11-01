@@ -70,7 +70,7 @@ test('manifest: the import line is an @ path, escaped for spaces', () => {
 })
 
 test('manifest: the default path is under the Claude home', () => {
-  assert.match(defaultManifestFile(), /\.claude\/dsh-tool-catalog\.md$/)
+  assert.match(defaultManifestFile(), /\.claude[\\/]dsh-tool-catalog\.md$/)
 })
 
 // --- writing ------------------------------------------------------------------

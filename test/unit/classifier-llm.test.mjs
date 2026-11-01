@@ -262,7 +262,7 @@ test('plugin: the default cache file lives under DSH_HOME, not the CWD', () => {
   const before = process.env.DSH_HOME
   process.env.DSH_HOME = '/tmp/dsh-home-example'
   try {
-    assert.equal(defaultCacheFile(), '/tmp/dsh-home-example/tool-manager/classifier-cache.json')
+    assert.equal(defaultCacheFile(), join('/tmp/dsh-home-example', 'tool-manager', 'classifier-cache.json'))
   } finally {
     if (before === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = before

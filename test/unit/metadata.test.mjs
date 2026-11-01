@@ -86,7 +86,7 @@ test('metadata: defaultMetadataFile follows DSH_HOME', () => {
   const previous = process.env.DSH_HOME
   process.env.DSH_HOME = '/tmp/dsh-home'
   try {
-    assert.equal(defaultMetadataFile(), '/tmp/dsh-home/tool-manager/metadata.json')
+    assert.equal(defaultMetadataFile(), join('/tmp/dsh-home', 'tool-manager', 'metadata.json'))
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous
