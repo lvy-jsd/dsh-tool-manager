@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1 — 2026-11-01
+
+Packages: `@lvy-jsd/dsh-tool-manager` 0.4.1. The other packages are unchanged.
+
+### Fixed
+
+- **Windows (and other non-Linux) crash on mount** (#1, fixed in #2). The bundled
+  retrieval sidecar is a Linux-only binary; starting it elsewhere emitted an
+  unhandled `error` event and took the DSH host down. The sidecar is now skipped
+  on non-Linux platforms, spawn errors are handled, and retrieval falls back to
+  the JS BM25 index.
+
 ## 0.3.0 — 2026-10-22
 
 Packages: `@lvy-jsd/dsh-tool-manager` 0.3.0, `@lvy-jsd/dsh-tool-manager-panel` 0.2.0,
