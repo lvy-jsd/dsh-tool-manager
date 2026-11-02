@@ -5,6 +5,7 @@
 //
 //   device__<slug>__<capability>          registered natively by Swiftnest
 //   mcp__swiftnest__<slug>__<capability>  Swiftnest reached over MCP
+//   mcp__devices__<slug>__<capability>    transitional MCP name of the first build
 //
 // This plugin files them under /device/<slug>, marks offline devices in
 // tools_ls, and adds load targets:
@@ -53,7 +54,7 @@ export const CATEGORY = 'device'
 const SLUG = '[a-z0-9_-]{1,24}'
 
 /** Device slug and capability for a tool name, or undefined when it is not a device tool. */
-export function parseDeviceTool(toolName: string, prefixes: readonly string[] = ['device__', 'mcp__swiftnest__']): { slug: string, capability: string } | undefined {
+export function parseDeviceTool(toolName: string, prefixes: readonly string[] = ['device__', 'mcp__swiftnest__', 'mcp__devices__']): { slug: string, capability: string } | undefined {
   for (const prefix of prefixes) {
     if (!toolName.startsWith(prefix)) continue
     const m = new RegExp(`^(${SLUG})__(.+)$`).exec(toolName.slice(prefix.length))
@@ -71,7 +72,7 @@ type Ctx = ExtensionContext & { get?(name: string): unknown, emit?(event: string
 
 export function apply(ctx: Ctx, config: DevicesConfig = {}) {
   const logger = (typeof ctx.logger === 'function' ? (ctx.logger as (n: string) => any)('tool-ultra-devices') : ctx.logger) ?? console
-  const prefixes = config.prefixes?.length ? config.prefixes : ['device__', 'mcp__swiftnest__']
+  const prefixes = config.prefixes?.length ? config.prefixes : ['device__', 'mcp__swiftnest__', 'mcp__devices__']
   const serviceName = config.service ?? 'swiftnestDevices'
   const changeEvent = config.changeEvent ?? 'swiftnest/devices-changed'
   const catalog = ctx.toolCatalog

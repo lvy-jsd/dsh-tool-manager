@@ -4,9 +4,10 @@
       name: '@lvy-jsd/dsh-tool-ultra-devices'
       config:
         # Tool name prefixes that carry a device slug: device__<slug>__<tool>
-        # (registered natively by Swiftnest) and mcp__swiftnest__<slug>__<tool>
-        # (Swiftnest reached over MCP).
-        prefixes: ['device__', 'mcp__swiftnest__']
+        # (registered natively by Swiftnest), mcp__swiftnest__<slug>__<tool>
+        # (Swiftnest reached over MCP) and mcp__devices__<slug>__<tool> (the
+        # transitional MCP server name of the first Swiftnest build).
+        prefixes: ['device__', 'mcp__swiftnest__', 'mcp__devices__']
         # DSH service that lists devices and the current device of a session.
         service: swiftnestDevices
         # Event the service emits when devices change.
