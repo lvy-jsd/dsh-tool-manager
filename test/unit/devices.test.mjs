@@ -5,9 +5,12 @@ import assert from 'node:assert/strict'
 import { apply, parseDeviceTool } from '../../packages/dsh-tool-ultra-devices/lib/index.js'
 
 test('devices: tool names parse with either prefix', () => {
-  assert.deepEqual(parseDeviceTool('device__laptop__shell_run'), { slug: 'laptop', capability: 'shell_run' })
-  assert.deepEqual(parseDeviceTool('mcp__swiftnest__pixel-8__screen_capture'), { slug: 'pixel-8', capability: 'screen_capture' })
-  assert.deepEqual(parseDeviceTool('mcp__devices__laptop__screen_capture'), { slug: 'laptop', capability: 'screen_capture' }, 'transitional MCP name')
+  assert.deepEqual(parseDeviceTool('device__laptop__shell_run'), { slug: 'laptop', capability: 'shell_run', area: 'shell' })
+  assert.deepEqual(parseDeviceTool('mcp__swiftnest__pixel-8__screen_capture'), { slug: 'pixel-8', capability: 'screen_capture', area: 'screen' })
+  assert.deepEqual(parseDeviceTool('mcp__devices__laptop__screen_capture'), { slug: 'laptop', capability: 'screen_capture', area: 'screen' }, 'transitional MCP name')
+  assert.deepEqual(parseDeviceTool('device__laptop__files_read'), { slug: 'laptop', capability: 'files_read', area: 'files' })
+  assert.deepEqual(parseDeviceTool('device__my_pc__files_read'), { slug: 'my_pc', capability: 'files_read', area: 'files' }, 'the first __ ends the slug')
+  assert.deepEqual(parseDeviceTool('device__laptop__notify'), { slug: 'laptop', capability: 'notify', area: 'notify' })
   assert.equal(parseDeviceTool('device__Laptop__x'), undefined, 'slugs are lowercase')
   assert.equal(parseDeviceTool('mcp__github__get_me'), undefined)
   assert.equal(parseDeviceTool('devices_list'), undefined)
@@ -27,7 +30,7 @@ function fakeCatalog(names) {
 }
 
 function setup() {
-  const names = ['device__laptop__shell_run', 'device__laptop__screen_capture', 'device__pixel__screen_capture', 'mcp__github__get_me']
+  const names = ['device__laptop__shell_run', 'device__laptop__screen_capture', 'device__laptop__files_read', 'device__laptop__files_write', 'device__pixel__screen_capture', 'mcp__github__get_me']
   const { catalog, reg } = fakeCatalog(names)
   const listeners = {}
   const devices = {
@@ -51,7 +54,10 @@ test('devices: device: targets resolve per session', () => {
   const { reg } = setup()
   const r = reg.resolvers[0]
   assert.equal(r.prefix, 'device:')
-  assert.deepEqual(r.resolve('device:current', { id: 'a', session: { id: 's1' } }), ['device__laptop__screen_capture', 'device__laptop__shell_run'])
+  assert.deepEqual(r.resolve('device:current', { id: 'a', session: { id: 's1' } }), ['device__laptop__files_read', 'device__laptop__files_write', 'device__laptop__screen_capture', 'device__laptop__shell_run'])
+  assert.deepEqual(r.resolve('device:laptop/files'), ['device__laptop__files_read', 'device__laptop__files_write'], 'an area loads all its tools')
+  assert.deepEqual(r.resolve('device:laptop/files_read'), ['device__laptop__files_read'])
+  assert.deepEqual(r.resolve('device:laptop/file'), [], 'areas match whole words')
   assert.deepEqual(r.resolve('device:current', { id: 'other' }), [], 'unknown current device is a miss')
   assert.deepEqual(r.resolve('device:all/screen_capture'), ['device__laptop__screen_capture', 'device__pixel__screen_capture'])
   assert.deepEqual(r.resolve('device:pixel'), ['device__pixel__screen_capture'])

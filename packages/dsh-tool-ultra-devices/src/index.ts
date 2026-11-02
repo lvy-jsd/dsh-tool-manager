@@ -3,7 +3,8 @@
 // Tools from phones and computers connected through Swiftnest carry a device
 // slug in their name:
 //
-//   device__<slug>__<capability>          registered natively by Swiftnest
+//   device__<slug>__<area>_<tool>         registered natively by Swiftnest,
+//                                         e.g. device__laptop__files_read
 //   mcp__swiftnest__<slug>__<capability>  Swiftnest reached over MCP
 //   mcp__devices__<slug>__<capability>    transitional MCP name of the first build
 //
@@ -13,7 +14,8 @@
 //   device:current            the device the user is chatting from
 //   device:all                every device
 //   device:<slug>             one device
-//   device:<who>/<capability> one capability, e.g. device:current/screen_capture
+//   device:<who>/<capability> one capability, e.g. device:current/files_read
+//   device:<who>/<area>       one area, e.g. device:laptop/files (files_read, files_write, ...)
 //
 // The device list and the current device come from a DSH service (default
 // `swiftnestDevices`) that the Swiftnest device hub provides. Without it the
@@ -52,15 +54,29 @@ export interface DevicesConfig {
 
 export const CATEGORY = 'device'
 const SLUG = '[a-z0-9_-]{1,24}'
+export const DEFAULT_PREFIXES: readonly string[] = ['device__', 'mcp__swiftnest__', 'mcp__devices__']
 
-/** Device slug and capability for a tool name, or undefined when it is not a device tool. */
-export function parseDeviceTool(toolName: string, prefixes: readonly string[] = ['device__', 'mcp__swiftnest__', 'mcp__devices__']): { slug: string, capability: string } | undefined {
+/**
+ * Device slug and capability for a tool name, or undefined when it is not a
+ * device tool. Swiftnest names a capability <area>_<tool> (files_read,
+ * shell_run), so `area` is the part before the first underscore.
+ */
+export function parseDeviceTool(toolName: string, prefixes: readonly string[] = DEFAULT_PREFIXES): { slug: string, capability: string, area: string } | undefined {
   for (const prefix of prefixes) {
     if (!toolName.startsWith(prefix)) continue
-    const m = new RegExp(`^(${SLUG})__(.+)$`).exec(toolName.slice(prefix.length))
-    if (m) return { slug: m[1], capability: m[2] }
+    // Lazy slug: the first "__" ends it, so a capability may hold underscores.
+    const m = new RegExp(`^(${SLUG}?)__(.+)$`).exec(toolName.slice(prefix.length))
+    if (m) {
+      const capability = m[2]
+      return { slug: m[1], capability, area: capability.split('_', 1)[0] }
+    }
   }
   return undefined
+}
+
+/** Does a parsed tool match a filter: a whole capability (files_read) or an area (files)? */
+export function matchesCapability(parsed: { capability: string, area: string }, filter?: string): boolean {
+  return !filter || parsed.capability === filter || parsed.area === filter
 }
 
 function sessionIdOf(agent: Agent | undefined): string | undefined {
@@ -72,7 +88,7 @@ type Ctx = ExtensionContext & { get?(name: string): unknown, emit?(event: string
 
 export function apply(ctx: Ctx, config: DevicesConfig = {}) {
   const logger = (typeof ctx.logger === 'function' ? (ctx.logger as (n: string) => any)('tool-ultra-devices') : ctx.logger) ?? console
-  const prefixes = config.prefixes?.length ? config.prefixes : ['device__', 'mcp__swiftnest__', 'mcp__devices__']
+  const prefixes = config.prefixes?.length ? config.prefixes : DEFAULT_PREFIXES
   const serviceName = config.service ?? 'swiftnestDevices'
   const changeEvent = config.changeEvent ?? 'swiftnest/devices-changed'
   const catalog = ctx.toolCatalog
@@ -121,7 +137,7 @@ export function apply(ctx: Ctx, config: DevicesConfig = {}) {
     const out: string[] = []
     for (const toolName of catalog.get().tools.keys()) {
       const p = parseDeviceTool(toolName, prefixes)
-      if (p && p.slug === slug && (!capability || p.capability === capability)) out.push(toolName)
+      if (p && p.slug === slug && matchesCapability(p, capability)) out.push(toolName)
     }
     return out.sort()
   }
