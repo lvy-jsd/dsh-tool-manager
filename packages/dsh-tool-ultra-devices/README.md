@@ -31,6 +31,14 @@ Approval stays with the device hub, which shows the user a card on their current
 
 The full draft is in the project files (`tool-ultra/device-interface.md`). The names can be changed in config: `prefixes`, `service`, `changeEvent`.
 
+## Live test with Swiftnest
+
+`scripts/swiftnest-integration.mjs` boots a real Swiftnest server (its pinned DSH kernel and device hub) in a throwaway home, pairs a Node Perch named `laptop` with files and shell, adds Tool Ultra through `user.patch.yml`, and drives a scripted model through `tools_ls /device`, `device:laptop/files`, a real `files_read`, `device:current` and an offline listing. It needs a built Swiftnest checkout and Node 24:
+
+```sh
+node scripts/swiftnest-integration.mjs ../swiftnest
+```
+
 ## License
 
 Apache-2.0.
