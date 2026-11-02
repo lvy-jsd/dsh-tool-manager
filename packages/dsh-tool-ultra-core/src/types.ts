@@ -104,8 +104,18 @@ export interface TargetResolver {
   name?: string
   /** Targets starting with this prefix are offered to `resolve` first. */
   prefix?: string
-  /** One or more ordinary targets to resolve instead, or undefined to pass. */
-  resolve(target: string): string | string[] | undefined | null
+  /**
+   * One or more ordinary targets to resolve instead, or undefined to pass.
+   * `agent` is the caller when known (tools_load, tools_ls), so a resolver can
+   * answer per session (for example `device:current`).
+   */
+  resolve(target: string, agent?: Agent): string | string[] | undefined | null
+}
+
+/** A note shown after a group's line in tools_ls. */
+export interface GroupNote {
+  name?: string
+  note(group: Group): string | undefined
 }
 
 /** A registry entry after registration (defaults filled in). */
@@ -365,6 +375,11 @@ export interface ToolCatalogService {
   /** Declare that a plugin confirms high-risk loads; without one they are refused. */
   registerRiskGate(gate?: RiskGate): Disposer
   riskGates(): string[]
+  /**
+   * Add a short note to group lines in tools_ls (for example "[offline]").
+   * `note(group)` returns the text or undefined. Returns a disposer.
+   */
+  registerGroupNote(note: GroupNote): Disposer
   /** Register a tool pack: listed in the panel and loadable as `pack:<id>`. */
   registerToolPack(pack: ToolPack): Disposer
   /** Registered tool packs with their current tools and status. */

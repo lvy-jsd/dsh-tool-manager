@@ -17,7 +17,7 @@ import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
 import { registerRouter } from './router/index.js'
-import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema } from './types.js'
+import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema, GroupNote, Group } from './types.js'
 
 export type * from './types.js'
 export { buildCatalog, resolveTarget, toolsUnder, estimateTokens, summary, shortName, structuralGroup, DEFAULT_CATEGORIES, UNCATEGORIZED, MISC_GROUP, OVERRIDE_PRIORITY } from './catalog.js'
@@ -136,6 +136,20 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
 
   // Tool packs: installed packages of tools (essentials, web, MCP presets...).
   // Each is listed in the panel and loadable in one call as `pack:<id>`.
+  // Short per-group notes in tools_ls (for example "[offline]" from a device plugin).
+  const groupNotes = new Set<GroupNote>()
+  const noteFor = (group: Group): string => {
+    const parts: string[] = []
+    for (const n of groupNotes) {
+      try {
+        const text = n.note(group)
+        if (text) parts.push(text)
+      } catch {
+        // a broken note never breaks the listing
+      }
+    }
+    return parts.length ? `  ${parts.join(' ')}` : ''
+  }
   const toolPacks = new Map<string, ToolPack>()
   const packToolNames = (pack: ToolPack): string[] => {
     const names = [...getCatalog().tools.keys()]
@@ -345,6 +359,12 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       return () => { riskGates.delete(entry) }
     },
     riskGates: () => [...riskGates].map((g) => g.name),
+    registerGroupNote(note: GroupNote): Disposer {
+      if (typeof note?.note !== 'function') throw new TypeError('registerGroupNote: provide note(group)')
+      const entry = { name: note.name ?? 'anonymous', note: note.note }
+      groupNotes.add(entry)
+      return () => { groupNotes.delete(entry) }
+    },
     registerToolPack(pack: ToolPack): Disposer {
       const id = String(pack?.id ?? '')
       if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(id)) throw new Error(`tool pack id "${id}" must be lowercase letters, digits and dashes`)
@@ -372,7 +392,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     },
     /** Catalog as one agent sees it, or the union over live agents. */
     get: (agent?: Agent) => getCatalog(agent),
-    resolve: (target: string, agent?: Agent) => resolveTarget(getCatalog(agent), target, [...registries.resolvers]),
+    resolve: (target: string, agent?: Agent) => resolveTarget(getCatalog(agent), target, [...registries.resolvers], agent),
     /** Loaded state of one agent: { loaded, groups, excluded, handoffGroups, handoffTools } (Sets). */
     stateOf: (agent: Agent) => visibility.stateOf(agent),
     /** Plain JSON of an agent's loaded state, for persistence plugins. */
@@ -638,10 +658,10 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       lines.push(`/${node.category.name}/  ${node.category.description}`)
       for (const group of node.category.groups) {
         const c = count(group.tools)
-        lines.push(`  ${pad(`${group.name}/`, 22)}${pad(`${c.n} tools`, 10)}${pad(`${c.loaded} loaded`, 11)}${fmtTokens(c.tokens)}`)
+        lines.push(`  ${pad(`${group.name}/`, 22)}${pad(`${c.n} tools`, 10)}${pad(`${c.loaded} loaded`, 11)}${fmtTokens(c.tokens)}${noteFor(group)}`)
       }
     } else if (node.kind === 'group') {
-      lines.push(`/${node.group.category}/${node.group.name}/`)
+      lines.push(`/${node.group.category}/${node.group.name}/${noteFor(node.group)}`)
       for (const tool of node.group.tools) lines.push(toolLine(tool, visible, denied))
     } else if (node.kind === 'tool') {
       const t = node.tool
@@ -682,7 +702,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
    */
   async function loadTargets(agent: Agent, targets: readonly string[], { forSubagents = false }: LoadOptions = {}): Promise<string> {
     const cat = getCatalog(agent)
-    const nodes = targets.map((raw) => ({ raw, node: resolveTarget(cat, raw, [...registries.resolvers]) }))
+    const nodes = targets.map((raw) => ({ raw, node: resolveTarget(cat, raw, [...registries.resolvers], agent) }))
     const names = nodes.flatMap(({ node }) => (node.kind === 'root' || node.kind === 'missing' ? [] : toolsUnder(cat, node).map((t) => t.name)))
     try {
       await ctx.serial('tool-catalog/before-load', { agent, targets, names })
@@ -761,7 +781,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
           for (const set of Object.values(state)) set.clear()
           continue
         }
-        const node = resolveTarget(cat, raw, [...registries.resolvers])
+        const node = resolveTarget(cat, raw, [...registries.resolvers], agent)
         if (node.kind === 'category' && node.category.aliasTools) {
           for (const tool of node.category.aliasTools) {
             state.loaded.delete(tool.name)
@@ -801,7 +821,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const cat = getCatalog(exec?.agent as Agent | undefined)
-      const node = resolveTarget(cat, args.path ?? '/', [...registries.resolvers])
+      const node = resolveTarget(cat, args.path ?? '/', [...registries.resolvers], exec?.agent as Agent | undefined)
       if (node.kind === 'missing') return `No such path: ${node.target}. Start from tools_ls("/") or search with tools_ls({query}).`
       const agent = exec?.agent as Agent | undefined
       const visible = visibleSetFor(agent)
