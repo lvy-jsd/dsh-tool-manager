@@ -7,6 +7,7 @@ import { apply, parseDeviceTool } from '../../packages/dsh-tool-ultra-devices/li
 test('devices: tool names parse with either prefix', () => {
   assert.deepEqual(parseDeviceTool('device__laptop__shell_run'), { slug: 'laptop', capability: 'shell_run' })
   assert.deepEqual(parseDeviceTool('mcp__swiftnest__pixel-8__screen_capture'), { slug: 'pixel-8', capability: 'screen_capture' })
+  assert.deepEqual(parseDeviceTool('mcp__devices__laptop__screen_capture'), { slug: 'laptop', capability: 'screen_capture' }, 'transitional MCP name')
   assert.equal(parseDeviceTool('device__Laptop__x'), undefined, 'slugs are lowercase')
   assert.equal(parseDeviceTool('mcp__github__get_me'), undefined)
   assert.equal(parseDeviceTool('devices_list'), undefined)
