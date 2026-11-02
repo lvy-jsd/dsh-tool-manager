@@ -58,6 +58,7 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-panel
 | [`@lvy-jsd/dsh-tool-ultra-pack-essentials`](packages/dsh-tool-ultra-pack-essentials) | 原生工具包，无需 API key：时区与日期计算、带单位的计算器（mathjs）、天气（Open-Meteo）、地点搜索（Nominatim）、维基百科。 |
 | [`@lvy-jsd/dsh-tool-ultra-pack-web`](packages/dsh-tool-ultra-pack-web) | 原生工具包：`web_read` 把网页正文转成干净的 Markdown（Readability + turndown），`web_links` 列出页面链接。默认拒绝访问内网地址。 |
 | [`@lvy-jsd/dsh-tool-ultra-pack-mcp`](packages/dsh-tool-ultra-pack-mcp) | 通过 DSH 的 MCP 客户端启动预设的 MCP 服务器：记忆、顺序思考、Context7、Playwright、文件系统无需 key 就能用；GitHub、SearXNG、Brave、Tavily、Firecrawl、Notion、高德地图在填好 key 后启动。用 `mcp_presets` 查看状态。 |
+| [`@lvy-jsd/dsh-tool-ultra-devices`](packages/dsh-tool-ultra-devices) | 设备命名空间：Swiftnest 连进来的设备工具放在 `/device/<设备>` 下，可用 `device:current`、`device:all`、`device:<名字>` 加载，离线设备会标出来。 |
 | [`@lvy-jsd/dsh-tool-manager-dsbot-entry`](packages/dsh-tool-manager-dsbot-entry) | 已弃用，不再发版。在 ds-bot 的设置弹窗里加一行"工具管理"，点开显示面板。 |
 | [`@lvy-jsd/dsh-tool-manager`](packages/dsh-tool-manager) | 旧的核心包名：转出 `@lvy-jsd/dsh-tool-ultra-core`，让已有配置继续可用。 |
 | [`@lvy-jsd/create-dsh-tool-ultra-plugin`](packages/create-dsh-tool-ultra-plugin) | 生成你自己的扩展：`npm create @lvy-jsd/dsh-tool-ultra-plugin@latest my-ext -- --type classifier`。 |

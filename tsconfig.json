@@ -17,6 +17,9 @@
       "path": "packages/dsh-tool-ultra-capability-bridge"
     },
     {
+      "path": "packages/dsh-tool-ultra-devices"
+    },
+    {
       "path": "packages/dsh-tool-ultra-attribution-scan"
     },
     {

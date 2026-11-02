@@ -9,7 +9,7 @@
 // Grouping never decides visibility; a misplaced tool is only listed in the
 // wrong place, never lost.
 
-import type { Annotation, Catalog, CatalogNode, Category, Classifier, Group, GroupProbe, RegisteredResolver, ToolEntry, ToolMeta, ToolProbe, ToolSchema } from './types.js'
+import type { Agent, Annotation, Catalog, CatalogNode, Category, Classifier, Group, GroupProbe, RegisteredResolver, ToolEntry, ToolMeta, ToolProbe, ToolSchema } from './types.js'
 
 export const UNCATEGORIZED = 'uncategorized'
 export const MISC_GROUP = 'misc'
@@ -227,19 +227,19 @@ export function buildCatalog(schemas: readonly ToolSchema[], { classifiers = [],
 const findCI = <T extends { name: string }>(map: Map<string, T>, key: string): T | undefined =>
   map.get(key) ?? [...map.values()].find((v) => v.name.toLowerCase() === key)
 
-export function resolveTarget(catalog: Catalog, raw: unknown, resolvers: readonly Pick<RegisteredResolver, 'prefix' | 'resolve'>[] = []): CatalogNode {
+export function resolveTarget(catalog: Catalog, raw: unknown, resolvers: readonly Pick<RegisteredResolver, 'prefix' | 'resolve'>[] = [], agent?: Agent): CatalogNode {
   const target = String(raw ?? '').trim()
   for (const { prefix, resolve } of resolvers) {
     if (prefix && !target.startsWith(prefix)) continue
     let expanded: string | string[] | undefined | null
     try {
-      expanded = resolve(target)
+      expanded = resolve(target, agent)
     } catch {
       continue
     }
     if (expanded === undefined || expanded === null) continue
     const list = Array.isArray(expanded) ? expanded : [expanded]
-    const nodes = list.map((one) => resolveTarget(catalog, one, resolvers))
+    const nodes = list.map((one) => resolveTarget(catalog, one, resolvers, agent))
     if (nodes.length === 0) return { kind: 'missing', target }
     if (nodes.length === 1) return nodes[0]!
     // Several targets behind one alias: expose them as a synthetic category so

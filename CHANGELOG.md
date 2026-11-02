@@ -14,6 +14,8 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 - `@lvy-jsd/dsh-tool-ultra-pack-web`: `web_read` (main article as Markdown via Readability + turndown) and `web_links`. Private, loopback and link-local targets are refused by default, and the check runs again on every redirect hop.
 - `@lvy-jsd/dsh-tool-ultra-pack-mcp`: twelve MCP server presets started through `@deepseek-ai/dsh-mcp-client`. Keyless presets (memory, thinking, context7, playwright) start by default, keyed ones wait for their key, versions are pinned, and write tools are marked high risk. `mcp_presets` reports the status.
 - Tool packs: the core's `toolCatalog.registerToolPack()` / `toolPacks()` and the `pack:<id>` target, so `tools_load(["pack:web"])` loads a whole pack. The three packs register themselves, and the panel has a Packs tab with per-preset status and one-click load.
+- `@lvy-jsd/dsh-tool-ultra-devices`: the device namespace. Swiftnest device tools (`device__<slug>__<capability>`) are filed under `/device/<slug>`, `device:current` / `device:all` / `device:<slug>[/<capability>]` load them, and offline devices are marked in `tools_ls`.
+- Core: target resolvers receive the calling agent (so `device:current` can answer per session), and `toolCatalog.registerGroupNote()` adds short notes to group lines in `tools_ls`.
 - `scripts/smoke-packs.mjs`: a live check of the packs against the real services, including starting each keyless MCP preset.
 
 ### Changed

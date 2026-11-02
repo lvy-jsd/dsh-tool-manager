@@ -19,6 +19,8 @@
 //           keep their category
 //   attr    core + dsh-tool-ultra-attribution-scan: tools are grouped by the
 //           plugin package whose source defines them
+//   devices core + dsh-tool-ultra-devices + a fake Swiftnest hub: /device/<slug>,
+//           device:current / device:<slug> / device:all, [offline] notes
 //   packs   core + the essentials, web and mcp packs: pack:<id> loads a pack,
 //           pack tools run, mcp_presets reports keyless/keyed presets
 //
@@ -44,6 +46,7 @@ const env = { ...process.env, DSH_HOME: home, FAKE_LLM_KEY: 'x', DSH_TELEMETRY_M
 // --- profiles ------------------------------------------------------------------
 // testkit-devices resolves @deepseek-ai/dsh-tools through the testkit's links.
 if (!existsSync(join(here, 'testkit-devices', 'node_modules'))) symlinkSync('../testkit/node_modules', join(here, 'testkit-devices', 'node_modules'))
+if (!existsSync(join(here, 'testkit-swiftnest', 'node_modules'))) symlinkSync('../testkit/node_modules', join(here, 'testkit-swiftnest', 'node_modules'))
 
 // A bundle is a package under packages/, or { name, dir } for a test package.
 function makeProfile(name, bundles, extraPatch = '') {
@@ -135,6 +138,8 @@ makeProfile('llm', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-llm'], `
     model: { provider: fake, model: fake-1 }
     cacheFile: ${join(root, 'llm-cache.json')}
 `)
+
+makeProfile('devices', ['dsh-tool-ultra-core', 'dsh-tool-ultra-devices', { name: 'dsh-tm-testkit-swiftnest', dir: join(here, 'testkit-swiftnest') }])
 
 makeProfile('packs', ['dsh-tool-ultra-core', 'dsh-tool-ultra-pack-essentials', 'dsh-tool-ultra-pack-web', 'dsh-tool-ultra-pack-mcp'], `
 - id: tool-ultra-pack-mcp
@@ -334,6 +339,28 @@ expect('cap: unload all clears the pack', fakeTools(cap[2]), [])
 expect('cap: a pack loads exactly its tools, not their group siblings', fakeTools(cap[3]), [P])
 expect('cap: the same applies to the other group in the pack', fakeTools(cap[3], 'phone_fake_'), ['phone_fake_tap'])
 contains('cap: an unknown pack is a normal miss, not a crash', cap[4].lastContent, /skipped cap:nope/)
+
+// --- devices profile: the device namespace ----------------------------------
+console.log('# devices profile')
+const dv = await run('devices', 'devices-main', [
+  call('tools_ls', { path: '/device' }),                                  // 0
+  call('tools_load', { targets: ['device:current'] }),                    // 1
+  call('tools_unload', { targets: ['all'] }),                             // 2
+  call('tools_load', { targets: ['device:pixel/screen_capture'] }),       // 3
+  call('tools_unload', { targets: ['all'] }),                             // 4
+  call('tools_load', { targets: ['device:all'] }),                        // 5
+  call('tools_ls', { path: '/device/pixel' }),                            // 6
+  call('tools_load', { targets: ['device:nope'] }),                       // 7
+  { text: 'done' },                                                       // 8
+], ['devices'])
+const devTools = (turn) => turn.tools.filter((n) => n.startsWith('device__')).sort()
+expect('devices: device tools start hidden', devTools(dv[0]), [])
+contains('devices: /device lists each device as a group', dv[1].lastContent, /laptop\/[^\n]*\(EliteBook, desktop\)/, /pixel\/[^\n]*\(Pixel 8, android\) \[offline, last seen 2026-11-02T05:00:00Z\]/)
+expect('devices: device:current loads the current device only', devTools(dv[2]), ['device__laptop__screen_capture', 'device__laptop__shell_run'])
+expect('devices: device:<slug>/<capability> loads one tool', devTools(dv[4]), ['device__pixel__screen_capture'])
+expect('devices: device:all loads every device', devTools(dv[6]), ['device__laptop__screen_capture', 'device__laptop__shell_run', 'device__pixel__notify_list', 'device__pixel__screen_capture'])
+contains('devices: a device group header carries its offline note', dv[7].lastContent, /^\/device\/pixel\/ .*\[offline/m)
+contains('devices: an unknown device is a normal miss', dv[8].lastContent, /skipped device:nope/)
 
 // --- packs profile: tool packs register, load by pack:<id>, and run -----------
 console.log('# packs profile')
