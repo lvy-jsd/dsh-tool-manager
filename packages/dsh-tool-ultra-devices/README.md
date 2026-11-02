@@ -12,13 +12,14 @@ tools_load(["device:current"])               # the device the user is chatting f
 tools_load(["device:all"])                   # every device
 tools_load(["device:pixel"])                 # one device
 tools_load(["device:current/screen_capture"]) # one capability
+tools_load(["device:laptop/files"])          # one area: files_read, files_write, ...
 ```
 
 ## Contract with the device hub
 
 The device hub and this plugin agree on two things.
 
-- **Tool names.** Each tool is named `device__<slug>__<capability>` (registered natively) or `mcp__swiftnest__<slug>__<capability>` (reached over MCP). The first Swiftnest build serves its MCP server as `devices`, so `mcp__devices__<slug>__<capability>` is accepted too until it switches to native names. A slug is `[a-z0-9_-]{1,24}`, is set when the device pairs, and never changes. The same capability has the same name on every device.
+- **Tool names.** Each tool is named `device__<slug>__<capability>` (registered natively), where a capability is `<area>_<tool>`, such as `files_read` or `shell_run`, or `mcp__swiftnest__<slug>__<capability>` (reached over MCP). The first Swiftnest build serves its MCP server as `devices`, so `mcp__devices__<slug>__<capability>` is accepted too until it switches to native names. A slug is `[a-z0-9_-]{1,24}`, is set when the device pairs, and never changes. The same capability has the same name on every device.
 - **Device service.** The hub provides a DSH service, `swiftnestDevices` by default:
   - `list()` returns `{ slug, name, kind, online, lastSeen }[]`.
   - `currentFor(sessionId)` returns the slug of the session's current device.
