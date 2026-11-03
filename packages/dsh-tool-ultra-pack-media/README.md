@@ -7,11 +7,7 @@ Images, music and video made from code, and local speech-to-text, for [Tool Ultr
 | `html_render` | image / media | Design an image in HTML and CSS (poster, social card, slide, infographic, certificate) and save it as PNG, JPEG or WebP, or save its CSS animations as an animated GIF or WebP (`seconds`). Flexbox, grid, gradients, gradient text, shadows, filters, blend modes; Chinese and emoji fonts from the host. |
 | `svg_render` | image / media | Render an SVG document (poster, greeting card, icon, diagram, infographic) to PNG, JPEG or WebP. `width` scales it sharply; `name` is a file name hint. |
 | `chart_render` | image / media | Draw a [Vega-Lite](https://vega.github.io/vega-lite/) chart (bar, line, pie, scatter, area, heatmap, ...) with inline data and save it as an image. A single-view chart without a size gets 480×300. |
-<<<<<<< HEAD
 | `music_render` | audio / media | Compose a piece from notes for up to 16 of 37 instruments plus a drum kit, and save a WAV played with real recorded instruments (General MIDI SoundFont, stereo, reverb, mastered to −14 LUFS) and the MIDI file. |
-=======
-| `music_render` | audio / media | Compose a short piece from notes and save it as a MIDI file (plays with real instrument sounds on phones and computers) and a WAV file (built-in synthesizer). Instruments: piano, chip, flute, strings, bass, drums. |
->>>>>>> origin/main
 | `video_render` | video / media | Make an MP4 (H.264 + AAC) from scenes: HTML pages animated with CSS, still SVG drawings, or photos with a slow camera move. Transitions (fade, slide, wipe, circle, cut), captions or an `.srt`, and a soundtrack from `music_render`. Needs ffmpeg on the host. |
 | `audio_transcribe` | audio / media | Turn the speech in an audio or video file into timestamped text with a local Whisper model, and save it as SRT subtitles. Nothing is uploaded. Needs ffmpeg on the host. |
 | `video_understand` | video / media | Understand a video: its length, size and frame rate, a storyboard image of 4-16 evenly spaced frames labelled with their times, and a timestamped transcript of the speech. Nothing is uploaded. Needs ffmpeg and ffprobe on the host. |

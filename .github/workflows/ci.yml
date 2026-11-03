@@ -31,6 +31,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: No merge-conflict markers
+        if: runner.os == 'Linux'
+        run: "! git grep -nE '^(<<<<<<<|>>>>>>>) ' -- ."
+
       - name: Install DSH host packages
         shell: bash
         run: |
