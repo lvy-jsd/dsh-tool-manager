@@ -1,7 +1,8 @@
 /** video_render. */
 import { safeBaseName, saveFile } from '../output.js'
 import { NAME_PARAMETER, type Settings, type ToolSpec } from '../settings.js'
-import { renderVideo, runProgram, type RunProgram } from '../video/render.js'
+import { runProgram, type RunProgram } from '../ffmpeg.js'
+import { renderVideo } from '../video/render.js'
 import { parseVideoRequest, totalSeconds } from '../video/scenes.js'
 
 const SCENE = {
