@@ -14,3 +14,8 @@
         # Longest piece music_render accepts, in seconds, and most notes in one piece.
         maxMusicSeconds: 300
         maxMusicNotes: 5000
+        # Longest video video_render makes, in seconds.
+        maxVideoSeconds: 180
+        # ffmpeg used by video_render, and how long one render may take (ms).
+        ffmpegPath: ffmpeg
+        ffmpegTimeoutMs: 300000
