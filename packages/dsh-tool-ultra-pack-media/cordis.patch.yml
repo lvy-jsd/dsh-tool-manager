@@ -33,8 +33,12 @@
         ffmpegTimeoutMs: 300000
         # Extra folders whose files audio_transcribe and video_understand may read by absolute path.
         inputDirs: []
-        # Local Whisper model for audio_transcribe, where it downloads from
-        # (https://hf-mirror.com/ in mainland China), and the longest audio per call.
-        speechModel: onnx-community/whisper-small
-        modelHost: 'https://huggingface.co/'
+        # Speech model for audio_transcribe: sensevoice (Chinese, Cantonese, English,
+        # Japanese, Korean; also emotions and sounds) or whisper-turbo (about 100
+        # languages, slower). A language SenseVoice does not read always goes to Whisper.
+        speechModel: sensevoice
+        # Where the speech models download from (the sherpa-onnx releases on GitHub,
+        # or a mirror of them), CPU threads, and the longest audio per call.
+        modelMirror: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/'
+        speechThreads: 4
         maxTranscribeSeconds: 1800

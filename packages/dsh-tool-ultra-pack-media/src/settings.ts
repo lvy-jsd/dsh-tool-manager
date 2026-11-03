@@ -5,7 +5,9 @@ import type { ScoreLimits } from './audio/score.js'
 import { DEFAULT_SOUNDFONT, type SoundFontSettings } from './audio/soundfont.js'
 import type { HtmlSettings } from './html/render.js'
 import { DEFAULT_OUTPUT_DIR } from './output.js'
-import type { WhisperConfig } from './speech/whisper.js'
+import type { EngineSettings } from './speech/engine.js'
+import { MODEL_RELEASES } from './speech/models.js'
+import { SPEECH_MODELS, type SpeechModel } from './speech/recognize.js'
 import type { RasterLimits } from './svg.js'
 import type { VideoLimits } from './video/scenes.js'
 
@@ -42,17 +44,19 @@ export interface Config {
   ffprobePath?: string
   /** How long one ffmpeg run may take, in milliseconds. */
   ffmpegTimeoutMs?: number
-  /** Whisper model (an ONNX export on Hugging Face) used by audio_transcribe. */
-  speechModel?: string
-  /** Where speech models download from; a mirror such as https://hf-mirror.com/ also works. */
-  modelHost?: string
+  /** sensevoice (default: Chinese, Cantonese, English, Japanese, Korean) or whisper-turbo (about 100 languages, slower). */
+  speechModel?: SpeechModel
+  /** Base URL of the sherpa-onnx model releases; a mirror of github.com/k2-fsa/sherpa-onnx/releases/download/ also works. */
+  modelMirror?: string
+  /** CPU threads for speech recognition. Default 4. */
+  speechThreads?: number
   /** Where downloaded models and the SoundFont are kept. */
   modelCacheDir?: string
   /** Longest stretch of audio transcribed per call, in seconds. */
   maxTranscribeSeconds?: number
 }
 
-export interface SpeechSettings extends WhisperConfig {
+export interface SpeechSettings extends EngineSettings {
   maxSeconds: number
   /** Longest transcript returned to the model, in characters; the SRT file keeps all of it. */
   maxChars: number
@@ -81,11 +85,19 @@ export interface ToolSpec {
 
 const modelCacheDir = (config: Config) => config.modelCacheDir ?? join(homedir(), '.cache', 'dsh-tool-ultra', 'models')
 
+function speechModel(value: unknown): SpeechModel {
+  if (value === undefined) return 'sensevoice'
+  if (!SPEECH_MODELS.includes(value as SpeechModel)) throw new Error(`speechModel must be one of ${SPEECH_MODELS.join(', ')}.`)
+  return value as SpeechModel
+}
+
 function speechSettings(config: Config): SpeechSettings {
   return {
-    model: config.speechModel ?? 'onnx-community/whisper-small',
-    modelHost: config.modelHost ?? 'https://huggingface.co/',
+    model: speechModel(config.speechModel),
+    mirror: config.modelMirror ?? MODEL_RELEASES,
     cacheDir: modelCacheDir(config),
+    threads: config.speechThreads ?? 4,
+    speakerThreshold: 0.9,
     maxSeconds: config.maxTranscribeSeconds ?? 1800,
     maxChars: 20_000,
   }

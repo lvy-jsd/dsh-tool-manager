@@ -9,7 +9,8 @@ import { NAME_PARAMETER, type Settings, type ToolSpec } from '../settings.js'
 import { clock, shortTime, timestampedText } from '../speech/transcript.js'
 import { parseProbe, probeArgs, type MediaInfo } from '../video/probe.js'
 import { buildStoryboard, extractArgs, frameTimes, listFrames } from '../video/storyboard.js'
-import { createSpeechReader, languageOf, type TranscribeDeps } from './transcribe.js'
+import { modelTitle } from '../speech/engine.js'
+import { createSpeechReader, describeSpeakers, languageOf, type TranscribeDeps } from './transcribe.js'
 
 const FRAMES = { min: 4, max: 16, default: 12 }
 
@@ -49,9 +50,10 @@ export function understandTool(settings: Settings, deps: TranscribeDeps = {}): T
   }
 
   async function transcript(path: string, language: string | undefined): Promise<string> {
-    const { segments } = await readSpeech(path, language)
+    const { segments } = await readSpeech(path, { language })
     if (!segments.length) return 'Speech: none found.'
-    return `Speech (local Whisper, ${segments.length} segments):\n${timestampedText(segments, settings.speech.maxChars)}`
+    const about = `${modelTitle(settings.speech, language)}, ${describeSpeakers(segments)}, ${segments.length} segments`
+    return `Speech (${about}):\n${timestampedText(segments, settings.speech.maxChars)}`
   }
 
   async function understand(args: any): Promise<string> {
@@ -69,7 +71,7 @@ export function understandTool(settings: Settings, deps: TranscribeDeps = {}): T
   return {
     name: 'video_understand',
     description: 'Understand a video (or audio) file on this server, with nothing uploaded: its length and size, a storyboard image of evenly spaced '
-      + 'frames with timestamps, and a timestamped transcript of the speech (local Whisper). Look at the storyboard image to see the scenes.',
+      + 'frames with timestamps, and a timestamped transcript of the speech with who speaks when (local models). Look at the storyboard image to see the scenes.',
     parameters: {
       file: { type: 'string', required: true, description: 'A file name from the output folder, or an absolute path inside an allowed input folder.' },
       frames: { type: 'integer', description: `Frames on the storyboard, ${FRAMES.min}-${FRAMES.max}. Default ${FRAMES.default}.` },
