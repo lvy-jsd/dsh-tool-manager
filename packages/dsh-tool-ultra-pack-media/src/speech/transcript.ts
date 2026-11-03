@@ -13,6 +13,11 @@ export function clock(seconds: number): string {
   return h ? `${h}:${pad(m)}:${pad(whole % 60)}` : `${pad(m)}:${pad(whole % 60)}`
 }
 
+/** A time label that stays distinct for short clips: "3.5 s" under a minute, else clock(). */
+export function shortTime(seconds: number, total: number): string {
+  return total < 60 ? `${(Math.round(seconds * 10) / 10).toFixed(1)} s` : clock(seconds)
+}
+
 function srtTime(seconds: number): string {
   const ms = Math.round(seconds * 1000)
   return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`

@@ -6,6 +6,7 @@
  * - music_render: a short score in a simple note notation → MIDI + WAV.
  * - video_render: SVG scenes plus an optional soundtrack → MP4 (host ffmpeg).
  * - audio_transcribe: speech in an audio or video file → timestamped text + SRT (local Whisper).
+ * - video_understand: a video's facts, a timestamped storyboard image and its transcript.
  *
  * The model writes the SVG, chart spec, score or scene list; this pack renders
  * it locally and saves the files into one configured folder. Nothing is
@@ -17,6 +18,7 @@ import { resolveSettings, type Config, type ToolSpec } from './settings.js'
 import { imageTools } from './tools/image.js'
 import { musicTool } from './tools/music.js'
 import { transcribeTool } from './tools/transcribe.js'
+import { understandTool } from './tools/understand.js'
 import { videoTool } from './tools/video.js'
 
 export type { Config, ToolSpec } from './settings.js'
@@ -31,13 +33,16 @@ export { checkAudioName, ffmpegArgs, parseVideoRequest } from './video/scenes.js
 export { resolveInputFile, resolveOutputFile } from './files.js'
 export { videoTool } from './tools/video.js'
 export { transcribeTool } from './tools/transcribe.js'
+export { understandTool } from './tools/understand.js'
+export { parseProbe, probeArgs } from './video/probe.js'
+export { buildStoryboard, extractArgs, frameTimes } from './video/storyboard.js'
 export { decodeArgs } from './speech/decode.js'
-export { clock, timestampedText, toSrt } from './speech/transcript.js'
+export { clock, shortTime, timestampedText, toSrt } from './speech/transcript.js'
 
 export const name = 'tool-ultra-pack-media'
 export const inject = ['tools']
 
-export const TOOL_NAMES = ['svg_render', 'chart_render', 'music_render', 'video_render', 'audio_transcribe'] as const
+export const TOOL_NAMES = ['svg_render', 'chart_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'] as const
 
 const TEXT_OUTPUT = {
   schema: { type: 'string' },
@@ -46,7 +51,7 @@ const TEXT_OUTPUT = {
 
 export function createTools(config: Config = {}): ToolSpec[] {
   const settings = resolveSettings(config)
-  return [...imageTools(settings), musicTool(settings), videoTool(settings), transcribeTool(settings)]
+  return [...imageTools(settings), musicTool(settings), videoTool(settings), transcribeTool(settings), understandTool(settings)]
 }
 
 function registerPack(ctx: any, tools: string[]) {
@@ -56,7 +61,7 @@ function registerPack(ctx: any, tools: string[]) {
     c.effect(() => c.toolCatalog.registerToolPack({
       id: 'media',
       title: 'Media',
-      summary: 'Images, music and video made from code, and local speech-to-text: SVG and charts as images, scores as MIDI/WAV, SVG scenes as MP4, recordings as timestamped text. No API keys.',
+      summary: 'Images, music and video made from code, and local understanding: SVG and charts as images, scores as MIDI/WAV, SVG scenes as MP4; recordings as text, videos as storyboards. No API keys.',
       source: '@lvy-jsd/dsh-tool-ultra-pack-media',
       tools,
     }))

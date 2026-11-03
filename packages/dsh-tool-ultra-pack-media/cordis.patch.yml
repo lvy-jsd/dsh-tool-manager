@@ -16,10 +16,12 @@
         maxMusicNotes: 5000
         # Longest video video_render makes, in seconds.
         maxVideoSeconds: 180
-        # ffmpeg used by video_render, and how long one render may take (ms).
+        # ffmpeg and ffprobe used by the video and speech tools, and how long
+        # one run may take (ms).
         ffmpegPath: ffmpeg
+        ffprobePath: ffprobe
         ffmpegTimeoutMs: 300000
-        # Extra folders whose files audio_transcribe may read by absolute path.
+        # Extra folders whose files audio_transcribe and video_understand may read by absolute path.
         inputDirs: []
         # Local Whisper model for audio_transcribe, where it downloads from
         # (https://hf-mirror.com/ in mainland China), and the longest audio per call.

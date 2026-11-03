@@ -26,6 +26,8 @@ export interface Config {
   maxVideoSeconds?: number
   /** ffmpeg program used by video_render and audio_transcribe. */
   ffmpegPath?: string
+  /** ffprobe program used by video_understand. */
+  ffprobePath?: string
   /** How long one ffmpeg run may take, in milliseconds. */
   ffmpegTimeoutMs?: number
   /** Whisper model (an ONNX export on Hugging Face) used by audio_transcribe. */
@@ -51,6 +53,7 @@ export interface Settings {
   scoreLimits: ScoreLimits
   videoLimits: VideoLimits
   ffmpegPath: string
+  ffprobePath: string
   ffmpegTimeoutMs: number
   speech: SpeechSettings
 }
@@ -80,6 +83,7 @@ export function resolveSettings(config: Config): Settings {
     scoreLimits: { maxSeconds: config.maxMusicSeconds ?? 300, maxEvents: config.maxMusicNotes ?? 5000 },
     videoLimits: { maxSeconds: config.maxVideoSeconds ?? 180, maxScenes: 60, maxPixels: 1920 * 1080 },
     ffmpegPath: config.ffmpegPath ?? 'ffmpeg',
+    ffprobePath: config.ffprobePath ?? 'ffprobe',
     ffmpegTimeoutMs: config.ffmpegTimeoutMs ?? 300_000,
     speech: speechSettings(config),
   }
