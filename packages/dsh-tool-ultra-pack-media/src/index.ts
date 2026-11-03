@@ -5,7 +5,7 @@
  * - svg_render: an SVG document (posters, cards, icons, diagrams) → PNG/JPEG/WebP.
  * - chart_render: a Vega-Lite chart spec with inline data → PNG/JPEG/WebP.
  * - music_render: a short score in a simple note notation → MIDI + WAV.
- * - video_render: SVG scenes plus an optional soundtrack → MP4 (host ffmpeg).
+ * - video_render: HTML (CSS-animated), SVG or photo scenes with transitions, captions and a soundtrack → MP4 (host ffmpeg).
  * - audio_transcribe: speech in an audio or video file → timestamped text + SRT (local Whisper).
  * - video_understand: a video's facts, a timestamped storyboard image and its transcript.
  *
@@ -15,6 +15,7 @@
  * a video's soundtrack must already be in that folder.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { createHtmlRenderer } from './html/render.js'
 import { resolveSettings, type Config, type ToolSpec } from './settings.js'
 import { htmlTool } from './tools/html.js'
 import { imageTools } from './tools/image.js'
@@ -35,7 +36,12 @@ export { safeBaseName, saveFile } from './output.js'
 export { parseScore, pitchToMidi } from './audio/score.js'
 export { scoreToMidi } from './audio/midi.js'
 export { encodeWav, renderScore } from './audio/synth.js'
-export { checkAudioName, ffmpegArgs, parseVideoRequest } from './video/scenes.js'
+export { checkAudioName, parseVideoRequest } from './video/scenes.js'
+export { encodeArgs, fadeLevel } from './video/render.js'
+export { planTimeline, frameAt } from './video/timeline.js'
+export { ease, transition, overlay, dim, onBlack } from './video/compose.js'
+export { parseSrt, checkCaptions, captionPage } from './video/captions.js'
+export { photoPage } from './video/layers.js'
 export { resolveInputFile, resolveOutputFile } from './files.js'
 export { videoTool } from './tools/video.js'
 export { transcribeTool } from './tools/transcribe.js'
@@ -57,7 +63,8 @@ const TEXT_OUTPUT = {
 
 export function createTools(config: Config = {}): ToolSpec[] {
   const settings = resolveSettings(config)
-  return [htmlTool(settings), ...imageTools(settings), musicTool(settings), videoTool(settings), transcribeTool(settings), understandTool(settings)]
+  const renderer = createHtmlRenderer(settings.html)
+  return [htmlTool(settings, renderer), ...imageTools(settings), musicTool(settings), videoTool(settings, { renderer }), transcribeTool(settings), understandTool(settings)]
 }
 
 function registerPack(ctx: any, tools: string[]) {

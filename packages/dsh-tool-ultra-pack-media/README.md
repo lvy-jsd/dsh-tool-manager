@@ -8,7 +8,7 @@ Images, music and video made from code, and local speech-to-text, for [Tool Ultr
 | `svg_render` | image / media | Render an SVG document (poster, greeting card, icon, diagram, infographic) to PNG, JPEG or WebP. `width` scales it sharply; `name` is a file name hint. |
 | `chart_render` | image / media | Draw a [Vega-Lite](https://vega.github.io/vega-lite/) chart (bar, line, pie, scatter, area, heatmap, ...) with inline data and save it as an image. A single-view chart without a size gets 480×300. |
 | `music_render` | audio / media | Compose a short piece from notes and save it as a MIDI file (plays with real instrument sounds on phones and computers) and a WAV file (built-in synthesizer). Instruments: piano, chip, flute, strings, bass, drums. |
-| `video_render` | video / media | Make an MP4 (H.264 + AAC) from SVG scenes, each shown for some seconds with a soft fade, optionally with a soundtrack saved by `music_render`. Needs ffmpeg on the host. |
+| `video_render` | video / media | Make an MP4 (H.264 + AAC) from scenes: HTML pages animated with CSS, still SVG drawings, or photos with a slow camera move. Transitions (fade, slide, wipe, circle, cut), captions or an `.srt`, and a soundtrack from `music_render`. Needs ffmpeg on the host. |
 | `audio_transcribe` | audio / media | Turn the speech in an audio or video file into timestamped text with a local Whisper model, and save it as SRT subtitles. Nothing is uploaded. Needs ffmpeg on the host. |
 | `video_understand` | video / media | Understand a video: its length, size and frame rate, a storyboard image of 4-16 evenly spaced frames labelled with their times, and a timestamped transcript of the speech. Nothing is uploaded. Needs ffmpeg and ffprobe on the host. |
 
@@ -41,11 +41,22 @@ Each track is one line of `<sound>:<beats>` tokens played in order: `C4:1 E4:0.5
 ### Video
 
 ```json
-{ "width": 1280, "height": 720, "audio": "bgm-20261103T080000Z.wav",
-  "scenes": [ { "svg": "<svg ...>title</svg>", "seconds": 3 }, { "svg": "<svg ...>…</svg>", "seconds": 4 } ] }
+{ "width": 1080, "height": 1920, "audio": "bgm-20261103T080000Z.wav", "captionStyle": "pop",
+  "scenes": [
+    { "html": "<style>@keyframes up{from{opacity:0;transform:translateY(80px)}} h1{animation:up .8s ease-out both} ...</style><div class=\"root\"><h1>Title</h1></div>", "seconds": 3, "transition": "circle" },
+    { "image": "trip.jpg", "motion": "zoom-in", "seconds": 4 },
+    { "svg": "<svg ...>…</svg>", "seconds": 3 } ],
+  "captions": [ { "start": 0.5, "end": 2.5, "text": "一句话做视频" } ] }
 ```
 
-Titles and captions are drawn into each scene's SVG. Frames are letterboxed to the video size. The video keeps its own length; a longer soundtrack is cut. `video_render` calls the host's `ffmpeg` (set `ffmpegPath` if it is not on `PATH`) as a separate program with an argument list, no shell, and a time limit (`ffmpegTimeoutMs`).
+Every frame is drawn by the pack and streamed as raw pixels into the host's `ffmpeg`, which encodes H.264 and adds the soundtrack:
+
+- **Scenes.** An `html` scene is a page the size of the video, drawn with the same engine as `html_render`; its CSS animations start when the scene appears, so entrances, kinetic type and growing bar charts play out. An `image` scene shows a photo full-frame with a slow camera move (`zoom-in`, `zoom-out`, `pan-left`, `pan-right`, `none`). An `svg` scene is a still drawing, letterboxed.
+- **Transitions.** `fade` (default), `slide-left`, `slide-up`, `wipe`, `circle` or `cut`, eased, up to 0.6 s, set per scene or for the whole video. A transition straddles the boundary, so the video is exactly as long as its scenes. `fade` also fades the video in from and out to black.
+- **Captions.** A `captions` list, or `subtitles`: an `.srt` file such as the one `audio_transcribe` saves. `subtitle` style is small and at the bottom; `pop` is big, bold and bounces in, short-video style. Caption text is escaped, never markup.
+- `fps` 24, 30 (default) or 60. A 1280×720 video takes about one to two times its length to render on a 4-core CPU.
+
+ffmpeg runs as a separate program with an argument list, no shell, and a time limit (`ffmpegTimeoutMs`; set `ffmpegPath` if it is not on `PATH`).
 
 ### Speech to text
 
@@ -64,7 +75,7 @@ Music needs no dependency: the MIDI encoder and the synthesizer are plain TypeSc
 - **HTML allowlist.** `<script>`, `<iframe>`, `<object>`, `<embed>`, `<link>`, `<meta>`, `<base>`, forms, `@import` and `@font-face` are refused with a reason. Links may only be `#id`, inline base64 images, or picture files that resolve (after links) inside the output folder or `inputDirs`; those files are read by the pack and handed to the renderer, which itself never touches the network or the disk.
 - **SVG allowlist.** An SVG may link only to its own elements (`#id`) or to inline `data:image/png|jpeg|gif|webp;base64,` images. Any other `href`, `xlink:href`, `src` or CSS `url(...)`, plus `@import`, DTDs and entities, `<script>`, `<foreignObject>` and `<iframe>`, are refused before the renderer sees the file.
 - **Charts are offline.** A spec with a `url` key anywhere is refused, the Vega loader refuses every request as a second guard, and expressions run in Vega's interpreter, not generated JavaScript. Render errors fail the call instead of saving an empty chart.
-- **One output folder.** The model never chooses a path: files go into `outputDir` under a cleaned-up name plus a UTC timestamp, and an existing file is never overwritten. A video's soundtrack must be a bare file name that resolves (after links) inside that folder, and files to transcribe or understand must resolve inside it or one of `inputDirs`.
+- **One output folder.** The model never chooses a path: files go into `outputDir` under a cleaned-up name plus a UTC timestamp, and an existing file is never overwritten. A video's soundtrack and `.srt` must be bare file names that resolve (after links) inside that folder, its photos follow the HTML picture rules, and files to transcribe or understand must resolve inside it or one of `inputDirs`.
 - **Size limits.** `maxHtmlBytes` caps an HTML page (and 25 MB each picture it shows), `maxSvgBytes` the SVG source, `maxPixels` the output image, `maxMusicSeconds` / `maxMusicNotes` the length of a piece, and `maxVideoSeconds` a video (at most 60 scenes and 1920×1080).
 
 ## Fonts
