@@ -11,3 +11,6 @@
         maxSvgBytes: 2000000
         # Largest output image, in pixels (width x height): 4096 x 4096.
         maxPixels: 16777216
+        # Longest piece music_render accepts, in seconds, and most notes in one piece.
+        maxMusicSeconds: 300
+        maxMusicNotes: 5000
