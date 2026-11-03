@@ -8,7 +8,7 @@ import { safeBaseName, saveFile } from '../output.js'
 import { NAME_PARAMETER, type Settings, type ToolSpec } from '../settings.js'
 import { clock, shortTime, timestampedText } from '../speech/transcript.js'
 import { parseProbe, probeArgs, type MediaInfo } from '../video/probe.js'
-import { buildStoryboard, extractArgs, frameTimes, listFrames } from '../video/storyboard.js'
+import { buildStoryboard, cutArgs, extractArgs, listFrames, parseCuts, planFrames, type FramePlan } from '../video/storyboard.js'
 import { modelTitle } from '../speech/engine.js'
 import { createSpeechReader, describeSpeakers, languageOf, type TranscribeDeps } from './transcribe.js'
 
@@ -32,17 +32,27 @@ export function understandTool(settings: Settings, deps: TranscribeDeps = {}): T
   const readSpeech = createSpeechReader(settings, deps)
   const timeoutMs = settings.ffmpegTimeoutMs
 
+  /** Where the frames go: following the cuts when ffmpeg finds any, else evenly. */
+  async function plan(path: string, info: MediaInfo, count: number): Promise<FramePlan> {
+    const printed = await run(settings.ffmpegPath, cutArgs(path), timeoutMs)
+    return planFrames(info.duration, parseCuts(printed), count)
+  }
+
+  function describeCuts(cuts: number[], duration: number): string {
+    if (!cuts.length) return 'No scene changes found; frames are evenly spaced.'
+    return `${cuts.length + 1} shots; the scene changes at ${cuts.map((t) => shortTime(t, duration)).join(', ')}.`
+  }
+
   async function storyboard(path: string, info: MediaInfo, count: number, name: string): Promise<string> {
     const dir = await mkdtemp(join(tmpdir(), 'dsh-media-frames-'))
     try {
-      await run(settings.ffmpegPath, extractArgs(path, dir, count, info.duration), timeoutMs)
+      const { times, cuts } = await plan(path, info, count)
+      await run(settings.ffmpegPath, extractArgs(path, dir, times), timeoutMs)
       const frames = await listFrames(dir)
       if (!frames.length) return 'Storyboard: no frames could be read from the picture.'
-      const labels = frameTimes(info.duration, count).map((t) => shortTime(t, info.duration))
-      const image = await buildStoryboard(frames, labels)
+      const image = await buildStoryboard(frames, times.map((t) => shortTime(t, info.duration)))
       const saved = await saveFile(settings.outputDir, name, 'jpg', image)
-      const every = shortTime(info.duration / count, info.duration)
-      return `Storyboard (${frames.length} frames, one every ${every}, left to right then top to bottom, each labelled with its time): ${saved}\n`
+      return `${describeCuts(cuts, info.duration)}\nStoryboard (${frames.length} frames, at least one per shot, left to right then top to bottom, each labelled with its time): ${saved}\n`
         + 'To see what happens on screen, look at this image with your image-reading tool.'
     } finally {
       await rm(dir, { recursive: true, force: true })
@@ -70,8 +80,8 @@ export function understandTool(settings: Settings, deps: TranscribeDeps = {}): T
 
   return {
     name: 'video_understand',
-    description: 'Understand a video (or audio) file on this server, with nothing uploaded: its length and size, a storyboard image of evenly spaced '
-      + 'frames with timestamps, and a timestamped transcript of the speech with who speaks when (local models). Look at the storyboard image to see the scenes.',
+    description: 'Understand a video (or audio) file on this server, with nothing uploaded: its length and size, a storyboard image of key frames '
+      + 'that follow the scene changes, with timestamps, and a timestamped transcript of the speech with who speaks when (local models). Look at the storyboard image to see the scenes.',
     parameters: {
       file: { type: 'string', required: true, description: 'A file name from the output folder, or an absolute path inside an allowed input folder.' },
       frames: { type: 'integer', description: `Frames on the storyboard, ${FRAMES.min}-${FRAMES.max}. Default ${FRAMES.default}.` },

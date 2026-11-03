@@ -70,7 +70,7 @@ The models (SenseVoice about 155 MB, the speaker models about 45 MB) download on
 
 ### Video understanding
 
-`video_understand` reads the file's facts with `ffprobe`, has ffmpeg pull evenly spaced frames, and lays them out four to a row on one JPEG storyboard, each with its time. It then transcribes the sound track the same way as `audio_transcribe` (skip it with `transcript: false`). The reply names the saved storyboard, so the agent can look at it with its own image-reading tool; with a text-only model, the facts and the transcript still describe the video. An audio-only file gets the facts and the transcript.
+`video_understand` reads the file's facts with `ffprobe`, then has ffmpeg find the cuts (its scene-change score on a small copy of each frame, which takes well under a second per minute of video). The frames follow the edit: the strongest cuts split the video into shots, each shot gets a frame from its middle, and long shots get more. The reply lists when the scene changes, and the frames go four to a row on one JPEG storyboard, each with its time. It then transcribes the sound track the same way as `audio_transcribe` (skip it with `transcript: false`). The reply names the saved storyboard, so the agent can look at it with its own image-reading tool; with a text-only model, the facts and the transcript still describe the video. An audio-only file gets the facts and the transcript.
 
 The file is a name from the output folder or an absolute path inside one of `inputDirs` (for example where uploads land). Paths are checked after resolving links.
 
