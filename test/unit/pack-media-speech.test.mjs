@@ -72,7 +72,9 @@ test('audio_transcribe: silence, bad languages and outside files are handled pla
   const tool = transcribeTool(resolveSettings({ outputDir: out }), { run: fakeDecoder(2), transcriber: async () => [] })
   assert.match(await tool.execute({ file: 'quiet.wav' }), /^No speech found in .*quiet\.wav \(00:02 of audio\)\.$/)
   await assert.rejects(tool.execute({ file: 'quiet.wav', language: 'chinese!' }), /language must be a short code/)
-  await assert.rejects(tool.execute({ file: '/etc/hostname' }), /not inside the output folder/)
+  const outside = join(tempDir(), 'elsewhere.wav')
+  writeFileSync(outside, 'x')
+  await assert.rejects(tool.execute({ file: outside }), /not inside the output folder/)
 })
 
 const SAMPLE = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav'
