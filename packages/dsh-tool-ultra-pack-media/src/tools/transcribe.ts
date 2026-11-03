@@ -14,7 +14,7 @@ export interface TranscribeDeps {
 
 const LANGUAGE = /^[a-z]{2,3}$/
 
-function languageOf(value: unknown): string | undefined {
+export function languageOf(value: unknown): string | undefined {
   if (value === undefined || value === '') return undefined
   if (typeof value !== 'string' || !LANGUAGE.test(value)) throw new Error('language must be a short code such as "zh", "en" or "ja".')
   return value
