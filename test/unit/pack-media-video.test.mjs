@@ -40,8 +40,8 @@ test('video: soundtrack paths cannot leave the output folder, even through a lin
   assert.match(await resolveOutputFile(dir, 'inside.wav'), /inside\.wav$/)
   // Windows runners may not allow file symlinks without admin rights.
   const linked = (() => { try { symlinkSync(outside, join(dir, 'link.wav')); return true } catch { return false } })()
-  if (linked) await assert.rejects(resolveOutputFile(dir, 'link.wav'), /not inside the output folder/)
-  await assert.rejects(resolveOutputFile(dir, 'missing.wav'), /Make the soundtrack with music_render first/)
+  if (linked) await assert.rejects(resolveOutputFile(dir, 'link.wav'), /not inside the output folder or an allowed input folder/)
+  await assert.rejects(resolveOutputFile(dir, 'missing.wav'), /No file at "missing.wav"/)
 })
 
 test('video: ffmpeg arguments loop each frame, fade long scenes and map the soundtrack', () => {

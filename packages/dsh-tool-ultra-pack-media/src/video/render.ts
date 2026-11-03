@@ -6,11 +6,12 @@
  * timeout, and inputs that are either our own temporary frames or a file
  * inside the output folder.
  */
-import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, sep } from 'node:path'
+import { join } from 'node:path'
 import sharp from 'sharp'
+import { runProgram, type RunProgram } from '../ffmpeg.js'
+import { resolveOutputFile } from '../files.js'
 import { rasterizeSvg, type RasterLimits } from '../svg.js'
 import { ffmpegArgs, type VideoRequest } from './scenes.js'
 
@@ -19,31 +20,6 @@ export interface VideoRuntime {
   ffmpegPath: string
   timeoutMs: number
   svgLimits: RasterLimits
-}
-
-export type RunProgram = (file: string, args: string[], timeoutMs: number) => Promise<void>
-
-/** Runs a program without a shell; a missing ffmpeg gets a plain-language error. */
-export const runProgram: RunProgram = (file, args, timeoutMs) => new Promise((resolve, reject) => {
-  execFile(file, args, { timeout: timeoutMs, windowsHide: true, maxBuffer: 1024 * 1024 }, (error, _stdout, stderr) => {
-    if (!error) return resolve()
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return reject(new Error(`video_render needs ffmpeg on the server, and "${file}" was not found. Install ffmpeg or set ffmpegPath.`))
-    if (error.killed) return reject(new Error(`ffmpeg took longer than ${timeoutMs / 1000} seconds and was stopped.`))
-    reject(new Error(`ffmpeg failed: ${String(stderr).trim().slice(0, 500) || error.message}`))
-  })
-})
-
-/** Absolute path of a file inside the output folder; anything that resolves elsewhere is refused. */
-export async function resolveOutputFile(outputDir: string, name: string): Promise<string> {
-  const root = await realpath(outputDir)
-  let path: string
-  try {
-    path = await realpath(join(root, name))
-  } catch {
-    throw new Error(`No file named "${name}" in the output folder. Make the soundtrack with music_render first.`)
-  }
-  if (!path.startsWith(root + sep)) throw new Error(`"${name}" is not inside the output folder.`)
-  return path
 }
 
 async function renderFrame(svg: string, request: VideoRequest, limits: RasterLimits): Promise<Buffer> {

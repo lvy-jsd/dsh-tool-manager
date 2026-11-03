@@ -42,7 +42,7 @@ jobs:
             @deepseek-ai/dsh-llm \
             @deepseek-ai/dsh-scope
 
-      # video_render's real-render test needs ffmpeg; Linux runners always run it.
+      # video_render's and audio_transcribe's real tests need ffmpeg; Linux runners always run them.
       - name: Install ffmpeg
         if: runner.os == 'Linux'
         run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg)
@@ -57,7 +57,10 @@ jobs:
       - run: npm run typecheck
 
       # The e2e run (test/e2e.mjs) boots a full DSH and is not run here yet.
+      # On Linux the speech test also downloads a small Whisper model and transcribes a sample.
       - run: node --test test/unit/*.test.mjs
+        env:
+          MEDIA_SPEECH_E2E: ${{ runner.os == 'Linux' && '1' || '' }}
 
   sidecar:
     name: sidecar (cargo)
