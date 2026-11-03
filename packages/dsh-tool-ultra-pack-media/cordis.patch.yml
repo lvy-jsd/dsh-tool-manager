@@ -1,0 +1,13 @@
+# @lvy-jsd/dsh-tool-ultra-pack-media bundle patch: one loader entry.
+- insert:
+    - id: tool-ultra-pack-media
+      name: '@lvy-jsd/dsh-tool-ultra-pack-media'
+      config:
+        # Tools to leave out, by name (e.g. [chart_render]).
+        disable: []
+        # Folder that receives every generated file. Unset: ~/dsh-creations.
+        # outputDir: /srv/swiftnest/creations
+        # Largest SVG source accepted, in bytes.
+        maxSvgBytes: 2000000
+        # Largest output image, in pixels (width x height): 4096 x 4096.
+        maxPixels: 16777216
