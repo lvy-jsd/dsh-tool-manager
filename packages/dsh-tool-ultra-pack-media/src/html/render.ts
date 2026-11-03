@@ -91,7 +91,7 @@ export function createHtmlRenderer(settings: HtmlSettings, findFont: FindFont = 
       const box = await outputBox(page, size)
       const { takumi } = await renderer()
       const encoding = format === 'raw' || format === 'png' ? { format } : { format, quality: 90 }
-      const data = await takumi.render(page.html, { ...box, timeMs, lang: settings.lang, images: page.images, ...encoding })
+      const data = await takumi.render(page.html, { ...box, timeMs: Math.round(timeMs), lang: settings.lang, images: page.images, ...encoding })
       return { data: Buffer.from(data), width: box.width, height: box.height }
     },
 
