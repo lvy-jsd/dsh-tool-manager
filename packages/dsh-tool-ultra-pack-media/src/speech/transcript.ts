@@ -1,5 +1,16 @@
 /** Transcript formatting: timestamped text for the model, SRT subtitles for people. */
-import type { Segment } from './whisper.js'
+
+export interface Segment {
+  start: number
+  end: number
+  text: string
+  /** 1, 2, … when more than one person speaks. */
+  speaker?: number
+  /** How the speaker sounds, when not neutral: happy, sad, angry, … */
+  emotion?: string
+  /** A sound heard with or instead of speech: music, laughter, applause, … */
+  sound?: string
+}
 
 function pad(value: number, width = 2): string {
   return String(value).padStart(width, '0')
@@ -23,13 +34,25 @@ function srtTime(seconds: number): string {
   return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`
 }
 
+const speakerLabel = (s: Segment) => (s.speaker ? `Speaker ${s.speaker}` : '')
+
+/** Subtitles: "Speaker 1: text", with a sound in brackets when there are no words. */
 export function toSrt(segments: Segment[]): string {
-  return segments.map((s, i) => `${i + 1}\n${srtTime(s.start)} --> ${srtTime(s.end)}\n${s.text}\n`).join('\n')
+  const line = (s: Segment) => [speakerLabel(s), s.text || `[${s.sound}]`].filter(Boolean).join(': ')
+  return segments.map((s, i) => `${i + 1}\n${srtTime(s.start)} --> ${srtTime(s.end)}\n${line(s)}\n`).join('\n')
+}
+
+/** "Speaker 2 (happy, laughter): text" for the model. */
+function describe(s: Segment): string {
+  const notes = [s.emotion, s.sound].filter(Boolean).join(', ')
+  const who = [speakerLabel(s), notes && `(${notes})`].filter(Boolean).join(' ')
+  if (!s.text) return who
+  return who ? `${who}: ${s.text}` : s.text
 }
 
 /** "[00:00-00:05] text" lines, cut at `maxChars` with a note. */
 export function timestampedText(segments: Segment[], maxChars: number): string {
-  const full = segments.map((s) => `[${clock(s.start)}-${clock(s.end)}] ${s.text}`).join('\n')
+  const full = segments.map((s) => `[${clock(s.start)}-${clock(s.end)}] ${describe(s)}`).join('\n')
   if (full.length <= maxChars) return full
   return `${full.slice(0, maxChars)}\n[truncated: ${full.length - maxChars} more characters are in the SRT file]`
 }

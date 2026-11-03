@@ -9,7 +9,7 @@ Images, music and video made from code, and local speech-to-text, for [Tool Ultr
 | `chart_render` | image / media | Draw a [Vega-Lite](https://vega.github.io/vega-lite/) chart (bar, line, pie, scatter, area, heatmap, ...) with inline data and save it as an image. A single-view chart without a size gets 480×300. |
 | `music_render` | audio / media | Compose a piece from notes for up to 16 of 37 instruments plus a drum kit, and save a WAV played with real recorded instruments (General MIDI SoundFont, stereo, reverb, mastered to −14 LUFS) and the MIDI file. |
 | `video_render` | video / media | Make an MP4 (H.264 + AAC) from scenes: HTML pages animated with CSS, still SVG drawings, or photos with a slow camera move. Transitions (fade, slide, wipe, circle, cut), captions or an `.srt`, and a soundtrack from `music_render`. Needs ffmpeg on the host. |
-| `audio_transcribe` | audio / media | Turn the speech in an audio or video file into timestamped text with a local Whisper model, and save it as SRT subtitles. Nothing is uploaded. Needs ffmpeg on the host. |
+| `audio_transcribe` | audio / media | Turn the speech in an audio or video file into timestamped text with local models: who speaks when, how they sound (happy, angry, …) and sounds such as laughter or music. Saves SRT subtitles. Nothing is uploaded. Needs ffmpeg on the host. |
 | `video_understand` | video / media | Understand a video: its length, size and frame rate, a storyboard image of 4-16 evenly spaced frames labelled with their times, and a timestamped transcript of the speech. Nothing is uploaded. Needs ffmpeg and ffprobe on the host. |
 
 Load the pack with `tools_load(["pack:media"])`. Each call returns the saved file's path, size and pixel dimensions.
@@ -60,7 +60,13 @@ ffmpeg runs as a separate program with an argument list, no shell, and a time li
 
 ### Speech to text
 
-`audio_transcribe` decodes the file with ffmpeg (16 kHz mono, at most `maxTranscribeSeconds`) and runs Whisper through [transformers.js](https://github.com/huggingface/transformers.js) (Apache-2.0) on ONNX Runtime (MIT), on the CPU, so it does not compete with a local LLM for the GPU. The audio never leaves the server. The model (default `onnx-community/whisper-small`, Whisper weights MIT) downloads once from `modelHost` into `modelCacheDir`; in mainland China set `modelHost: https://hf-mirror.com/`. The model gets the timestamped transcript (up to 20 000 characters) and the full text is saved as an `.srt` file.
+`audio_transcribe` decodes the file with ffmpeg (16 kHz mono, at most `maxTranscribeSeconds`) and recognizes it with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) on the CPU, so it does not compete with a local LLM for the GPU. The audio never leaves the server.
+
+- **Who speaks when.** Speaker diarization (pyannote segmentation 3.0, MIT, plus a 3D-Speaker ERes2Net voiceprint, Apache-2.0) splits the recording into turns, labelled Speaker 1, 2, … when more than one person talks. `speakers: false` skips it and cuts the audio by voice activity (Silero VAD, MIT) instead, which is several times faster.
+- **What is said.** [SenseVoice Small](https://github.com/FunAudioLLM/SenseVoice) (code MIT; weights under the FunASR model license, which asks for attribution) reads Chinese, Cantonese, English, Japanese and Korean with punctuation, and also hears how the speaker sounds (happy, sad, angry, …) and sounds such as laughter, applause, coughing or music. About 0.15× real time on 4 cores.
+- **Other languages.** A `language` SenseVoice does not read (for example `fr`) goes to Whisper large-v3-turbo (MIT, about 540 MB); `speechModel: whisper-turbo` uses Whisper for everything.
+
+The models (SenseVoice about 155 MB, the speaker models about 45 MB) download once from the sherpa-onnx releases on GitHub (`modelMirror`) into `modelCacheDir`, are checked against their SHA-256 and unpacked in JavaScript, so the server needs no tar or bzip2. The model gets the timestamped transcript (up to 20 000 characters) and the full text is saved as an `.srt` file.
 
 ### Video understanding
 
@@ -92,7 +98,7 @@ Text is drawn with the host's fonts (fontconfig). For Chinese or Japanese text, 
 
 ## Config
 
-See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxHtmlBytes`, `fontFiles`, `lang`, `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelHost`, `modelCacheDir`, `maxTranscribeSeconds`, `soundfont`, `soundfontUrl`.
+See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxHtmlBytes`, `fontFiles`, `lang`, `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelMirror`, `speechThreads`, `modelCacheDir`, `maxTranscribeSeconds`, `soundfont`, `soundfontUrl`.
 
 ## License
 

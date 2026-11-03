@@ -125,7 +125,7 @@ test('music: WAV is 16-bit PCM, mono or stereo, with a correct header', () => {
 test('music: the default SoundFont downloads once, is checked, and a local file needs no download', async () => {
   const cacheDir = mkdtempSync(join(tmpdir(), 'pack-media-sf-'))
   const settings = { url: 'https://mirror.example/FluidR3Mono_GM.sf3', cacheDir }
-  await assert.rejects(loadSoundFont(settings, async () => Buffer.from('not the file')), /does not match the expected file/)
+  await assert.rejects(loadSoundFont(settings, async () => Buffer.from('not the file')), /not the expected one/)
   await assert.rejects(loadSoundFont(settings, async () => { throw new Error('offline') }), /Could not download the SoundFont from https:\/\/mirror\.example.* \(offline\)\. Set soundfontUrl/)
   const cached = join(cacheDir, 'soundfonts', 'FluidR3Mono_GM.sf3')
   assert.ok(!existsSync(cached), 'nothing half-written is kept')

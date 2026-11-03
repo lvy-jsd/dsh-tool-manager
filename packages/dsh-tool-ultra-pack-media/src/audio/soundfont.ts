@@ -4,9 +4,9 @@
  * it is; otherwise the default (FluidR3 Mono GM, MIT licence, about 24 MB)
  * downloads once into the model cache and is checked against its SHA-256.
  */
-import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import { download, fetchVerified, writeAtomically, type Download } from '../download.js'
 
 export const DEFAULT_SOUNDFONT = {
   url: 'https://raw.githubusercontent.com/musescore/MuseScore/3.x/share/sound/FluidR3Mono_GM.sf3',
@@ -28,26 +28,11 @@ export interface SoundFont {
   title: string
 }
 
-export type Download = (url: string) => Promise<Buffer>
-
-export const download: Download = async (url) => {
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  const length = Number(response.headers.get('content-length') ?? 0)
-  if (length > MAX_DOWNLOAD_BYTES) throw new Error(`the file is ${length} bytes, over the ${MAX_DOWNLOAD_BYTES}-byte limit`)
-  return Buffer.from(await response.arrayBuffer())
-}
-
-const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
-
 async function fetchAndCache(settings: SoundFontSettings, path: string, fetchBytes: Download): Promise<Buffer> {
-  const bytes = await fetchBytes(settings.url).catch((error) => {
+  const bytes = await fetchVerified(settings.url, DEFAULT_SOUNDFONT.sha256, MAX_DOWNLOAD_BYTES, fetchBytes).catch((error) => {
     throw new Error(`Could not download the SoundFont from ${settings.url} (${error.message}). Set soundfontUrl to a mirror, or soundfont to a local .sf2/.sf3 file.`)
   })
-  if (sha256(bytes) !== DEFAULT_SOUNDFONT.sha256) throw new Error(`The SoundFont downloaded from ${settings.url} does not match the expected file.`)
-  await mkdir(join(path, '..'), { recursive: true })
-  await writeFile(`${path}.part`, bytes)
-  await rename(`${path}.part`, path)
+  await writeAtomically(path, bytes)
   return bytes
 }
 

@@ -71,7 +71,7 @@ test('video_understand: reports facts, saves a storyboard and adds the transcrip
   assert.match(board, /trip-\d{8}T\d{6}Z\.jpg$/)
   const meta = await sharp(board).metadata()
   assert.deepEqual([meta.width, meta.height], [1280, 360])
-  assert.match(result, /Speech \(local Whisper, 1 segments\):\n\[00:01-00:03\] 大家好$/)
+  assert.match(result, /Speech \(SenseVoice Small \(FunAudioLLM\), one speaker, 1 segments\):\n\[00:01-00:03\] 大家好$/)
   assert.deepEqual(calls, ['ffprobe', 'ffmpeg', 'ffmpeg'])
 })
 

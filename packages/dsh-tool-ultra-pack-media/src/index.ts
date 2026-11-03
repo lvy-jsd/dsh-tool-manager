@@ -6,7 +6,7 @@
  * - chart_render: a Vega-Lite chart spec with inline data → PNG/JPEG/WebP.
  * - music_render: a score in a simple note notation → MIDI + a mastered WAV played with a SoundFont.
  * - video_render: HTML (CSS-animated), SVG or photo scenes with transitions, captions and a soundtrack → MP4 (host ffmpeg).
- * - audio_transcribe: speech in an audio or video file → timestamped text + SRT (local Whisper).
+ * - audio_transcribe: speech in an audio or video file → timestamped text with speakers, emotions and sounds + SRT (local SenseVoice / Whisper).
  * - video_understand: a video's facts, a timestamped storyboard image and its transcript.
  *
  * The model writes the HTML, SVG, chart spec, score or scene list; this pack renders
@@ -17,6 +17,7 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createHtmlRenderer } from './html/render.js'
 import { resolveSettings, type Config, type ToolSpec } from './settings.js'
+import { createSpeechEngine } from './speech/engine.js'
 import { htmlTool } from './tools/html.js'
 import { imageTools } from './tools/image.js'
 import { musicTool } from './tools/music.js'
@@ -54,6 +55,12 @@ export { parseProbe, probeArgs } from './video/probe.js'
 export { buildStoryboard, extractArgs, frameTimes } from './video/storyboard.js'
 export { decodeArgs } from './speech/decode.js'
 export { clock, shortTime, timestampedText, toSrt } from './speech/transcript.js'
+export { createSpeechEngine, modelTitle } from './speech/engine.js'
+export { ensureModel, MODELS, MODEL_RELEASES } from './speech/models.js'
+export { untar } from './speech/archive.js'
+export { extrasOf, modelFor, recognizerConfig } from './speech/recognize.js'
+export { numberSpeakers, tidyPieces } from './speech/segments.js'
+export { onceUntilFailure } from './once.js'
 
 export const name = 'tool-ultra-pack-media'
 export const inject = ['tools']
@@ -68,7 +75,11 @@ const TEXT_OUTPUT = {
 export function createTools(config: Config = {}): ToolSpec[] {
   const settings = resolveSettings(config)
   const renderer = createHtmlRenderer(settings.html)
-  return [htmlTool(settings, renderer), ...imageTools(settings), musicTool(settings), videoTool(settings, { renderer }), transcribeTool(settings), understandTool(settings)]
+  const speech = { transcriber: createSpeechEngine(settings.speech) }
+  return [
+    htmlTool(settings, renderer), ...imageTools(settings), musicTool(settings), videoTool(settings, { renderer }),
+    transcribeTool(settings, speech), understandTool(settings, speech),
+  ]
 }
 
 function registerPack(ctx: any, tools: string[]) {
@@ -78,7 +89,7 @@ function registerPack(ctx: any, tools: string[]) {
     c.effect(() => c.toolCatalog.registerToolPack({
       id: 'media',
       title: 'Media',
-      summary: 'Images, music and video made from code, and local understanding: HTML/CSS designs, SVG and charts as images, CSS animations as GIFs, scores as MIDI/WAV, SVG scenes as MP4; recordings as text, videos as storyboards. No API keys.',
+      summary: 'Images, music and video made from code, and local understanding: HTML/CSS designs, SVG and charts as images, CSS animations as GIFs, scores as MIDI/WAV, SVG scenes as MP4; recordings as text with speakers and emotions, videos as storyboards. No API keys.',
       source: '@lvy-jsd/dsh-tool-ultra-pack-media',
       tools,
     }))

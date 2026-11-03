@@ -6,6 +6,7 @@ import { renderMidi } from '../audio/sampler.js'
 import { INSTRUMENTS, parseScore } from '../audio/score.js'
 import { loadSoundFont, type SoundFont } from '../audio/soundfont.js'
 import { renderScore } from '../audio/synth.js'
+import { onceUntilFailure } from '../once.js'
 import { safeBaseName, saveFile } from '../output.js'
 import { NAME_PARAMETER, type Settings, type ToolSpec } from '../settings.js'
 
@@ -26,17 +27,8 @@ export interface MusicDeps {
   soundFont?: () => Promise<SoundFont>
 }
 
-/** Loads the SoundFont once; a failure is not remembered, so the next call tries again. */
-function soundFontOnce(load: () => Promise<SoundFont>): () => Promise<SoundFont> {
-  let pending: Promise<SoundFont> | undefined
-  return () => (pending ??= load().catch((error) => {
-    pending = undefined
-    throw error
-  }))
-}
-
 export function musicTool(settings: Settings, deps: MusicDeps = {}): ToolSpec {
-  const soundFont = soundFontOnce(deps.soundFont ?? (() => loadSoundFont(settings.soundFont)))
+  const soundFont = onceUntilFailure(deps.soundFont ?? (() => loadSoundFont(settings.soundFont)))
 
   /** Real instruments from the SoundFont, or the built-in synth with the reason it stood in. */
   async function perform(midi: Buffer, score: ReturnType<typeof parseScore>): Promise<{ audio: Audio; source: string }> {
