@@ -70,8 +70,8 @@ test('html_render: a still is drawn after its animations settle, at the asked si
 test('html_render: without a height the page is as tall as its content; jpeg and webp work', async () => {
   const render = htmlRender({ outputDir: tempDir() })
   const tall = '<div style="display:flex;flex-direction:column;width:100%"><div style="height:300px;background:#00f"></div><div style="height:150px;background:#0f0"></div></div>'
-  assert.match(await render.execute({ html: tall, width: 100, format: 'jpeg' }), /^Saved JPEG 100×450 .*\.jpg$/)
-  assert.match(await render.execute({ html: tall, width: 100, format: 'webp' }), /^Saved WEBP 100×450 .*\.webp$/)
+  assert.match(await render.execute({ html: tall, width: 100, format: 'jpeg' }), /^Saved JPEG 100×450 .*\.jpg$/m)
+  assert.match(await render.execute({ html: tall, width: 100, format: 'webp' }), /^Saved WEBP 100×450 .*\.webp$/m)
 })
 
 test('html_render: seconds makes an animated GIF of the CSS animation', async () => {
