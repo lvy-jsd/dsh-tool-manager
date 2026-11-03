@@ -51,7 +51,7 @@ export function imageTools(settings: Settings): ToolSpec[] {
       description: 'Draw a chart (bar, line, pie, scatter, area, heatmap...) from a Vega-Lite spec and save it as an image file. '
         + 'Put the data inline in data.values; loading data from URLs or files is not allowed.',
       parameters: {
-        spec: { type: 'object', required: true, description: 'Vega-Lite JSON spec, e.g. {"data":{"values":[...]},"mark":"bar","encoding":{...}}.' },
+        spec: { type: 'object', additionalProperties: true, required: true, description: 'Vega-Lite JSON spec, e.g. {"data":{"values":[...]},"mark":"bar","encoding":{...}}.' },
         ...IMAGE_PARAMETERS,
       },
       execute: async (args) => renderAndSave(await chartToSvg(args.spec), args, 'chart'),

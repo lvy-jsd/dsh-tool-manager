@@ -33,6 +33,13 @@ test('media: tools match the package.json catalog; disable and pack registration
   assert.deepEqual(packs[0].tools, ['svg_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'])
 })
 
+test('media: every tool registers with the real host defineTool under the default config', () => {
+  // defineTool rejects schemas the host cannot use (e.g. an object without explicit additionalProperties).
+  const registered = []
+  apply({ tools: { register: (definition) => registered.push(definition.name) } })
+  assert.deepEqual(registered, [...TOOL_NAMES])
+})
+
 test('media: checkSvg allows #id links and inline images', () => {
   const ok = [
     SVG,
