@@ -1,7 +1,7 @@
 {
   "name": "@lvy-jsd/dsh-tool-ultra-pack-media",
   "version": "0.5.0",
-  "description": "Tool Ultra media pack: images made from code. SVG drawings and Vega-Lite charts rendered locally to PNG, JPEG or WebP. No model API, no API keys.",
+  "description": "Tool Ultra media pack: images and music made from code. SVG drawings and Vega-Lite charts rendered to PNG, JPEG or WebP; short scores rendered to MIDI and WAV. No model API, no API keys.",
   "license": "Apache-2.0",
   "author": "lvy-jsd",
   "type": "module",
@@ -37,7 +37,9 @@
     "svg",
     "chart",
     "vega-lite",
-    "image"
+    "image",
+    "music",
+    "midi"
   ],
   "dependencies": {
     "sharp": "^0.35.5",
@@ -61,6 +63,11 @@
         },
         "chart_render": {
           "group": "image",
+          "category": "media",
+          "risk": "low"
+        },
+        "music_render": {
+          "group": "audio",
           "category": "media",
           "risk": "low"
         }
