@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
-import { buildStoryboard, extractArgs, frameTimes, parseProbe, probeArgs, resolveSettings, shortTime, understandTool } from '../../packages/dsh-tool-ultra-pack-media/lib/index.js'
+import { buildStoryboard, cutArgs, extractArgs, parseCuts, parseProbe, planFrames, probeArgs, resolveSettings, shortTime, understandTool } from '../../packages/dsh-tool-ultra-pack-media/lib/index.js'
 
 const tempDir = () => mkdtempSync(join(tmpdir(), 'pack-media-understand-'))
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0
@@ -24,12 +24,21 @@ test('understand: ffprobe output becomes length, picture and sound facts', () =>
   assert.deepEqual(probeArgs('/v.mp4').slice(-3), ['-of', 'json', '/v.mp4'])
 })
 
-test('understand: frames are sampled evenly and labelled readably', () => {
-  assert.deepEqual(frameTimes(12, 4), [0, 3, 6, 9])
-  assert.deepEqual(extractArgs('/in/v.mp4', '/t', 12, 192.5).slice(5), [
-    '-i', '/in/v.mp4', '-an', '-vf', 'fps=12/192.5,scale=320:180:force_original_aspect_ratio=decrease', '-frames:v', '12', join('/t', 'frame-%02d.jpg'),
-  ])
+test('understand: cuts are read from ffmpeg and frames follow the shots', () => {
+  assert.match(cutArgs('/in/v.mp4').join(' '), /-i \/in\/v\.mp4 -an -vf scale=160:-2,select='gt\(scene,0\.1\)',metadata=print:file=- -f null -$/)
+  const printed = 'frame:0    pts:61440   pts_time:4\nlavfi.scene_score=0.145947\nframe:1    pts:184320  pts_time:12\nlavfi.scene_score=0.637569\n'
+  assert.deepEqual(parseCuts(printed), [{ time: 4, score: 0.145947 }, { time: 12, score: 0.637569 }])
+  assert.deepEqual(planFrames(12, [], 4), { times: [1.5, 4.5, 7.5, 10.5], cuts: [] })
+  assert.deepEqual(planFrames(16, parseCuts(printed), 4), { times: [2, 6, 10, 14], cuts: [4, 12] })
+  const many = [{ time: 2, score: 0.2 }, { time: 4, score: 0.9 }, { time: 6, score: 0.5 }, { time: 8, score: 0.4 }]
+  assert.deepEqual(planFrames(10, many, 3).cuts, [4, 6], 'only the strongest cuts when shots outnumber frames')
   assert.deepEqual([shortTime(2.25, 10), shortTime(75, 192)], ['2.3 s', '01:15'])
+})
+
+test('understand: ffmpeg takes the first frame at or after each planned time', () => {
+  const args = extractArgs('/in/v.mp4', '/t', [1.5, 4.25])
+  assert.equal(args[args.indexOf('-vf') + 1], "select='gte(t,1.500)*(isnan(prev_t)+lt(prev_t,1.500))+gte(t,4.250)*(isnan(prev_t)+lt(prev_t,4.250))',scale=320:180:force_original_aspect_ratio=decrease")
+  assert.deepEqual(args.slice(-5), ['-fps_mode', 'vfr', '-frames:v', '2', join('/t', 'frame-%02d.jpg')])
 })
 
 test('understand: the storyboard is a grid four frames wide', async () => {
@@ -49,6 +58,7 @@ function fakeMedia(probe, calls = []) {
     calls.push(file)
     if (file === 'ffprobe') return probe
     const out = args.at(-1)
+    if (out === '-') return 'frame:0 pts:1 pts_time:100\nlavfi.scene_score=0.5\n'
     if (out.endsWith('frame-%02d.jpg')) {
       const count = Number(args[args.indexOf('-frames:v') + 1])
       for (let i = 1; i <= count; i++) writeFileSync(out.replace('%02d', String(i).padStart(2, '0')), await frame('#336'))
@@ -67,12 +77,13 @@ test('video_understand: reports facts, saves a storyboard and adds the transcrip
   const tool = understandTool(resolveSettings({ outputDir: out }), { run: fakeMedia(PROBE, calls), transcriber })
   const result = await tool.execute({ file: 'clip.mp4', frames: 8, name: 'trip' })
   assert.match(result, /^File .*clip\.mp4: 03:12 long, 1920×1080, 29\.97 fps, with sound\./)
-  const [, board] = /Storyboard \(8 frames, one every 00:24, .*\): (.+\.jpg)\n/.exec(result)
+  assert.match(result, /\n2 shots; the scene changes at 01:40\.\nStoryboard/)
+  const [, board] = /Storyboard \(8 frames, at least one per shot, .*\): (.+\.jpg)\n/.exec(result)
   assert.match(board, /trip-\d{8}T\d{6}Z\.jpg$/)
   const meta = await sharp(board).metadata()
   assert.deepEqual([meta.width, meta.height], [1280, 360])
   assert.match(result, /Speech \(SenseVoice Small \(FunAudioLLM\), one speaker, 1 segments\):\n\[00:01-00:03\] 大家好$/)
-  assert.deepEqual(calls, ['ffprobe', 'ffmpeg', 'ffmpeg'])
+  assert.deepEqual(calls, ['ffprobe', 'ffmpeg', 'ffmpeg', 'ffmpeg'])
 })
 
 test('video_understand: audio-only files, skipped transcripts and bad frame counts', async () => {
