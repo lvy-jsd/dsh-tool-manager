@@ -7,6 +7,12 @@
         disable: []
         # Folder that receives every generated file. Unset: ~/dsh-creations.
         # outputDir: /srv/swiftnest/creations
+        # Largest HTML page html_render accepts, in bytes.
+        maxHtmlBytes: 2000000
+        # Font files html_render loads before the host's own (found with fontconfig).
+        fontFiles: []
+        # Default page language; zh-CN picks Simplified Chinese glyphs.
+        lang: zh-CN
         # Largest SVG source accepted, in bytes.
         maxSvgBytes: 2000000
         # Largest output image, in pixels (width x height): 4096 x 4096.

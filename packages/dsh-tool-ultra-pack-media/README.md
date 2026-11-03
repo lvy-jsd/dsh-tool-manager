@@ -1,9 +1,10 @@
 # @lvy-jsd/dsh-tool-ultra-pack-media
 
-Images, music and video made from code, and local speech-to-text, for [Tool Ultra](https://github.com/lvy-jsd/dsh-tool-ultra). The model writes an SVG drawing, a chart spec, a short score or a list of scenes, and this pack renders it on the DSH host. Recordings and videos are understood on the host too. No model API, no API keys, nothing fetched.
+Images, music and video made from code, and local speech-to-text, for [Tool Ultra](https://github.com/lvy-jsd/dsh-tool-ultra). The model writes an HTML/CSS page, an SVG drawing, a chart spec, a short score or a list of scenes, and this pack renders it on the DSH host. Recordings and videos are understood on the host too. No model API, no API keys, nothing fetched.
 
 | Tool | Group / category | What it does |
 | --- | --- | --- |
+| `html_render` | image / media | Design an image in HTML and CSS (poster, social card, slide, infographic, certificate) and save it as PNG, JPEG or WebP, or save its CSS animations as an animated GIF or WebP (`seconds`). Flexbox, grid, gradients, gradient text, shadows, filters, blend modes; Chinese and emoji fonts from the host. |
 | `svg_render` | image / media | Render an SVG document (poster, greeting card, icon, diagram, infographic) to PNG, JPEG or WebP. `width` scales it sharply; `name` is a file name hint. |
 | `chart_render` | image / media | Draw a [Vega-Lite](https://vega.github.io/vega-lite/) chart (bar, line, pie, scatter, area, heatmap, ...) with inline data and save it as an image. A single-view chart without a size gets 480×300. |
 | `music_render` | audio / media | Compose a short piece from notes and save it as a MIDI file (plays with real instrument sounds on phones and computers) and a WAV file (built-in synthesizer). Instruments: piano, chip, flute, strings, bass, drums. |
@@ -12,6 +13,19 @@ Images, music and video made from code, and local speech-to-text, for [Tool Ultr
 | `video_understand` | video / media | Understand a video: its length, size and frame rate, a storyboard image of 4-16 evenly spaced frames labelled with their times, and a timestamped transcript of the speech. Nothing is uploaded. Needs ffmpeg and ffprobe on the host. |
 
 Load the pack with `tools_load(["pack:media"])`. Each call returns the saved file's path, size and pixel dimensions.
+
+### HTML designs
+
+`html_render` draws the page with [Takumi](https://github.com/kane50613/takumi) (Rust, MIT OR Apache-2.0), a layout and paint engine for HTML and CSS that needs no browser: no Chromium download, no scripts, nothing fetched. It supports flexbox and grid, gradients (including `background-clip: text`), box and text shadows, `filter`, blend modes, `border-radius`, transforms and CSS `@keyframes`.
+
+```json
+{ "width": 1080, "height": 1350, "scale": 2, "name": "poster",
+  "html": "<style>.root{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#7c3aed)} h1{font-size:120px;color:#fff}</style><div class=\"root\"><h1>你好 👋</h1></div>" }
+```
+
+A still shows the design after its animations finish. With `seconds` (0.5-10), the first seconds of the animations become an animated GIF (default) or WebP at 20 frames per second. `width` and `height` are CSS pixels (default 1080 wide, as tall as the content); `scale` 2 or 3 draws them sharper. Pictures are inline `data:image/...` or `.png`/`.jpg`/`.webp`/`.gif` files from the output folder by name (a chart from `chart_render`, a photo) or by absolute path inside `inputDirs`.
+
+Fonts come from the host through fontconfig (`fc-match`): Chinese sans and serif (regular and bold), monospace and colour emoji, plus any `fontFiles`. `lang` (default `zh-CN`) picks regional glyphs. Rotations interpolate as matrices, so a full spin needs keyframes under 180° apart.
 
 ### Note notation
 
@@ -47,18 +61,19 @@ Music needs no dependency: the MIDI encoder and the synthesizer are plain TypeSc
 
 ## Safety
 
+- **HTML allowlist.** `<script>`, `<iframe>`, `<object>`, `<embed>`, `<link>`, `<meta>`, `<base>`, forms, `@import` and `@font-face` are refused with a reason. Links may only be `#id`, inline base64 images, or picture files that resolve (after links) inside the output folder or `inputDirs`; those files are read by the pack and handed to the renderer, which itself never touches the network or the disk.
 - **SVG allowlist.** An SVG may link only to its own elements (`#id`) or to inline `data:image/png|jpeg|gif|webp;base64,` images. Any other `href`, `xlink:href`, `src` or CSS `url(...)`, plus `@import`, DTDs and entities, `<script>`, `<foreignObject>` and `<iframe>`, are refused before the renderer sees the file.
 - **Charts are offline.** A spec with a `url` key anywhere is refused, the Vega loader refuses every request as a second guard, and expressions run in Vega's interpreter, not generated JavaScript. Render errors fail the call instead of saving an empty chart.
 - **One output folder.** The model never chooses a path: files go into `outputDir` under a cleaned-up name plus a UTC timestamp, and an existing file is never overwritten. A video's soundtrack must be a bare file name that resolves (after links) inside that folder, and files to transcribe or understand must resolve inside it or one of `inputDirs`.
-- **Size limits.** `maxSvgBytes` caps the SVG source, `maxPixels` the output image, `maxMusicSeconds` / `maxMusicNotes` the length of a piece, and `maxVideoSeconds` a video (at most 60 scenes and 1920×1080).
+- **Size limits.** `maxHtmlBytes` caps an HTML page (and 25 MB each picture it shows), `maxSvgBytes` the SVG source, `maxPixels` the output image, `maxMusicSeconds` / `maxMusicNotes` the length of a piece, and `maxVideoSeconds` a video (at most 60 scenes and 1920×1080).
 
 ## Fonts
 
-Text is drawn with the host's fonts (fontconfig). For Chinese or Japanese text, install a CJK font on the server, for example `fonts-noto-cjk` on Debian/Ubuntu.
+Text is drawn with the host's fonts (fontconfig). For Chinese or Japanese text, install a CJK font on the server, for example `fonts-noto-cjk` (and `fonts-noto-color-emoji` for emoji) on Debian/Ubuntu, or `noto-fonts-cjk-sans` on NixOS. Without fontconfig (Windows, macOS without it), list font files in `fontFiles`.
 
 ## Config
 
-See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelHost`, `modelCacheDir`, `maxTranscribeSeconds`.
+See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxHtmlBytes`, `fontFiles`, `lang`, `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelHost`, `modelCacheDir`, `maxTranscribeSeconds`.
 
 ## License
 

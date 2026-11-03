@@ -28,9 +28,9 @@ test('media: tools match the package.json catalog; disable and pack registration
     inject: (_deps, fn) => fn({ toolCatalog: { registerToolPack: (p) => packs.push(p) }, effect: (f) => f() }),
   }
   apply(ctx, { disable: ['chart_render'] })
-  assert.deepEqual(registered, ['svg_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'])
+  assert.deepEqual(registered, ['html_render', 'svg_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'])
   assert.equal(packs[0].id, 'media')
-  assert.deepEqual(packs[0].tools, ['svg_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'])
+  assert.deepEqual(packs[0].tools, ['html_render', 'svg_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'])
 })
 
 test('media: every tool registers with the real host defineTool under the default config', () => {

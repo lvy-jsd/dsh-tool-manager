@@ -2,6 +2,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { ScoreLimits } from './audio/score.js'
+import type { HtmlSettings } from './html/render.js'
 import { DEFAULT_OUTPUT_DIR } from './output.js'
 import type { WhisperConfig } from './speech/whisper.js'
 import type { RasterLimits } from './svg.js'
@@ -18,6 +19,12 @@ export interface Config {
   maxSvgBytes?: number
   /** Largest output image, in pixels (width × height). */
   maxPixels?: number
+  /** Largest HTML page html_render accepts, in bytes. */
+  maxHtmlBytes?: number
+  /** Font files html_render loads before the host's own fonts (found with fontconfig). */
+  fontFiles?: string[]
+  /** Default page language for html_render; picks regional glyphs, e.g. Simplified Chinese for zh-CN. */
+  lang?: string
   /** Longest piece music_render accepts, in seconds. */
   maxMusicSeconds?: number
   /** Most notes music_render accepts in one piece. */
@@ -50,6 +57,7 @@ export interface Settings {
   outputDir: string
   inputDirs: string[]
   svgLimits: RasterLimits
+  html: HtmlSettings
   scoreLimits: ScoreLimits
   videoLimits: VideoLimits
   ffmpegPath: string
@@ -75,11 +83,23 @@ function speechSettings(config: Config): SpeechSettings {
   }
 }
 
-export function resolveSettings(config: Config): Settings {
+function htmlSettings(config: Config, folders: { outputDir: string; inputDirs: string[] }): HtmlSettings {
   return {
-    outputDir: config.outputDir ?? DEFAULT_OUTPUT_DIR,
-    inputDirs: config.inputDirs ?? [],
+    maxHtmlBytes: config.maxHtmlBytes ?? 2_000_000,
+    maxImageBytes: 25_000_000,
+    maxPixels: config.maxPixels ?? 4096 * 4096,
+    fontFiles: config.fontFiles ?? [],
+    lang: config.lang ?? 'zh-CN',
+    folders,
+  }
+}
+
+export function resolveSettings(config: Config): Settings {
+  const folders = { outputDir: config.outputDir ?? DEFAULT_OUTPUT_DIR, inputDirs: config.inputDirs ?? [] }
+  return {
+    ...folders,
     svgLimits: { maxSvgBytes: config.maxSvgBytes ?? 2_000_000, maxPixels: config.maxPixels ?? 4096 * 4096 },
+    html: htmlSettings(config, folders),
     scoreLimits: { maxSeconds: config.maxMusicSeconds ?? 300, maxEvents: config.maxMusicNotes ?? 5000 },
     videoLimits: { maxSeconds: config.maxVideoSeconds ?? 180, maxScenes: 60, maxPixels: 1920 * 1080 },
     ffmpegPath: config.ffmpegPath ?? 'ffmpeg',
