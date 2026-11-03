@@ -17,7 +17,7 @@ import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
 import { registerRouter } from './router/index.js'
-import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema, GroupNote, Group } from './types.js'
+import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema, GroupNote, Group, PendingCall } from './types.js'
 
 export type * from './types.js'
 export { buildCatalog, resolveTarget, toolsUnder, estimateTokens, summary, shortName, structuralGroup, DEFAULT_CATEGORIES, UNCATEGORIZED, MISC_GROUP, OVERRIDE_PRIORITY } from './catalog.js'
@@ -323,13 +323,23 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
 
   // Rescue a direct call of a hidden tool (see rescueHiddenCall). Runs before
   // dispatch resolves the name, so loading here makes the call succeed.
-  ctx.effect(() => ctx.on('tools/pre-execute', async (exec: { agent?: Agent, name: string } | undefined, next: () => unknown) => {
+  ctx.effect(() => ctx.on('tools/pre-execute', async (exec: PendingCall | undefined, next: () => unknown) => {
     const agent = exec?.agent
     if (!agent || pinnedSet().has(exec!.name) || ENTRY_TOOLS.includes(exec!.name)) return next()
-    const refusal = await rescueHiddenCall(agent, exec!.name)
+    const refusal = await rescueHiddenCall(agent, exec!.name) ?? retryAfterRescue(exec!)
     if (refusal !== undefined) return { kind: 'deny', reason: refusal }
     return next()
   }), 'tool-manager.rescue-hidden-call()')
+
+  // DSH 0.2.2+ fixes the callable tools when a step starts (`exec.toolSet`), so
+  // a tool loaded during the step only becomes callable from the next one.
+  // The set is read-only by contract: say so, rather than let the host report
+  // the tool as unknown. Older hosts resolve at dispatch and need nothing here.
+  function retryAfterRescue({ agent, name, toolSet }: PendingCall): string | undefined {
+    if (!toolSet || toolSet.view(agent).has(name)) return undefined
+    if (!visibility.stateOf(agent!).loaded.has(name) || deniedFor(agent).has(name)) return undefined
+    return `"${name}" was not loaded, so this call did not run. It is loaded now: call it again.`
+  }
 
   // --- the toolCatalog service ---------------------------------------------------
   const service = {

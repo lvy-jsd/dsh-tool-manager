@@ -80,7 +80,7 @@ function makeProfile(name, bundles, extraPatch = '') {
 - id: tool-manager
   name: '@lvy-jsd/dsh-tool-ultra-core'
   config:
-    pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens]
+    pinned: [testkit_reconnect, testkit_service_load, testkit_service_unload, testkit_wire_tokens, testkit_deny]
 ${extraPatch}`)
 }
 
@@ -98,6 +98,15 @@ makeProfile('preset', ['dsh-tool-ultra-core', 'dsh-tool-ultra-classifier-rules']
 - id: tm-testkit
   name: dsh-tm-testkit
   config: { simulatePresetLayer: true }
+`)
+
+// PTC mode. DSH 0.2.2+ selects the executor in the profile; DSH 0.2.1 reads
+// DSH_TOOLS_MODE (set by the run below) and ignores these rows.
+makeProfile('ptc', ['dsh-tool-ultra-core'], `
+- id: tool-executor-native
+  disabled: true
+- id: tool-executor-ptc
+  disabled: false
 `)
 
 makeProfile('persist', ['dsh-tool-ultra-core', 'dsh-tool-ultra-persist'])
@@ -253,9 +262,9 @@ check('deny: tools_load does not list the denied tool as callable', !/callable f
 // --- core profile in PTC mode: the model calls tools from run_code -----------
 // The host offers only run_code and declares the callable tools as an SDK in
 // the system prompt; that SDK comes from the same restricted view.
-console.log('# ptc (core profile, DSH_TOOLS_MODE=ptc)')
+console.log('# ptc profile')
 const code = (body) => call('run_code', { code: body, description: 'test step' })
-const pt = await run('core', 'core-ptc', [
+const pt = await run('ptc', 'core-ptc', [
   code("return await tools.tools_ls({ path: '/uncategorized' })"),        // 0
   code("return await tools.tools_load({ targets: ['/uncategorized/fake'] })"), // 1
   code("return await tools.mcp__fake__ping({ text: 'x' })"),               // 2
@@ -310,18 +319,23 @@ contains('exempt route: the directory is still available', ex[2].lastContent, 'u
 // The real incident: a plugin's prompt tells the model to call a tool that this
 // plugin hid. It must not fail with "unknown tool".
 console.log('# rescue profile')
+// DSH 0.2.2+ fixes a step's callable tools when the step starts, so there the
+// rescued call is refused with "call it again" and the retry (step 1) runs it.
 const resc = await run('core', 'rescue-main', [
   call('testkit_protocol_reply', { text: 'hello' }),           // 0 hidden, ordinary: auto-loads
-  call('adb_fake_two', {}),                                     // 1 hidden, declared high risk
-  call('testkit_protocol_reply', { text: 'again' }),            // 2 now loaded, still callable
-  call('no_such_tool_at_all', {}),                              // 3 genuinely unknown
-  { text: 'done' },                                             // 4
+  { ...call('testkit_protocol_reply', { text: 'hello' }), skipUnless: 'call it again' }, // 1 DSH 0.2.2+ retry
+  call('adb_fake_two', {}),                                     // 2 hidden, declared high risk
+  call('testkit_protocol_reply', { text: 'again' }),            // 3 now loaded, still callable
+  call('no_such_tool_at_all', {}),                              // 4 genuinely unknown
+  { text: 'done' },                                             // 5
 ], ['rescue'])
-contains('rescue: a hidden ordinary tool is auto-loaded and runs', resc[1].lastContent, 'protocol reply:hello')
-contains('rescue: a hidden high-risk tool gets the load instruction, not unknown', resc[2].lastContent, /adb_fake_two.*high risk.*tools_load/s)
-contains('rescue: the ordinary tool stays loaded for the next call', resc[3].lastContent, 'protocol reply:again')
-check('rescue: neither case reports an unknown tool', !/unknown tool/.test(resc[1].lastContent) && !/unknown tool/.test(resc[2].lastContent), `${resc[1].lastContent} | ${resc[2].lastContent}`)
-contains('rescue: a genuinely unknown tool still reports unknown', resc[4].lastContent, 'unknown tool')
+const retried = resc[1]?.lastContent
+contains('rescue: a hidden ordinary tool is auto-loaded and runs', resc[2].lastContent, 'protocol reply:hello')
+check('rescue: a refused first call names the tool and asks for a retry', retried === undefined || /testkit_protocol_reply.*call it again/.test(retried), retried)
+contains('rescue: a hidden high-risk tool gets the load instruction, not unknown', resc[3].lastContent, /adb_fake_two.*high risk.*tools_load/s)
+contains('rescue: the ordinary tool stays loaded for the next call', resc[4].lastContent, 'protocol reply:again')
+check('rescue: no rescued call reports an unknown tool', [retried, resc[2].lastContent, resc[3].lastContent].every((t) => !/unknown tool/.test(t ?? '')), `${retried} | ${resc[2].lastContent} | ${resc[3].lastContent}`)
+contains('rescue: a genuinely unknown tool still reports unknown', resc[5].lastContent, 'unknown tool')
 
 // --- cap profile: a capability pack loads as one target ------------------------
 console.log('# cap profile')

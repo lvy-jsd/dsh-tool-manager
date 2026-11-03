@@ -56,11 +56,40 @@ jobs:
 
       - run: npm run typecheck
 
-      # The e2e run (test/e2e.mjs) boots a full DSH and is not run here yet.
+      # The e2e run (test/e2e.mjs) boots a full DSH: see the e2e job.
       # On Linux the speech test also downloads a small Whisper model and transcribes a sample.
       - run: node --test test/unit/*.test.mjs
         env:
           MEDIA_SPEECH_E2E: ${{ runner.os == 'Linux' && '1' || '' }}
+
+  e2e:
+    name: e2e (dsh ${{ matrix.dsh }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The version Swiftnest pins, and the next one.
+        dsh: [0.2.1-rc.5, 0.2.2-alpha.3]
+    env:
+      DSH_APP: ${{ github.workspace }}/../dsh-app
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install DSH
+        run: |
+          mkdir -p "$DSH_APP"
+          cd "$DSH_APP"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund --ignore-scripts @deepseek-ai/dsh@${{ matrix.dsh }}
+
+      - run: npm install --no-audit --no-fund
+
+      # Boots a full DSH per scenario against a scripted fake model.
+      - run: node test/e2e.mjs "$DSH_APP/node_modules/.bin/dsh"
 
   sidecar:
     name: sidecar (cargo)

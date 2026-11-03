@@ -42,10 +42,14 @@ built-in rules and config overrides, or write your own classifier.
   `tools_ls`, and `tools_load` reports it as not callable instead of listing it
   (with one log warning per tool, pointing at connector governance rules and
   per-session injection).
-- DSH's PTC mode (`DSH_TOOLS_MODE=ptc`) works unchanged: the model gets only
+- DSH's PTC mode (`DSH_TOOLS_MODE=ptc` on DSH 0.2.1, the
+  `tool-executor-ptc` profile row from 0.2.2) works unchanged: the model gets only
   `run_code`, and the SDK the host declares for it is built from the same
   narrowed view, so loads show up there from the next step. `run_code` itself
   is a host transport and never enters the directory.
+- A direct call of a hidden ordinary tool loads it. On DSH 0.2.1 the call then
+  runs; DSH 0.2.2 fixes a step's callable tools when the step starts, so there
+  the call is refused with "it is loaded now: call it again" and the retry runs.
 - Every agent is restricted separately. A subagent starts from the pinned set
   plus whatever the parent loaded with `forSubagents: true`.
 - Loaded state is in memory. Install

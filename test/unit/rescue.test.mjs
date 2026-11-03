@@ -33,7 +33,11 @@ function coreHost(toolNames) {
   // a spawned sidecar child would keep the event loop alive past the test.
   apply(ctx, { sidecar: { bin: '/nonexistent' } })
   const catalog = services.toolCatalog
-  const preExecute = (name) => listeners.get('tools/pre-execute')[0]({ agent, name, arguments: {} }, async () => ({ kind: 'allow' }))
+  // `admitted` stands in for DSH 0.2.2's step tool set; omitted, the host is DSH 0.2.1.
+  const preExecute = (name, admitted) => {
+    const toolSet = admitted && { view: (scope) => new Set(scope === agent ? admitted : []) }
+    return listeners.get('tools/pre-execute')[0]({ agent, name, arguments: {}, toolSet }, async () => ({ kind: 'allow' }))
+  }
   return { ctx, on, agent, catalog, preExecute }
 }
 
@@ -62,4 +66,18 @@ test('rescue: a tool a visibility filter keeps out is refused and not left loade
   assert.equal(decision.kind, 'deny')
   assert.match(decision.reason, /not available in this session/)
   assert.equal(catalog.stateOf(agent).loaded.has('hidden_tool'), false)
+})
+
+test('rescue: with a step tool set, the loaded tool is refused for this step with a retry hint', async () => {
+  const { agent, catalog, preExecute } = coreHost(['hidden_tool'])
+  const decision = await preExecute('hidden_tool', [])
+  assert.equal(decision.kind, 'deny')
+  assert.match(decision.reason, /"hidden_tool" was not loaded.*call it again/)
+  assert.ok(catalog.stateOf(agent).loaded.has('hidden_tool'))
+})
+
+test('rescue: with a step tool set that admits the tool, the call proceeds', async () => {
+  const { preExecute } = coreHost(['hidden_tool'])
+  await preExecute('hidden_tool', [])
+  assert.deepEqual(await preExecute('hidden_tool', ['hidden_tool']), { kind: 'allow' })
 })

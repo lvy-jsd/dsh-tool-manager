@@ -219,6 +219,19 @@ export interface HostTools {
   }
 }
 
+/** The tools a step may call, fixed when the step starts (DSH 0.2.2+). */
+export interface StepToolSet {
+  view(agent: Agent | undefined): { has(name: string): boolean }
+}
+
+/** The part of a pending call (`tools/pre-execute`) this plugin reads. */
+export interface PendingCall {
+  agent?: Agent
+  name: string
+  /** Absent on hosts that resolve the tool at dispatch (DSH 0.2.1). */
+  toolSet?: StepToolSet
+}
+
 export interface LoaderEntry {
   options?: { name?: unknown, disabled?: boolean }
 }
