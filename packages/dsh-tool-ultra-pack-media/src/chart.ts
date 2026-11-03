@@ -33,9 +33,12 @@ export function findUrlKey(value: unknown, path = 'spec'): string | undefined {
   return undefined
 }
 
-/** Parses a Vega-Lite spec given as an object or a JSON string, and refuses external data. */
+/**
+ * Parses a Vega-Lite spec given as an object or a JSON string, and refuses external data.
+ * Returns a private copy: Vega tags data rows in place, and the host hands tools frozen arguments.
+ */
 export function parseSpec(spec: unknown): Record<string, unknown> {
-  const value = typeof spec === 'string' ? JSON.parse(spec) : spec
+  const value = typeof spec === 'string' ? JSON.parse(spec) : structuredClone(spec)
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('spec must be a Vega-Lite JSON object.')
   const urlPath = findUrlKey(value)
   if (urlPath) throw new Error(`Charts cannot load external data (${urlPath}): put the data inline in data.values.`)
