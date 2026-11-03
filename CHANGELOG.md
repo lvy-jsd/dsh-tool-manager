@@ -21,6 +21,7 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 
 ### Changed
 
+- Works with DSH 0.2.2 (tested on 0.2.2-alpha.3) as well as 0.2.1-rc.5. DSH 0.2.2 fixes a step's callable tools when the step starts, so a direct call of a hidden ordinary tool now loads it and asks the model to call it again, instead of running in the same step. CI runs the e2e suite against both DSH versions.
 - **License: Apache-2.0** from this release on. Releases up to 0.4.1 stay MIT.
 - The core also provides its service as `toolUltra`; `toolCatalog` stays.
 
