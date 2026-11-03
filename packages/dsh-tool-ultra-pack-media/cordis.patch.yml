@@ -20,6 +20,10 @@
         # Longest piece music_render accepts, in seconds, and most notes in one piece.
         maxMusicSeconds: 300
         maxMusicNotes: 5000
+        # A local SoundFont (.sf2/.sf3) for music_render. Empty: download the
+        # default (FluidR3 Mono GM, ~24 MB) once from soundfontUrl into modelCacheDir.
+        soundfont: ''
+        soundfontUrl: 'https://raw.githubusercontent.com/musescore/MuseScore/3.x/share/sound/FluidR3Mono_GM.sf3'
         # Longest video video_render makes, in seconds.
         maxVideoSeconds: 180
         # ffmpeg and ffprobe used by the video and speech tools, and how long

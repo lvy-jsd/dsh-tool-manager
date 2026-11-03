@@ -58,10 +58,12 @@ jobs:
       - run: npm run typecheck
 
       # The e2e run (test/e2e.mjs) boots a full DSH: see the e2e job.
-      # On Linux the speech test also downloads a small Whisper model and transcribes a sample.
+      # On Linux the speech test also downloads a small Whisper model and transcribes a sample,
+      # and the music test downloads the default SoundFont and plays real instruments.
       - run: node --test test/unit/*.test.mjs
         env:
           MEDIA_SPEECH_E2E: ${{ runner.os == 'Linux' && '1' || '' }}
+          MEDIA_SOUNDFONT_E2E: ${{ runner.os == 'Linux' && '1' || '' }}
 
   e2e:
     name: e2e (dsh ${{ matrix.dsh }})

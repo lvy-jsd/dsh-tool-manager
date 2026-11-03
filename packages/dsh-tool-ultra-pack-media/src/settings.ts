@@ -2,6 +2,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { ScoreLimits } from './audio/score.js'
+import { DEFAULT_SOUNDFONT, type SoundFontSettings } from './audio/soundfont.js'
 import type { HtmlSettings } from './html/render.js'
 import { DEFAULT_OUTPUT_DIR } from './output.js'
 import type { WhisperConfig } from './speech/whisper.js'
@@ -25,6 +26,10 @@ export interface Config {
   fontFiles?: string[]
   /** Default page language for html_render; picks regional glyphs, e.g. Simplified Chinese for zh-CN. */
   lang?: string
+  /** A local SoundFont (.sf2/.sf3) for music_render instead of the default download. */
+  soundfont?: string
+  /** Where the default SoundFont downloads from (a mirror of the same file also works). */
+  soundfontUrl?: string
   /** Longest piece music_render accepts, in seconds. */
   maxMusicSeconds?: number
   /** Most notes music_render accepts in one piece. */
@@ -41,7 +46,7 @@ export interface Config {
   speechModel?: string
   /** Where speech models download from; a mirror such as https://hf-mirror.com/ also works. */
   modelHost?: string
-  /** Where downloaded models are kept. */
+  /** Where downloaded models and the SoundFont are kept. */
   modelCacheDir?: string
   /** Longest stretch of audio transcribed per call, in seconds. */
   maxTranscribeSeconds?: number
@@ -59,6 +64,7 @@ export interface Settings {
   svgLimits: RasterLimits
   html: HtmlSettings
   scoreLimits: ScoreLimits
+  soundFont: SoundFontSettings
   videoLimits: VideoLimits
   ffmpegPath: string
   ffprobePath: string
@@ -73,11 +79,13 @@ export interface ToolSpec {
   execute(args: any): Promise<string>
 }
 
+const modelCacheDir = (config: Config) => config.modelCacheDir ?? join(homedir(), '.cache', 'dsh-tool-ultra', 'models')
+
 function speechSettings(config: Config): SpeechSettings {
   return {
     model: config.speechModel ?? 'onnx-community/whisper-small',
     modelHost: config.modelHost ?? 'https://huggingface.co/',
-    cacheDir: config.modelCacheDir ?? join(homedir(), '.cache', 'dsh-tool-ultra', 'models'),
+    cacheDir: modelCacheDir(config),
     maxSeconds: config.maxTranscribeSeconds ?? 1800,
     maxChars: 20_000,
   }
@@ -101,6 +109,7 @@ export function resolveSettings(config: Config): Settings {
     svgLimits: { maxSvgBytes: config.maxSvgBytes ?? 2_000_000, maxPixels: config.maxPixels ?? 4096 * 4096 },
     html: htmlSettings(config, folders),
     scoreLimits: { maxSeconds: config.maxMusicSeconds ?? 300, maxEvents: config.maxMusicNotes ?? 5000 },
+    soundFont: { file: config.soundfont, url: config.soundfontUrl ?? DEFAULT_SOUNDFONT.url, cacheDir: modelCacheDir(config) },
     videoLimits: { maxSeconds: config.maxVideoSeconds ?? 180, maxScenes: 60, maxPixels: 1920 * 1080 },
     ffmpegPath: config.ffmpegPath ?? 'ffmpeg',
     ffprobePath: config.ffprobePath ?? 'ffprobe',
