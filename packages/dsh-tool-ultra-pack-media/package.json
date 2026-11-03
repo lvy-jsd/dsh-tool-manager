@@ -1,7 +1,7 @@
 {
   "name": "@lvy-jsd/dsh-tool-ultra-pack-media",
   "version": "0.5.0",
-  "description": "Tool Ultra media pack: images, music and video made from code (SVG and Vega-Lite to PNG/JPEG/WebP, scores to MIDI/WAV, SVG scenes to MP4), and local understanding (Whisper speech-to-text, video storyboards). No model API, no API keys.",
+  "description": "Tool Ultra media pack: images, music and video made from code (HTML/CSS, SVG and Vega-Lite to PNG/JPEG/WebP and animated GIF/WebP, scores to MIDI/WAV, SVG scenes to MP4), and local understanding (Whisper speech-to-text, video storyboards). No model API, no API keys.",
   "license": "Apache-2.0",
   "author": "lvy-jsd",
   "type": "module",
@@ -34,6 +34,7 @@
     "deepseek-harness",
     "dsh-tool-ultra",
     "tools",
+    "html",
     "svg",
     "chart",
     "vega-lite",
@@ -47,6 +48,7 @@
   ],
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
+    "@takumi-rs/core": "^2.19.0",
     "sharp": "^0.35.5",
     "vega": "^6.4.0",
     "vega-interpreter": "^2.3.2",
@@ -61,6 +63,11 @@
     },
     "toolCatalog": {
       "tools": {
+        "html_render": {
+          "group": "image",
+          "category": "media",
+          "risk": "low"
+        },
         "svg_render": {
           "group": "image",
           "category": "media",

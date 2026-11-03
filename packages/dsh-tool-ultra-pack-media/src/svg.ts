@@ -8,6 +8,7 @@
  * sees it.
  */
 import sharp, { type Sharp } from 'sharp'
+import { findReferences, isSelfContained } from './references.js'
 
 export type ImageFormat = 'png' | 'jpeg' | 'webp'
 export const IMAGE_FORMATS: readonly ImageFormat[] = ['png', 'jpeg', 'webp']
@@ -38,23 +39,6 @@ const FORBIDDEN = [
   { pattern: /<(script|foreignObject|iframe)[\s>/]/i, reason: 'scripts and embedded documents are not allowed' },
   { pattern: /@import/i, reason: 'CSS @import is not allowed' },
 ]
-const REFERENCE = /\b(?:xlink:href|href|src)\s*=\s*(["'])([\s\S]*?)\1/gi
-const CSS_URL = /url\(\s*(["']?)([^"')]*)\1\s*\)/gi
-const INLINE_IMAGE = /^data:image\/(png|jpeg|gif|webp);base64,/i
-
-function isAllowedReference(value: string): boolean {
-  const v = value.trim()
-  return v.startsWith('#') || INLINE_IMAGE.test(v)
-}
-
-function firstBadReference(svg: string): string | undefined {
-  for (const pattern of [REFERENCE, CSS_URL]) {
-    for (const match of svg.matchAll(pattern)) {
-      if (!isAllowedReference(match[2])) return match[2]
-    }
-  }
-  return undefined
-}
 
 /** Throws with a readable reason when the SVG is not safe to render. */
 export function checkSvg(svg: string, maxBytes: number): void {
@@ -63,7 +47,7 @@ export function checkSvg(svg: string, maxBytes: number): void {
     if (pattern.test(svg)) throw new Error(`Refusing SVG: ${reason}.`)
   }
   if (!SVG_START.test(svg)) throw new Error('Not an SVG document: it must start with <svg>.')
-  const bad = firstBadReference(svg)
+  const bad = findReferences(svg).find((reference) => !isSelfContained(reference))
   if (bad !== undefined) {
     throw new Error(`Refusing SVG: it links to "${bad.slice(0, 80)}". Only #id links and inline data:image/... images are allowed.`)
   }

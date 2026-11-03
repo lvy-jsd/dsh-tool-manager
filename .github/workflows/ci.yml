@@ -42,10 +42,11 @@ jobs:
             @deepseek-ai/dsh-llm \
             @deepseek-ai/dsh-scope
 
-      # video_render's and audio_transcribe's real tests need ffmpeg; Linux runners always run them.
-      - name: Install ffmpeg
+      # The media pack's real tests need ffmpeg, and html_render's Chinese text test needs a CJK font;
+      # Linux runners always run them.
+      - name: Install ffmpeg and fonts
         if: runner.os == 'Linux'
-        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk fonts-noto-color-emoji
 
       - name: Build the Rust sidecar
         if: runner.os == 'Linux'

@@ -1,6 +1,7 @@
 /**
  * Tool Ultra media pack: images, music and video made from code, with no model API and no key.
  *
+ * - html_render: an HTML/CSS page (posters, cards, slides) → PNG/JPEG/WebP, or its CSS animations → GIF/WebP.
  * - svg_render: an SVG document (posters, cards, icons, diagrams) → PNG/JPEG/WebP.
  * - chart_render: a Vega-Lite chart spec with inline data → PNG/JPEG/WebP.
  * - music_render: a short score in a simple note notation → MIDI + WAV.
@@ -8,13 +9,14 @@
  * - audio_transcribe: speech in an audio or video file → timestamped text + SRT (local Whisper).
  * - video_understand: a video's facts, a timestamped storyboard image and its transcript.
  *
- * The model writes the SVG, chart spec, score or scene list; this pack renders
+ * The model writes the HTML, SVG, chart spec, score or scene list; this pack renders
  * it locally and saves the files into one configured folder. Nothing is
- * fetched: external links in an SVG and data URLs in a chart are refused, and
+ * fetched: external links in HTML or SVG and data URLs in a chart are refused, and
  * a video's soundtrack must already be in that folder.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { resolveSettings, type Config, type ToolSpec } from './settings.js'
+import { htmlTool } from './tools/html.js'
 import { imageTools } from './tools/image.js'
 import { musicTool } from './tools/music.js'
 import { transcribeTool } from './tools/transcribe.js'
@@ -24,6 +26,10 @@ import { videoTool } from './tools/video.js'
 export type { Config, ToolSpec } from './settings.js'
 export { resolveSettings } from './settings.js'
 export { checkSvg, rasterizeSvg } from './svg.js'
+export { checkHtml } from './html/check.js'
+export { chooseFonts } from './html/fonts.js'
+export { createHtmlRenderer } from './html/render.js'
+export { htmlTool } from './tools/html.js'
 export { chartToSvg } from './chart.js'
 export { safeBaseName, saveFile } from './output.js'
 export { parseScore, pitchToMidi } from './audio/score.js'
@@ -42,7 +48,7 @@ export { clock, shortTime, timestampedText, toSrt } from './speech/transcript.js
 export const name = 'tool-ultra-pack-media'
 export const inject = ['tools']
 
-export const TOOL_NAMES = ['svg_render', 'chart_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'] as const
+export const TOOL_NAMES = ['html_render', 'svg_render', 'chart_render', 'music_render', 'video_render', 'audio_transcribe', 'video_understand'] as const
 
 const TEXT_OUTPUT = {
   schema: { type: 'string' },
@@ -51,7 +57,7 @@ const TEXT_OUTPUT = {
 
 export function createTools(config: Config = {}): ToolSpec[] {
   const settings = resolveSettings(config)
-  return [...imageTools(settings), musicTool(settings), videoTool(settings), transcribeTool(settings), understandTool(settings)]
+  return [htmlTool(settings), ...imageTools(settings), musicTool(settings), videoTool(settings), transcribeTool(settings), understandTool(settings)]
 }
 
 function registerPack(ctx: any, tools: string[]) {
@@ -61,7 +67,7 @@ function registerPack(ctx: any, tools: string[]) {
     c.effect(() => c.toolCatalog.registerToolPack({
       id: 'media',
       title: 'Media',
-      summary: 'Images, music and video made from code, and local understanding: SVG and charts as images, scores as MIDI/WAV, SVG scenes as MP4; recordings as text, videos as storyboards. No API keys.',
+      summary: 'Images, music and video made from code, and local understanding: HTML/CSS designs, SVG and charts as images, CSS animations as GIFs, scores as MIDI/WAV, SVG scenes as MP4; recordings as text, videos as storyboards. No API keys.',
       source: '@lvy-jsd/dsh-tool-ultra-pack-media',
       tools,
     }))
