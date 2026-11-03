@@ -3,13 +3,16 @@
  * with real instrument sounds on phones and computers, so it is the
  * best-sounding output that needs no synthesizer on the server.
  */
-import type { Instrument, Score, Track } from './score.js'
+import { drumKey, programOf } from './instruments.js'
+import type { Score, Track } from './score.js'
 
 const TICKS_PER_BEAT = 480
 const DRUM_CHANNEL = 9
-/** General MIDI programs, and drum keys on channel 10. */
-const PROGRAMS: Record<Exclude<Instrument, 'drums'>, number> = { piano: 0, chip: 80, flute: 73, strings: 48, bass: 33 }
-const DRUM_KEYS = { K: 36, S: 38, H: 42 } as const
+const CONTROL = { pan: 10, reverb: 91 } as const
+/** A little room sound on every track, as a mix engineer would add. */
+const REVERB_LEVEL = 40
+/** Pan positions (0 left, 64 centre, 127 right) that spread tracks across the stereo field. */
+const PAN_SPREAD = [64, 44, 84, 34, 94, 54, 74, 24, 104]
 
 interface MidiEvent {
   tick: number
@@ -38,7 +41,7 @@ function noteEvents(track: Track, channel: number): MidiEvent[] {
   const velocity = Math.max(1, Math.round(track.volume * 127))
   const events: MidiEvent[] = []
   for (const note of track.events) {
-    const keys = note.drum ? [DRUM_KEYS[note.drum]] : note.pitches
+    const keys = note.drums ? note.drums.map(drumKey) : note.pitches
     const on = Math.round(note.start * TICKS_PER_BEAT)
     const off = Math.round((note.start + note.beats) * TICKS_PER_BEAT)
     for (const key of keys) {
@@ -50,9 +53,16 @@ function noteEvents(track: Track, channel: number): MidiEvent[] {
   return events.sort((a, b) => a.tick - b.tick || (a.bytes[0] & 0xf0) - (b.bytes[0] & 0xf0))
 }
 
-function trackBody(track: Track, channel: number): number[] {
-  const setup = track.instrument === 'drums' ? [] : [0, 0xc0 | channel, PROGRAMS[track.instrument]]
-  const body = [...setup]
+/** Program, pan and reverb at the start of a track; drums stay centred. */
+function trackSetup(track: Track, channel: number, index: number): number[] {
+  const reverb = [0, 0xb0 | channel, CONTROL.reverb, REVERB_LEVEL]
+  if (track.instrument === 'drums') return reverb
+  const pan = PAN_SPREAD[index % PAN_SPREAD.length]
+  return [0, 0xc0 | channel, programOf(track.instrument), 0, 0xb0 | channel, CONTROL.pan, pan, ...reverb]
+}
+
+function trackBody(track: Track, channel: number, index: number): number[] {
+  const body = trackSetup(track, channel, index)
   let last = 0
   for (const event of noteEvents(track, channel)) {
     body.push(...variableLength(event.tick - last), ...event.bytes)
@@ -69,6 +79,6 @@ function channelFor(track: Track, index: number): number {
 
 export function scoreToMidi(score: Score): Buffer {
   const header = [0, 1, 0, score.tracks.length + 1, TICKS_PER_BEAT >> 8, TICKS_PER_BEAT & 0xff]
-  const tracks = score.tracks.map((track, i) => chunk('MTrk', trackBody(track, channelFor(track, i))))
+  const tracks = score.tracks.map((track, i) => chunk('MTrk', trackBody(track, channelFor(track, i), i)))
   return Buffer.concat([chunk('MThd', header), chunk('MTrk', tempoTrack(score.tempo)), ...tracks])
 }

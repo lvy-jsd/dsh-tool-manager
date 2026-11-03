@@ -1,13 +1,17 @@
 # @lvy-jsd/dsh-tool-ultra-pack-media
 
-Images, music and video made from code, and local speech-to-text, for [Tool Ultra](https://github.com/lvy-jsd/dsh-tool-ultra). The model writes an HTML/CSS page, an SVG drawing, a chart spec, a short score or a list of scenes, and this pack renders it on the DSH host. Recordings and videos are understood on the host too. No model API, no API keys, nothing fetched.
+Images, music and video made from code, and local speech-to-text, for [Tool Ultra](https://github.com/lvy-jsd/dsh-tool-ultra). The model writes an HTML/CSS page, an SVG drawing, a chart spec, a short score or a list of scenes, and this pack renders it on the DSH host. Recordings and videos are understood on the host too. No model API and no API keys; the only downloads are a speech model and a SoundFont, each once, on first use.
 
 | Tool | Group / category | What it does |
 | --- | --- | --- |
 | `html_render` | image / media | Design an image in HTML and CSS (poster, social card, slide, infographic, certificate) and save it as PNG, JPEG or WebP, or save its CSS animations as an animated GIF or WebP (`seconds`). Flexbox, grid, gradients, gradient text, shadows, filters, blend modes; Chinese and emoji fonts from the host. |
 | `svg_render` | image / media | Render an SVG document (poster, greeting card, icon, diagram, infographic) to PNG, JPEG or WebP. `width` scales it sharply; `name` is a file name hint. |
 | `chart_render` | image / media | Draw a [Vega-Lite](https://vega.github.io/vega-lite/) chart (bar, line, pie, scatter, area, heatmap, ...) with inline data and save it as an image. A single-view chart without a size gets 480×300. |
+<<<<<<< HEAD
+| `music_render` | audio / media | Compose a piece from notes for up to 16 of 37 instruments plus a drum kit, and save a WAV played with real recorded instruments (General MIDI SoundFont, stereo, reverb, mastered to −14 LUFS) and the MIDI file. |
+=======
 | `music_render` | audio / media | Compose a short piece from notes and save it as a MIDI file (plays with real instrument sounds on phones and computers) and a WAV file (built-in synthesizer). Instruments: piano, chip, flute, strings, bass, drums. |
+>>>>>>> origin/main
 | `video_render` | video / media | Make an MP4 (H.264 + AAC) from scenes: HTML pages animated with CSS, still SVG drawings, or photos with a slow camera move. Transitions (fade, slide, wipe, circle, cut), captions or an `.srt`, and a soundtrack from `music_render`. Needs ffmpeg on the host. |
 | `audio_transcribe` | audio / media | Turn the speech in an audio or video file into timestamped text with a local Whisper model, and save it as SRT subtitles. Nothing is uploaded. Needs ffmpeg on the host. |
 | `video_understand` | video / media | Understand a video: its length, size and frame rate, a storyboard image of 4-16 evenly spaced frames labelled with their times, and a timestamped transcript of the speech. Nothing is uploaded. Needs ffmpeg and ffprobe on the host. |
@@ -68,7 +72,15 @@ ffmpeg runs as a separate program with an argument list, no shell, and a time li
 
 The file is a name from the output folder or an absolute path inside one of `inputDirs` (for example where uploads land). Paths are checked after resolving links.
 
-Music needs no dependency: the MIDI encoder and the synthesizer are plain TypeScript in this package. Rendering images uses [sharp](https://sharp.pixelplumbing.com/) (Apache-2.0, librsvg for SVG) and [Vega](https://vega.github.io/vega/) / Vega-Lite / vega-interpreter (BSD-3-Clause).
+### Music
+
+`music_render` writes the score as MIDI (each track on its own channel with an instrument, a place in the stereo field and some reverb) and plays it with [spessasynth_core](https://github.com/spessasus/spessasynth_core) (Apache-2.0), a SoundFont synthesizer in plain TypeScript. The default SoundFont is FluidR3 Mono GM (MIT, about 24 MB as `.sf3`), downloaded once from `soundfontUrl` into `modelCacheDir` and checked against its SHA-256; set `soundfont` to use a local `.sf2`/`.sf3` instead. The mix is then mastered: gain to −14 LUFS integrated loudness (ITU-R BS.1770, what streaming services aim for) and a look-ahead limiter at −1 dBFS. If the SoundFont cannot load, a small built-in synthesizer plays the piece and the reply says why.
+
+Instruments: piano, harpsichord, vibraphone, marimba, organ, accordion, guitar, bass, violin, cello, pizzicato, harp, timpani, strings, choir, trumpet, trombone, horn, brass, sax, oboe, clarinet, flute, chip, pad, sitar, koto and more (the tool lists all 37), plus `drums`: K kick, S snare, P clap, H closed and O open hi-hat, C crash, Y ride, T/M/L toms. `[K,C]:1` hits two at once.
+
+### Libraries
+
+Rendering images uses [sharp](https://sharp.pixelplumbing.com/) (Apache-2.0, librsvg for SVG) and [Vega](https://vega.github.io/vega/) / Vega-Lite / vega-interpreter (BSD-3-Clause).
 
 ## Safety
 
@@ -84,7 +96,7 @@ Text is drawn with the host's fonts (fontconfig). For Chinese or Japanese text, 
 
 ## Config
 
-See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxHtmlBytes`, `fontFiles`, `lang`, `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelHost`, `modelCacheDir`, `maxTranscribeSeconds`.
+See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxHtmlBytes`, `fontFiles`, `lang`, `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelHost`, `modelCacheDir`, `maxTranscribeSeconds`, `soundfont`, `soundfontUrl`.
 
 ## License
 

@@ -4,7 +4,7 @@
  * - html_render: an HTML/CSS page (posters, cards, slides) → PNG/JPEG/WebP, or its CSS animations → GIF/WebP.
  * - svg_render: an SVG document (posters, cards, icons, diagrams) → PNG/JPEG/WebP.
  * - chart_render: a Vega-Lite chart spec with inline data → PNG/JPEG/WebP.
- * - music_render: a short score in a simple note notation → MIDI + WAV.
+ * - music_render: a score in a simple note notation → MIDI + a mastered WAV played with a SoundFont.
  * - video_render: HTML (CSS-animated), SVG or photo scenes with transitions, captions and a soundtrack → MP4 (host ffmpeg).
  * - audio_transcribe: speech in an audio or video file → timestamped text + SRT (local Whisper).
  * - video_understand: a video's facts, a timestamped storyboard image and its transcript.
@@ -33,9 +33,13 @@ export { createHtmlRenderer } from './html/render.js'
 export { htmlTool } from './tools/html.js'
 export { chartToSvg } from './chart.js'
 export { safeBaseName, saveFile } from './output.js'
-export { parseScore, pitchToMidi } from './audio/score.js'
+export { INSTRUMENTS, parseScore, pitchToMidi } from './audio/score.js'
 export { scoreToMidi } from './audio/midi.js'
-export { encodeWav, renderScore } from './audio/synth.js'
+export { renderScore } from './audio/synth.js'
+export { encodeWav, loudness, master, peak } from './audio/master.js'
+export { renderMidi } from './audio/sampler.js'
+export { DEFAULT_SOUNDFONT, loadSoundFont } from './audio/soundfont.js'
+export { musicTool } from './tools/music.js'
 export { checkAudioName, parseVideoRequest } from './video/scenes.js'
 export { encodeArgs, fadeLevel } from './video/render.js'
 export { planTimeline, frameAt } from './video/timeline.js'

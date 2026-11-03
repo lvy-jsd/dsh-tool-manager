@@ -50,6 +50,7 @@
     "@huggingface/transformers": "^4.3.2",
     "@takumi-rs/core": "^2.19.0",
     "sharp": "^0.35.5",
+    "spessasynth_core": "^4.4.4",
     "vega": "^6.4.0",
     "vega-interpreter": "^2.3.2",
     "vega-lite": "^6.5.0"

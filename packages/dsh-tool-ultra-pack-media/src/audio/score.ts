@@ -4,28 +4,28 @@
  * Each track is a line of `<sound>:<beats>` tokens played one after another:
  *
  *   "C4:1 E4:1 G4:2 R:1 [C4,E4,G4]:2"   (notes, a rest, a chord)
- *   "K:1 H:0.5 H:0.5 S:1 H:1"           (drums: K kick, S snare, H hi-hat)
+ *   "K:1 H:0.5 H:0.5 S:1 [K,C]:1"       (drums by letter, see instruments.ts; [..] hits together)
  *
  * Beats may be decimals or fractions ("1/2"). The score is validated against
  * fixed limits before anything is rendered.
  */
 
-export const INSTRUMENTS = ['piano', 'chip', 'flute', 'strings', 'bass', 'drums'] as const
-export type Instrument = (typeof INSTRUMENTS)[number]
-export const DRUM_SOUNDS = ['K', 'S', 'H'] as const
-export type DrumSound = (typeof DRUM_SOUNDS)[number]
+import { DRUM_HELP, DRUM_SOUNDS, INSTRUMENTS, type DrumSound, type Instrument } from './instruments.js'
+
+export { DRUM_SOUNDS, INSTRUMENTS, type DrumSound, type Instrument } from './instruments.js'
 
 export interface ScoreInput {
   tempo?: number
   tracks?: Array<{ instrument?: string; notes?: string; volume?: number }>
 }
 
-/** One sounding event; `pitches` are MIDI numbers, or a drum sound on a drum track. */
+/** One sounding event: MIDI pitches, or drum sounds on a drum track (both empty for a rest). */
 export interface NoteEvent {
   start: number
   beats: number
   pitches: number[]
-  drum?: DrumSound
+  /** Drum sounds struck together, on a drum track. */
+  drums?: DrumSound[]
 }
 
 export interface Track {
@@ -68,15 +68,14 @@ function parseBeats(text: string, token: string): number {
   return beats
 }
 
-function parseSound(sound: string, instrument: Instrument): Pick<NoteEvent, 'pitches' | 'drum'> {
+function parseSound(sound: string, instrument: Instrument): Pick<NoteEvent, 'pitches' | 'drums'> {
   if (sound === 'R') return { pitches: [] }
-  if (instrument === 'drums') {
-    if (!DRUM_SOUNDS.includes(sound as DrumSound)) throw new Error(`Drum tracks use K (kick), S (snare), H (hi-hat) or R (rest), not "${sound}".`)
-    return { pitches: [], drum: sound as DrumSound }
-  }
   const chord = /^\[(.+)\]$/.exec(sound)
   const names = chord ? chord[1].split(',').map((s) => s.trim()) : [sound]
-  return { pitches: names.map(pitchToMidi) }
+  if (instrument !== 'drums') return { pitches: names.map(pitchToMidi) }
+  const bad = names.find((name) => !DRUM_SOUNDS.includes(name as DrumSound))
+  if (bad !== undefined) throw new Error(`Drum tracks use ${DRUM_HELP}, or R (rest), not "${bad}".`)
+  return { pitches: [], drums: names as DrumSound[] }
 }
 
 /** Parses one track line into timed events, starting at beat 0. */
