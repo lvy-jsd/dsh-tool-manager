@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { ScoreLimits } from './audio/score.js'
 import { DEFAULT_SOUNDFONT, type SoundFontSettings } from './audio/soundfont.js'
 import type { HtmlSettings } from './html/render.js'
+import { DEFAULT_GEMINI_KEY_FILE, DEFAULT_GEMINI_MODEL, type GeminiSettings } from './gemini/settings.js'
 import { DEFAULT_OUTPUT_DIR } from './output.js'
 import type { EngineSettings } from './speech/engine.js'
 import { MODEL_RELEASES } from './speech/models.js'
@@ -54,6 +55,12 @@ export interface Config {
   modelCacheDir?: string
   /** Longest stretch of audio transcribed per call, in seconds. */
   maxTranscribeSeconds?: number
+  /** Optional Google API key. Setting a key enables media uploads in auto mode. */
+  geminiApiKey?: string
+  /** Key file, checked before GEMINI_API_KEY. Default ~/.config/swiftnest/gemini.key. */
+  geminiKeyFile?: string
+  /** Gemini model used for native audio and video understanding. */
+  geminiModel?: string
 }
 
 export interface SpeechSettings extends EngineSettings {
@@ -74,6 +81,7 @@ export interface Settings {
   ffprobePath: string
   ffmpegTimeoutMs: number
   speech: SpeechSettings
+  gemini: GeminiSettings
 }
 
 export interface ToolSpec {
@@ -127,6 +135,11 @@ export function resolveSettings(config: Config): Settings {
     ffprobePath: config.ffprobePath ?? 'ffprobe',
     ffmpegTimeoutMs: config.ffmpegTimeoutMs ?? 300_000,
     speech: speechSettings(config),
+    gemini: {
+      apiKey: config.geminiApiKey,
+      keyFile: config.geminiKeyFile ?? DEFAULT_GEMINI_KEY_FILE,
+      model: config.geminiModel ?? DEFAULT_GEMINI_MODEL,
+    },
   }
 }
 
