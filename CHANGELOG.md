@@ -10,7 +10,7 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 
 ### Added
 
-- Media: optional Gemini engine for `video_understand` and `audio_transcribe`, enabled by a configured key. Uploads to Google are disclosed in each Gemini reply; failures fall back to local speech recognition with a short reason. Both tools retain ffprobe facts, video keeps its local storyboard, and audio saves SRT subtitles. Supports config/key-file/environment credentials and `engine: auto | local | gemini`.
+- Media: optional Gemini engine for `video_understand` and `audio_transcribe`, enabled by `geminiUploads: true` and a configured key. Uploads to Google are disclosed in each Gemini reply; failures fall back to local speech recognition with a short reason. Both tools retain ffprobe facts, video keeps its local storyboard, and audio saves SRT subtitles. Supports config/key-file/environment credentials and `engine: auto | local | gemini`.
 - `@lvy-jsd/dsh-tool-ultra-pack-essentials`: the first native tool pack, with no API keys: `time_now`, `time_convert`, `date_diff`, `math_eval` (mathjs, with units), `weather_forecast` (Open-Meteo), `geo_search` (Nominatim) and `wiki_search` / `wiki_summary` (Wikimedia).
 - `@lvy-jsd/dsh-tool-ultra-pack-web`: `web_read` (main article as Markdown via Readability + turndown) and `web_links`. Private, loopback and link-local targets are refused by default, and the check runs again on every redirect hop.
 - `@lvy-jsd/dsh-tool-ultra-pack-mcp`: twelve MCP server presets started through `@deepseek-ai/dsh-mcp-client`. Keyless presets (memory, thinking, context7, playwright) start by default, keyed ones wait for their key, versions are pinned, and write tools are marked high risk. `mcp_presets` reports the status.
@@ -22,6 +22,7 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 
 ### Changed
 
+- Media: `geminiUploads` defaults to `false`, so a shared vision key cannot silently enable audio/video uploads to Google. With uploads off, `auto` stays quietly local and explicit `gemini` adds one localized reason line; neither reads the key nor makes Gemini requests.
 - Works with DSH 0.2.2 (tested on 0.2.2-alpha.3) as well as 0.2.1-rc.5. DSH 0.2.2 fixes a step's callable tools when the step starts, so a direct call of a hidden ordinary tool now loads it and asks the model to call it again, instead of running in the same step. CI runs the e2e suite against both DSH versions.
 - **License: Apache-2.0** from this release on. Releases up to 0.4.1 stay MIT.
 - The core also provides its service as `toolUltra`; `toolCatalog` stays.

@@ -18,7 +18,7 @@ const TRANSCRIPT = JSON.stringify({ segments: SEGMENTS })
 const json = (value, status = 200) => Response.json(value, { status })
 const candidate = (text) => json({ candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }] })
 
-async function fixture(t) {
+async function fixture(t, config = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'media-gemini-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
   const oldKey = process.env.GEMINI_API_KEY
@@ -29,7 +29,13 @@ async function fixture(t) {
   })
   const path = join(dir, 'clip.mp4')
   await writeFile(path, 'media bytes')
-  const settings = resolveSettings({ outputDir: dir, geminiKeyFile: join(dir, 'missing.key'), lang: 'en' })
+  const settings = resolveSettings({
+    outputDir: dir,
+    geminiKeyFile: join(dir, 'missing.key'),
+    geminiUploads: true,
+    lang: 'en',
+    ...config,
+  })
   return { dir, path, settings }
 }
 
@@ -65,6 +71,9 @@ function mockApi(t, options = {}) {
 test('Gemini: key precedence, whitespace, missing/empty files, tilde default and environment', async (t) => {
   const { dir, settings } = await fixture(t)
   assert.equal(settings.gemini.model, DEFAULT_GEMINI_MODEL)
+  assert.equal(settings.gemini.uploads, true)
+  assert.equal(resolveSettings({}).gemini.uploads, false)
+  assert.equal(resolveSettings({ geminiUploads: false }).gemini.uploads, false)
   assert.equal(resolveSettings({}).gemini.keyFile, DEFAULT_GEMINI_KEY_FILE)
   const keyFile = join(dir, 'gemini.key')
   await writeFile(keyFile, '  file-key\n')
@@ -227,6 +236,64 @@ function mediaDeps(video = false) {
   }
   return { run, transcriber, calls, localCalls: () => localCalls }
 }
+
+test('media engines: uploads off keeps auto quiet and local even with keys present', async (t) => {
+  for (const factory of [transcribeTool, understandTool]) {
+    for (const engine of [undefined, 'auto', 'local']) {
+      await t.test(`${factory.name}/${engine}`, async (t) => {
+        const { settings, dir } = await fixture(t, { geminiUploads: false })
+        settings.gemini.apiKey = KEY
+        settings.gemini.keyFile = join(dir, 'gemini.key')
+        await writeFile(settings.gemini.keyFile, KEY)
+        process.env.GEMINI_API_KEY = KEY
+        const calls = mockApi(t)
+        const deps = mediaDeps()
+        const result = await factory(settings, deps).execute({ file: 'clip.mp4', engine })
+        assert.match(result, /^File .*clip.mp4/)
+        assert.match(result, /local words/)
+        assert.doesNotMatch(result, /Gemini|test-secret|do-not-echo/)
+        assert.equal(deps.localCalls(), 1)
+        assert.equal(calls.length, 0)
+      })
+    }
+  }
+})
+
+test('media engines: uploads off gives explicit gemini one localized reason without reading keys', async (t) => {
+  const reasons = {
+    en: 'Gemini uploads are off (set geminiUploads: true)',
+    'zh-CN': 'Gemini 上传已关闭（设置 geminiUploads: true 可开启）',
+  }
+  for (const factory of [transcribeTool, understandTool]) {
+    for (const [lang, reason] of Object.entries(reasons)) {
+      await t.test(`${factory.name}/${lang}`, async (t) => {
+        const { settings } = await fixture(t, { geminiUploads: false, lang })
+        let keyReads = 0
+        for (const property of ['apiKey', 'keyFile']) {
+          Object.defineProperty(settings.gemini, property, {
+            get() {
+              keyReads++
+              throw new Error('Key access forbidden while uploads are off')
+            },
+          })
+        }
+        const calls = mockApi(t)
+        const deps = mediaDeps()
+        const tool = factory(settings, deps)
+        assert.match(tool.parameters.engine.description, /geminiUploads: true/)
+        const result = await tool.execute({ file: 'clip.mp4', engine: 'gemini' })
+        const lines = result.split('\n')
+        assert.equal(lines[0], reason)
+        assert.match(lines[1], /^File .*clip.mp4/)
+        assert.equal(lines.filter((line) => line.includes('Gemini')).length, 1)
+        assert.match(result, /local words/)
+        assert.equal(deps.localCalls(), 1)
+        assert.equal(calls.length, 0)
+        assert.equal(keyReads, 0)
+      })
+    }
+  }
+})
 
 test('media engines: auto with and without a key, local with a key, and gemini with and without a key', async (t) => {
   for (const factory of [transcribeTool, understandTool]) {

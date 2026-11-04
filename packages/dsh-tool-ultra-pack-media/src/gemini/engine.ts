@@ -26,8 +26,9 @@ export async function runMediaEngine(
   if (engine !== undefined && !['auto', 'local', 'gemini'].includes(engine as string)) {
     throw new Error(messages.badEngine)
   }
-  if (engine === 'local') {
-    return local()
+  if (engine === 'local' || !settings.gemini.uploads) {
+    const output = await local()
+    return engine === 'gemini' ? `${messages.uploadsOff}\n${output}` : output
   }
   let key: string | undefined
   let reason: string | undefined

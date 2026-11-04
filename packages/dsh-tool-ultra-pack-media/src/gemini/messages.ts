@@ -1,10 +1,11 @@
 /** New media-engine copy. Existing local-pipeline copy is kept compatible. */
 const en = {
-  pack: 'Images, music and video made from code, and local understanding: recordings as text with speakers and emotions, videos as storyboards. Optional Gemini uploads when a key is configured.',
-  engine: 'auto: use Gemini if a key is set, otherwise local. local: keep the file here. gemini: upload to Google, with local fallback.',
+  pack: 'Images, music and video made from code, and local understanding: recordings as text with speakers and emotions, videos as storyboards. Optional Gemini uploads require geminiUploads: true and a key.',
+  engine: 'auto: use Gemini only with geminiUploads: true and a key, otherwise local. local: keep the file here. gemini: upload to Google only with geminiUploads: true, with local fallback.',
+  uploadsOff: 'Gemini uploads are off (set geminiUploads: true)',
   badEngine: 'engine must be auto, local or gemini.',
-  audio: 'Turn speech into timestamped text with speakers and tone. Saves SRT subtitles. Local by default; a Gemini key enables uploads to Google. Needs ffmpeg and ffprobe.',
-  video: 'Describe a video with file facts, a saved storyboard and timestamped speech. Local by default; a Gemini key enables Google uploads for scenes, screen text and actions. Needs ffmpeg and ffprobe.',
+  audio: 'Turn speech into timestamped text with speakers and tone. Saves SRT subtitles. Local by default; Google uploads require geminiUploads: true and a Gemini key. Needs ffmpeg and ffprobe.',
+  video: 'Describe a video with file facts, a saved storyboard and timestamped speech. Local by default; Google uploads for scenes, screen text and actions require geminiUploads: true and a Gemini key. Needs ffmpeg and ffprobe.',
   fallback: (reason: string) => `Gemini unavailable; using local: ${reason}`,
   subtitles: (path: string) => `Subtitles saved: ${path}`,
   noSpeech: 'No speech found.',
@@ -21,11 +22,12 @@ const en = {
 }
 
 const zh: typeof en = {
-  pack: '用代码制作图片、音乐和视频；在本地识别录音中的说话人和情绪、生成视频故事板。设置密钥后可选用 Gemini，并将文件上传到 Google。',
-  engine: 'auto：有密钥时使用 Gemini，否则本地处理。local：文件留在本机。gemini：上传到 Google，失败时改用本地处理。',
+  pack: '用代码制作图片、音乐和视频；在本地识别录音中的说话人和情绪、生成视频故事板。启用 geminiUploads: true 并设置密钥后，可选用 Gemini 将文件上传到 Google。',
+  engine: 'auto：仅在 geminiUploads: true 且有密钥时使用 Gemini，否则本地处理。local：文件留在本机。gemini：仅在 geminiUploads: true 时上传到 Google，失败时改用本地处理。',
+  uploadsOff: 'Gemini 上传已关闭（设置 geminiUploads: true 可开启）',
   badEngine: 'engine 必须是 auto、local 或 gemini。',
-  audio: '将语音转为带时间、说话人和语气的文字，并保存 SRT 字幕。默认本地处理；设置 Gemini 密钥即启用上传到 Google。需要 ffmpeg 和 ffprobe。',
-  video: '读取视频信息、保存故事板并生成带时间的语音文字。默认本地处理；设置 Gemini 密钥即启用上传到 Google，识别场景、画面文字和动作。需要 ffmpeg 和 ffprobe。',
+  audio: '将语音转为带时间、说话人和语气的文字，并保存 SRT 字幕。默认本地处理；启用 geminiUploads: true 并设置 Gemini 密钥后才会上传到 Google。需要 ffmpeg 和 ffprobe。',
+  video: '读取视频信息、保存故事板并生成带时间的语音文字。默认本地处理；启用 geminiUploads: true 并设置 Gemini 密钥后才会上传到 Google，识别场景、画面文字和动作。需要 ffmpeg 和 ffprobe。',
   fallback: (reason: string) => `Gemini 不可用，已改用本地处理：${reason}`,
   subtitles: (path: string) => `字幕已保存：${path}`,
   noSpeech: '未发现语音。',

@@ -7,6 +7,7 @@ export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash'
 export const DEFAULT_GEMINI_KEY_FILE = '~/.config/swiftnest/gemini.key'
 
 export interface GeminiSettings {
+  uploads: boolean
   apiKey?: string
   keyFile: string
   model: string

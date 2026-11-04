@@ -42,8 +42,10 @@
         modelMirror: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/'
         speechThreads: 4
         maxTranscribeSeconds: 1800
-        # Optional Gemini: setting a key enables uploading the WHOLE file to Google
-        # for audio_transcribe and video_understand (unless engine: local).
+        # Opt in to uploading the WHOLE audio/video file to Google for
+        # audio_transcribe and video_understand (unless engine: local).
+        geminiUploads: false
+        # Optional Gemini key; only read when geminiUploads is true.
         # Prefer a private key file; do not commit keys in shared config.
         # Key order: geminiApiKey, geminiKeyFile, GEMINI_API_KEY.
         geminiApiKey: ''
