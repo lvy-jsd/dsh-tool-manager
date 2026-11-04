@@ -1,4 +1,5 @@
 /** What a media file contains, read with ffprobe. */
+import { clock } from '../speech/transcript.js'
 
 export interface MediaInfo {
   /** Seconds. */
@@ -6,6 +7,11 @@ export interface MediaInfo {
   /** Present when the file has a picture stream. */
   video?: { width: number; height: number; fps: number }
   hasAudio: boolean
+}
+
+export function describeMedia(path: string, info: MediaInfo): string {
+  const picture = info.video ? `${info.video.width}×${info.video.height}, ${info.video.fps} fps` : 'no picture'
+  return `File ${path}: ${clock(info.duration)} long, ${picture}, ${info.hasAudio ? 'with sound' : 'no sound'}.`
 }
 
 export function probeArgs(file: string): string[] {

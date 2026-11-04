@@ -1,5 +1,5 @@
 /**
- * Tool Ultra media pack: images, music and video made from code, with no model API and no key.
+ * Tool Ultra media pack: local creation and understanding, with optional Gemini uploads.
  *
  * - html_render: an HTML/CSS page (posters, cards, slides) → PNG/JPEG/WebP, or its CSS animations → GIF/WebP.
  * - svg_render: an SVG document (posters, cards, icons, diagrams) → PNG/JPEG/WebP.
@@ -10,11 +10,12 @@
  * - video_understand: a video's facts, a timestamped storyboard image and its transcript.
  *
  * The model writes the HTML, SVG, chart spec, score or scene list; this pack renders
- * it locally and saves the files into one configured folder. Nothing is
- * fetched: external links in HTML or SVG and data URLs in a chart are refused, and
+ * it locally and saves the files into one configured folder. External
+ * links in HTML or SVG and data URLs in a chart are refused, and
  * a video's soundtrack must already be in that folder.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { mediaMessages } from './gemini/messages.js'
 import { createHtmlRenderer } from './html/render.js'
 import { resolveSettings, type Config, type ToolSpec } from './settings.js'
 import { createSpeechEngine } from './speech/engine.js'
@@ -82,14 +83,14 @@ export function createTools(config: Config = {}): ToolSpec[] {
   ]
 }
 
-function registerPack(ctx: any, tools: string[]) {
+function registerPack(ctx: any, tools: string[], lang: string) {
   if (typeof ctx.inject !== 'function') return
   ctx.inject(['toolCatalog'], (c: any) => {
     if (typeof c.toolCatalog?.registerToolPack !== 'function') return
     c.effect(() => c.toolCatalog.registerToolPack({
       id: 'media',
       title: 'Media',
-      summary: 'Images, music and video made from code, and local understanding: HTML/CSS designs, SVG and charts as images, CSS animations as GIFs, scores as MIDI/WAV, SVG scenes as MP4; recordings as text with speakers and emotions, videos as storyboards. No API keys.',
+      summary: mediaMessages(lang).pack,
       source: '@lvy-jsd/dsh-tool-ultra-pack-media',
       tools,
     }))
@@ -100,7 +101,7 @@ export function apply(ctx: any, config: Config = {}) {
   const disabled = new Set(config.disable ?? [])
   const specs = createTools(config).filter((spec) => !disabled.has(spec.name))
   // List the pack in Tool Ultra's panel and make it loadable as pack:media.
-  registerPack(ctx, specs.map((spec) => spec.name))
+  registerPack(ctx, specs.map((spec) => spec.name), config.lang ?? 'zh-CN')
   for (const spec of specs) {
     ctx.tools.register(defineTool({
       name: spec.name,

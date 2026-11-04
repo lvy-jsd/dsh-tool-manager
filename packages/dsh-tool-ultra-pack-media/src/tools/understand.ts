@@ -1,13 +1,15 @@
-/** video_understand: a video's facts, a storyboard image and the spoken words, all made on this server. */
+/** video_understand: local facts and storyboard, with optional native Gemini analysis. */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runProgram } from '../ffmpeg.js'
+import { runProgram, type RunProgram } from '../ffmpeg.js'
 import { resolveInputFile } from '../files.js'
+import { engineParameter, mediaPrompt, runMediaEngine } from '../gemini/engine.js'
+import { mediaMessages } from '../gemini/messages.js'
 import { safeBaseName, saveFile } from '../output.js'
 import { NAME_PARAMETER, type Settings, type ToolSpec } from '../settings.js'
-import { clock, shortTime, timestampedText } from '../speech/transcript.js'
-import { parseProbe, probeArgs, type MediaInfo } from '../video/probe.js'
+import { shortTime, timestampedText } from '../speech/transcript.js'
+import { describeMedia, parseProbe, probeArgs, type MediaInfo } from '../video/probe.js'
 import { buildStoryboard, cutArgs, extractArgs, listFrames, parseCuts, planFrames, type FramePlan } from '../video/storyboard.js'
 import { modelTitle } from '../speech/engine.js'
 import { createSpeechReader, describeSpeakers, languageOf, type TranscribeDeps } from './transcribe.js'
@@ -22,14 +24,12 @@ function frameCount(value: unknown): number {
   return value as number
 }
 
-function describeMedia(path: string, info: MediaInfo): string {
-  const picture = info.video ? `${info.video.width}×${info.video.height}, ${info.video.fps} fps` : 'no picture'
-  return `File ${path}: ${clock(info.duration)} long, ${picture}, ${info.hasAudio ? 'with sound' : 'no sound'}.`
+function describeCuts(cuts: number[], duration: number): string {
+  if (!cuts.length) return 'No scene changes found; frames are evenly spaced.'
+  return `${cuts.length + 1} shots; the scene changes at ${cuts.map((t) => shortTime(t, duration)).join(', ')}.`
 }
 
-export function understandTool(settings: Settings, deps: TranscribeDeps = {}): ToolSpec {
-  const run = deps.run ?? runProgram
-  const readSpeech = createSpeechReader(settings, deps)
+function createStoryboard(settings: Settings, run: RunProgram) {
   const timeoutMs = settings.ffmpegTimeoutMs
 
   /** Where the frames go: following the cuts when ffmpeg finds any, else evenly. */
@@ -38,12 +38,7 @@ export function understandTool(settings: Settings, deps: TranscribeDeps = {}): T
     return planFrames(info.duration, parseCuts(printed), count)
   }
 
-  function describeCuts(cuts: number[], duration: number): string {
-    if (!cuts.length) return 'No scene changes found; frames are evenly spaced.'
-    return `${cuts.length + 1} shots; the scene changes at ${cuts.map((t) => shortTime(t, duration)).join(', ')}.`
-  }
-
-  async function storyboard(path: string, info: MediaInfo, count: number, name: string): Promise<string> {
+  return async (path: string, info: MediaInfo, count: number, name: string): Promise<string> => {
     const dir = await mkdtemp(join(tmpdir(), 'dsh-media-frames-'))
     try {
       const { times, cuts } = await plan(path, info, count)
@@ -58,6 +53,13 @@ export function understandTool(settings: Settings, deps: TranscribeDeps = {}): T
       await rm(dir, { recursive: true, force: true })
     }
   }
+}
+
+export function understandTool(settings: Settings, deps: TranscribeDeps = {}): ToolSpec {
+  const run = deps.run ?? runProgram
+  const readSpeech = createSpeechReader(settings, deps)
+  const storyboard = createStoryboard(settings, run)
+  const timeoutMs = settings.ffmpegTimeoutMs
 
   async function transcript(path: string, language: string | undefined): Promise<string> {
     const { segments } = await readSpeech(path, { language })
@@ -74,16 +76,20 @@ export function understandTool(settings: Settings, deps: TranscribeDeps = {}): T
     const name = safeBaseName(args.name, 'storyboard')
     const parts = [describeMedia(path, info)]
     if (info.video) parts.push(await storyboard(path, info, count, name))
-    if (info.hasAudio && args.transcript !== false) parts.push(await transcript(path, language))
-    return parts.join('\n\n')
+    const local = async () => {
+      const speech = info.hasAudio && args.transcript !== false ? await transcript(path, language) : ''
+      return [...parts, speech].filter(Boolean).join('\n\n')
+    }
+    return runMediaEngine(settings, args.engine, path, mediaPrompt(settings, 'video', args), local,
+      async (text) => [...parts, text].join('\n\n'))
   }
 
   return {
     name: 'video_understand',
-    description: 'Understand a video (or audio) file on this server, with nothing uploaded: its length and size, a storyboard image of key frames '
-      + 'that follow the scene changes, with timestamps, and a timestamped transcript of the speech with who speaks when (local models). Look at the storyboard image to see the scenes.',
+    description: mediaMessages(settings.html.lang).video,
     parameters: {
       file: { type: 'string', required: true, description: 'A file name from the output folder, or an absolute path inside an allowed input folder.' },
+      engine: engineParameter(settings),
       frames: { type: 'integer', description: `Frames on the storyboard, ${FRAMES.min}-${FRAMES.max}. Default ${FRAMES.default}.` },
       transcript: { type: 'boolean', description: 'Transcribe the speech too. Default true; false is faster.' },
       language: { type: 'string', description: 'Spoken language code such as "zh" or "en". Default: detect.' },

@@ -18,6 +18,7 @@ const SEGMENTS = [{ start: 0, end: 2.5, text: '你好，欢迎收听。' }, { st
 /** Stand-in ffmpeg: writes `seconds` of 16 kHz float silence to the output path. */
 const fakeDecoder = (seconds, calls = []) => async (file, args) => {
   calls.push({ file, args })
+  if (file === 'ffprobe') return JSON.stringify({ streams: [{ codec_type: 'audio' }], format: { duration: String(seconds) } })
   writeFileSync(args.at(-1), Buffer.from(new Float32Array(seconds * 16_000).buffer))
 }
 
@@ -135,10 +136,11 @@ test('audio_transcribe: decodes the file, transcribes it and saves SRT subtitles
   const settings = resolveSettings({ outputDir: out, ffmpegPath: '/opt/ffmpeg', maxTranscribeSeconds: 600 })
   const tool = transcribeTool(settings, { run: fakeDecoder(3, calls), transcriber })
   const result = await tool.execute({ file: 'talk.m4a', language: 'zh', name: 'podcast' })
-  assert.equal(calls[0].file, '/opt/ffmpeg')
-  assert.ok(calls[0].args.includes('600'))
+  assert.equal(calls[0].file, 'ffprobe')
+  assert.equal(calls[1].file, '/opt/ffmpeg')
+  assert.ok(calls[1].args.includes('600'))
   assert.deepEqual(heard, { length: 48_000, options: { language: 'zh', speakers: true } })
-  assert.match(result, /^Transcript of .*talk\.m4a \(00:03, one speaker, 2 segments, local model SenseVoice Small \(FunAudioLLM\)\)\. Subtitles saved: (.+podcast-\d{8}T\d{6}Z\.srt)\n\n\[00:00-00:02\] 你好/)
+  assert.match(result, /^File .*talk\.m4a: 00:03 long, no picture, with sound\.\n\nTranscript of .*talk\.m4a \(00:03, one speaker, 2 segments, local model SenseVoice Small \(FunAudioLLM\)\)\. Subtitles saved: (.+podcast-\d{8}T\d{6}Z\.srt)\n\n\[00:00-00:02\] 你好/)
   await tool.execute({ file: 'talk.m4a', language: 'fr', speakers: false })
   assert.deepEqual(heard.options, { language: 'fr', speakers: false })
   const srtPath = /Subtitles saved: (.+\.srt)/.exec(result)[1]
@@ -149,7 +151,7 @@ test('audio_transcribe: silence, bad languages and outside files are handled pla
   const out = tempDir()
   writeFileSync(join(out, 'quiet.wav'), 'x')
   const tool = transcribeTool(resolveSettings({ outputDir: out }), { run: fakeDecoder(2), transcriber: async () => [] })
-  assert.match(await tool.execute({ file: 'quiet.wav' }), /^No speech found in .*quiet\.wav \(00:02 of audio\)\.$/)
+  assert.match(await tool.execute({ file: 'quiet.wav' }), /\n\nNo speech found in .*quiet\.wav \(00:02 of audio\)\.$/)
   await assert.rejects(tool.execute({ file: 'quiet.wav', language: 'chinese!' }), /language must be a short code/)
   const outside = join(tempDir(), 'elsewhere.wav')
   writeFileSync(outside, 'x')

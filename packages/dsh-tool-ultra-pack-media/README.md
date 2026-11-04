@@ -1,6 +1,6 @@
 # @lvy-jsd/dsh-tool-ultra-pack-media
 
-Images, music and video made from code, and local speech-to-text, for [Tool Ultra](https://github.com/lvy-jsd/dsh-tool-ultra). The model writes an HTML/CSS page, an SVG drawing, a chart spec, a short score or a list of scenes, and this pack renders it on the DSH host. Recordings and videos are understood on the host too. No model API and no API keys; the only downloads are a speech model and a SoundFont, each once, on first use.
+Images, music and video made from code, and speech-to-text, for [Tool Ultra](https://github.com/lvy-jsd/dsh-tool-ultra). The model writes an HTML/CSS page, an SVG drawing, a chart spec, a short score or a list of scenes, and this pack renders it on the DSH host. Recordings and videos use local processing unless you configure an optional Gemini key. Local processing needs no API key; speech models and a SoundFont download once on first use.
 
 | Tool | Group / category | What it does |
 | --- | --- | --- |
@@ -9,8 +9,8 @@ Images, music and video made from code, and local speech-to-text, for [Tool Ultr
 | `chart_render` | image / media | Draw a [Vega-Lite](https://vega.github.io/vega-lite/) chart (bar, line, pie, scatter, area, heatmap, ...) with inline data and save it as an image. A single-view chart without a size gets 480×300. |
 | `music_render` | audio / media | Compose a piece from notes for up to 16 of 37 instruments plus a drum kit, and save a WAV played with real recorded instruments (General MIDI SoundFont, stereo, reverb, mastered to −14 LUFS) and the MIDI file. |
 | `video_render` | video / media | Make an MP4 (H.264 + AAC) from scenes: HTML pages animated with CSS, still SVG drawings, or photos with a slow camera move. Transitions (fade, slide, wipe, circle, cut), captions or an `.srt`, and a soundtrack from `music_render`. Needs ffmpeg on the host. |
-| `audio_transcribe` | audio / media | Turn the speech in an audio or video file into timestamped text with local models: who speaks when, how they sound (happy, angry, …) and sounds such as laughter or music. Saves SRT subtitles. Nothing is uploaded. Needs ffmpeg on the host. |
-| `video_understand` | video / media | Understand a video: its length, size and frame rate, a storyboard image of 4-16 evenly spaced frames labelled with their times, and a timestamped transcript of the speech. Nothing is uploaded. Needs ffmpeg and ffprobe on the host. |
+| `audio_transcribe` | audio / media | Turn speech into timestamped text with speakers, tone and meaningful sounds. Saves SRT subtitles and reports local file facts. Local processing or optional Gemini. Needs ffmpeg and ffprobe. |
+| `video_understand` | video / media | Read file facts, save a storyboard of 4-16 frames following scene changes, and transcribe speech. Optional Gemini adds scenes, motion and screen text. Needs ffmpeg and ffprobe. |
 
 Load the pack with `tools_load(["pack:media"])`. Each call returns the saved file's path, size and pixel dimensions.
 
@@ -60,7 +60,7 @@ ffmpeg runs as a separate program with an argument list, no shell, and a time li
 
 ### Speech to text
 
-`audio_transcribe` decodes the file with ffmpeg (16 kHz mono, at most `maxTranscribeSeconds`) and recognizes it with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) on the CPU, so it does not compete with a local LLM for the GPU. The audio never leaves the server.
+With the local engine, `audio_transcribe` decodes the file with ffmpeg (16 kHz mono, at most `maxTranscribeSeconds`) and recognizes it with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) on the CPU, so it does not compete with a local LLM for the GPU. Local processing never uploads your audio.
 
 - **Who speaks when.** Speaker diarization (pyannote segmentation 3.0, MIT, plus a 3D-Speaker ERes2Net voiceprint, Apache-2.0) splits the recording into turns, labelled Speaker 1, 2, … when more than one person talks. `speakers: false` skips it and cuts the audio by voice activity (Silero VAD, MIT) instead, which is several times faster.
 - **What is said.** [SenseVoice Small](https://github.com/FunAudioLLM/SenseVoice) (code MIT; weights under the FunASR model license, which asks for attribution) reads Chinese, Cantonese, English, Japanese and Korean with punctuation, and also hears how the speaker sounds (happy, sad, angry, …) and sounds such as laughter, applause, coughing or music. About 0.15× real time on 4 cores.
@@ -73,6 +73,20 @@ The models (SenseVoice about 155 MB, the speaker models about 45 MB) download on
 `video_understand` reads the file's facts with `ffprobe`, then has ffmpeg find the cuts (its scene-change score on a small copy of each frame, which takes well under a second per minute of video). The frames follow the edit: the strongest cuts split the video into shots, each shot gets a frame from its middle, and long shots get more. The reply lists when the scene changes, and the frames go four to a row on one JPEG storyboard, each with its time. It then transcribes the sound track the same way as `audio_transcribe` (skip it with `transcript: false`). The reply names the saved storyboard, so the agent can look at it with its own image-reading tool; with a text-only model, the facts and the transcript still describe the video. An audio-only file gets the facts and the transcript.
 
 The file is a name from the output folder or an absolute path inside one of `inputDirs` (for example where uploads land). Paths are checked after resolving links.
+
+### Gemini
+
+**Privacy / 隐私：Gemini uploads the entire input file to Google. 设置密钥即表示启用上传；未设置密钥时使用本地处理。** This is optional: configure a key only if you want Google to process your recordings and videos. `engine: "local"` keeps the file on this server even when a key is configured.
+
+Both `audio_transcribe` and `video_understand` accept `engine: "auto" | "local" | "gemini"`. The default, `auto`, uses Gemini when a key resolves and local processing otherwise. Key sources are checked in order: `geminiApiKey`, then `geminiKeyFile` (default `~/.config/swiftnest/gemini.key`, with surrounding whitespace removed), then `GEMINI_API_KEY`. A missing or empty key file allows the environment fallback. An unreadable key file causes local fallback. Keep keys out of version control; prefer the private key file or environment to a shared config.
+
+Create a key in [Google AI Studio](https://aistudio.google.com/api-keys), save it in the key file, and call either tool normally. You can override `geminiModel`. The default is the stable `gemini-3.8-flash`: the [models page](https://ai.google.dev/gemini-api/docs/models) recommends 3.8 Flash for new projects, and its [model details](https://aistudio.google.com/docs/models/gemini-3.8-flash) list “Stable: `gemini-3.8-flash`”.
+
+Gemini describes video scenes, screen text, actions and motion with timestamps, and transcribes speech with speakers and tone. Audio replies also save SRT subtitles. `language`, `speakers: false` (audio) and `transcript: false` (video) guide the request. Both engines retain local ffprobe facts, and video always saves the local storyboard. Gemini receives the **whole file**, including video audio when `transcript: false`; the local `maxTranscribeSeconds` limit does not trim uploads.
+
+The client uses the REST Files API, waits for processing, then calls `generateContent`. Uploads are capped at 2 GB. Upload, processing and generation share a two-minute timeout; deletion is attempted afterwards, including on failure, with a separate five-second limit. If deletion fails, Google's [Files API retention](https://ai.google.dev/gemini-api/docs/files#delete-uploaded) applies. API errors, quota limits, unsupported files and timeouts run the local pipeline and add one short reason line at the top. With `engine: "gemini"` but no key, that line is `no Gemini key configured (set geminiApiKey or ~/.config/swiftnest/gemini.key)`.
+
+Every successful Gemini reply includes `analysed by Gemini <model> (file uploaded to Google)`. Keys are sent only in the `x-goog-api-key` header and are filtered from replies and errors. The integration uses global `fetch`, with no SDK dependency.
 
 ### Music
 
@@ -98,7 +112,7 @@ Text is drawn with the host's fonts (fontconfig). For Chinese or Japanese text, 
 
 ## Config
 
-See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxHtmlBytes`, `fontFiles`, `lang`, `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelMirror`, `speechThreads`, `modelCacheDir`, `maxTranscribeSeconds`, `soundfont`, `soundfontUrl`.
+See [`cordis.patch.yml`](cordis.patch.yml): `disable`, `outputDir` (default `~/dsh-creations`), `maxHtmlBytes`, `fontFiles`, `lang`, `maxSvgBytes`, `maxPixels`, `maxMusicSeconds`, `maxMusicNotes`, `maxVideoSeconds`, `ffmpegPath`, `ffprobePath`, `ffmpegTimeoutMs`, `inputDirs`, `speechModel`, `modelMirror`, `speechThreads`, `modelCacheDir`, `maxTranscribeSeconds`, `soundfont`, `soundfontUrl`, `geminiApiKey`, `geminiKeyFile`, `geminiModel`.
 
 ## License
 
