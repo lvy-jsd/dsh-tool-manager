@@ -135,7 +135,11 @@ export function resolveSettings(config: Config): Settings {
     ffprobePath: config.ffprobePath ?? 'ffprobe',
     ffmpegTimeoutMs: config.ffmpegTimeoutMs ?? 300_000,
     speech: speechSettings(config),
-    gemini: { apiKey: config.geminiApiKey, keyFile: config.geminiKeyFile ?? DEFAULT_GEMINI_KEY_FILE, model: config.geminiModel ?? DEFAULT_GEMINI_MODEL },
+    gemini: {
+      apiKey: config.geminiApiKey,
+      keyFile: config.geminiKeyFile ?? DEFAULT_GEMINI_KEY_FILE,
+      model: config.geminiModel ?? DEFAULT_GEMINI_MODEL,
+    },
   }
 }
 

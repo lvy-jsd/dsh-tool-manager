@@ -12,7 +12,9 @@ const ORIGIN = 'https://generativelanguage.googleapis.com'
 const API = `${ORIGIN}/v1beta`
 const UPLOAD = `${ORIGIN}/upload/v1beta/files?upload_id=test`
 const KEY = 'test-secret+/do-not-echo'
-const SRT = '1\n00:00:00,000 --> 00:00:02,000\nSpeaker 1 (happy): 你好\n'
+const PROSE = '[00:00] A person waves beside a sign.'
+const SEGMENTS = [{ start: 0, end: 2, speaker: 1, text: '你好', tone: 'happy' }]
+const TRANSCRIPT = JSON.stringify({ segments: SEGMENTS })
 const json = (value, status = 200) => Response.json(value, { status })
 const candidate = (text) => json({ candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }] })
 
@@ -36,6 +38,7 @@ function mockApi(t, options = {}) {
   let polls = 0
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push({ url, ...init })
+    options.beforeRequest?.(url, init)
     if (init.method === 'DELETE') {
       if (options.deleteError) throw new Error(KEY)
       return new Response(null, { status: 204 })
@@ -51,7 +54,8 @@ function mockApi(t, options = {}) {
     }
     if (url.endsWith(':generateContent')) {
       if (options.generateError) return json({ error: { message: `${KEY}\n${encodeURIComponent(KEY)}` } }, 429)
-      return options.response?.() ?? candidate(options.text ?? SRT)
+      const structured = JSON.parse(init.body).generationConfig?.responseMimeType === 'application/json'
+      return options.response?.() ?? candidate(options.text ?? (structured ? TRANSCRIPT : PROSE))
     }
     assert.fail(`Unexpected URL: ${url}`)
   })
@@ -78,7 +82,7 @@ test('Gemini: key precedence, whitespace, missing/empty files, tilde default and
 test('Gemini: REST upload → processing → active → generate → delete uses only header credentials', async (t) => {
   const { path } = await fixture(t)
   const calls = mockApi(t)
-  assert.equal(await analyseGemini(path, 'Describe motion and OCR.', DEFAULT_GEMINI_MODEL, KEY, { pollMs: 0 }), SRT)
+  assert.equal(await analyseGemini(path, 'Describe motion and OCR.', DEFAULT_GEMINI_MODEL, KEY, { pollMs: 0 }), PROSE)
   assert.deepEqual(calls.map((c) => [c.url, c.method]), [
     [`${ORIGIN}/upload/v1beta/files`, 'POST'], [UPLOAD, 'POST'],
     [`${API}/files/test`, 'GET'], [`${API}/files/test`, 'GET'],
@@ -123,7 +127,7 @@ test('Gemini: FAILED, processing timeout, malformed and blocked responses delete
     await t.test(JSON.stringify(options), async (t) => {
       const { path } = await fixture(t)
       const calls = mockApi(t, options)
-      await assert.rejects(analyseGemini(path, 'test', DEFAULT_GEMINI_MODEL, KEY, { pollMs: 0, timeoutMs: options.state === 'PROCESSING' ? 100 : 1000 }))
+      await assert.rejects(analyseGemini(path, 'test', DEFAULT_GEMINI_MODEL, KEY, { pollMs: 0, processingTimeoutMs: 100 }))
       assert.equal(calls.at(-1).method, 'DELETE')
     })
   }
@@ -133,8 +137,55 @@ test('Gemini: requests and body reads time out even if fetch ignores abort', asy
   const { path } = await fixture(t)
   for (const response of [() => new Promise(() => {}), () => ({ ok: true, headers: { get: () => UPLOAD }, json: () => new Promise(() => {}) })]) {
     t.mock.method(globalThis, 'fetch', response)
-    await assert.rejects(analyseGemini(path, 'test', DEFAULT_GEMINI_MODEL, KEY, { timeoutMs: 15 }), /timeout/)
+    await assert.rejects(analyseGemini(path, 'test', DEFAULT_GEMINI_MODEL, KEY, { uploadTimeoutMs: 15 }), /timeout/)
     t.mock.restoreAll()
+  }
+})
+
+test('Gemini: upload budget scales to 2 GB, and later phases get independent budgets', async (t) => {
+  for (const size of [11, 500 * 1024 ** 2, 2 * 1024 ** 3]) {
+    await t.test(`${size} bytes`, async (t) => {
+      const { path } = await fixture(t)
+      await truncate(path, size)
+      const uploadBudget = 120_000 + Math.ceil(size / 125_000 * 1000)
+      const scheduled = []
+      const schedule = globalThis.setTimeout
+      t.mock.method(globalThis, 'setTimeout', (fn, ms, ...args) => {
+        scheduled.push(ms)
+        return schedule(fn, ms, ...args)
+      })
+      let now = 1000
+      let polls = 0
+      t.mock.method(Date, 'now', () => now)
+      mockApi(t, { beforeRequest: (url, init) => {
+        if (url === `${ORIGIN}/upload/v1beta/files`) now += 1000
+        else if (url === UPLOAD) now += uploadBudget - 2000
+        else if (init.method === 'GET') now += ++polls === 1 ? 500_000 : 90_000
+        else if (url.endsWith(':generateContent')) now += 250_000
+      } })
+      const result = await analyseGemini(path, 'test', DEFAULT_GEMINI_MODEL, KEY, { pollMs: 0 })
+      assert.equal(result, PROSE)
+      assert.deepEqual(scheduled, [uploadBudget, uploadBudget - 1000, 600_000, 100_000, 300_000, 5000])
+    })
+  }
+})
+
+test('Gemini: processing and generation timeouts still delete the uploaded file', async (t) => {
+  for (const phase of ['processing', 'generation']) {
+    await t.test(phase, async (t) => {
+      const { path } = await fixture(t)
+      const calls = mockApi(t, { state: 'ACTIVE' })
+      const respond = globalThis.fetch
+      t.mock.method(globalThis, 'fetch', (url, init) => {
+        const stalled = phase === 'processing' ? init.method === 'GET' : url.endsWith(':generateContent')
+        if (stalled) return new Promise(() => {})
+        return respond(url, init)
+      })
+      const options = { processingTimeoutMs: 30, generationTimeoutMs: 30 }
+      await assert.rejects(analyseGemini(path, 'test', DEFAULT_GEMINI_MODEL, KEY, options), /timeout/)
+      assert.equal(calls.at(-1).method, 'DELETE')
+      assert.equal(calls.at(-1).signal.aborted, false, 'cleanup has its own budget and signal')
+    })
   }
 })
 
@@ -236,18 +287,87 @@ test('media engines: Gemini saves storyboard and SRT, honours options, and redac
   assert.doesNotMatch(video, /test-secret|do-not-echo/)
   assert.equal(deps.localCalls(), 0)
   const request = JSON.parse(calls.find((c) => c.url.endsWith(':generateContent')).body)
+  assert.equal(request.generationConfig, undefined, 'video keeps prose output')
+  assert.match(request.contents[0].parts[1].text, /Markdown/)
   assert.match(request.contents[0].parts[1].text, /on-screen text \(OCR\), actions and motion/)
   assert.match(request.contents[0].parts[1].text, /Do not include a speech transcript/)
   t.mock.restoreAll()
-  const audioCalls = mockApi(t, { text: SRT.replace('你好', KEY), state: 'ACTIVE' })
+  const audioCalls = mockApi(t, { text: TRANSCRIPT.replace('你好', KEY), state: 'ACTIVE' })
   const audio = await transcribeTool(settings, mediaDeps()).execute({ file: 'clip.mp4', speakers: false, language: 'zh' })
   const subtitles = /Subtitles saved: (.+\.srt)/.exec(audio)[1]
-  assert.match(await readFile(subtitles, 'utf8'), /Speaker 1 \(happy\): \[redacted\]/)
+  assert.match(await readFile(subtitles, 'utf8'), /00:00:00,000 --> 00:00:02,000\n\[redacted\]/)
+  assert.match(audio, /\[00:00-00:02\] \(happy\): \[redacted\]/)
+  assert.doesNotMatch(audio, /Speaker 1/)
   assert.doesNotMatch(audio, /test-secret|do-not-echo/)
-  const prompt = JSON.parse(audioCalls.find((c) => c.url.endsWith(':generateContent')).body).contents[0].parts[1].text
-  assert.match(prompt, /SRT subtitles only/)
-  assert.match(prompt, /Do not label speakers/)
+  const audioRequest = JSON.parse(audioCalls.find((c) => c.url.endsWith(':generateContent')).body)
+  const { responseMimeType, responseJsonSchema } = audioRequest.generationConfig
+  assert.equal(responseMimeType, 'application/json')
+  assert.equal(responseJsonSchema.type, 'object')
+  assert.equal(responseJsonSchema.properties.segments.type, 'array')
+  const segmentSchema = responseJsonSchema.properties.segments.items
+  assert.deepEqual(segmentSchema.required, ['start', 'end', 'speaker', 'text'])
+  assert.deepEqual(Object.keys(segmentSchema.properties), ['start', 'end', 'speaker', 'text', 'tone'])
+  const prompt = audioRequest.contents[0].parts[1].text
+  assert.match(prompt, /JSON segments/)
+  assert.match(prompt, /Do not distinguish speakers/)
   assert.match(prompt, /original language \(zh\)/)
+})
+
+test('media engines: structured segments produce speakers, tone, fractional timestamps and SRT', async (t) => {
+  const { settings } = await fixture(t)
+  settings.gemini.apiKey = KEY
+  const segments = [
+    { start: 0.125, end: 1.875, speaker: 1, text: '你好', tone: 'happy' },
+    { start: 2, end: 3, speaker: 2, text: 'Hello' },
+  ]
+  mockApi(t, { text: JSON.stringify({ segments }), state: 'ACTIVE' })
+  const deps = mediaDeps()
+  const result = await transcribeTool(settings, deps).execute({ file: 'clip.mp4' })
+  assert.match(result, /\[00:00-00:01\] Speaker 1 \(happy\): 你好/)
+  assert.match(result, /\[00:02-00:03\] Speaker 2: Hello/)
+  const path = /Subtitles saved: (.+\.srt)/.exec(result)[1]
+  const srt = await readFile(path, 'utf8')
+  assert.match(srt, /00:00:00,125 --> 00:00:01,875\nSpeaker 1: 你好/)
+  assert.match(srt, /00:00:02,000 --> 00:00:03,000\nSpeaker 2: Hello/)
+  assert.equal(deps.localCalls(), 0)
+})
+
+test('media engines: invalid structured segments fall back locally without leaking response text', async (t) => {
+  const invalid = [
+    'not JSON', '```json\n' + TRANSCRIPT + '\n```', '{}', '{"segments":{}}',
+    ...[null, { start: '0' }, { start: -1 }, { end: 0 }, { end: 1e400 },
+      { speaker: 0 }, { speaker: 1.5 }, { speaker: 'Alice' }, { text: '' }, { text: 3 }, { tone: 3 },
+    ].map((overrides) => JSON.stringify({ segments: [overrides === null ? null : { ...SEGMENTS[0], text: KEY, ...overrides }] })),
+  ]
+  // A normal segment with all fields omitted must also be rejected.
+  invalid.push('{"segments":[{}]}')
+  for (const [index, text] of invalid.entries()) {
+    await t.test(`invalid response ${index}`, async (t) => {
+      const { settings } = await fixture(t)
+      settings.gemini.apiKey = KEY
+      const calls = mockApi(t, { text, state: 'ACTIVE' })
+      const deps = mediaDeps()
+      const result = await transcribeTool(settings, deps).execute({ file: 'clip.mp4' })
+      assert.match(result, /^Gemini unavailable; using local: Google returned an unreadable response\nFile/)
+      assert.match(result, /local words/)
+      assert.doesNotMatch(result, /test-secret|do-not-echo/)
+      assert.equal(deps.localCalls(), 1)
+      assert.equal(calls.at(-1).method, 'DELETE')
+    })
+  }
+})
+
+test('media engines: an empty structured transcript reports silence without falling back', async (t) => {
+  const { settings } = await fixture(t)
+  settings.gemini.apiKey = KEY
+  const calls = mockApi(t, { text: '{"segments":[]}', state: 'ACTIVE' })
+  const deps = mediaDeps()
+  const result = await transcribeTool(settings, deps).execute({ file: 'clip.mp4' })
+  assert.match(result, /analysed by Gemini/)
+  assert.match(result, /No speech found\.$/)
+  assert.doesNotMatch(result, /unavailable|Subtitles saved/)
+  assert.equal(deps.localCalls(), 0)
+  assert.equal(calls.at(-1).method, 'DELETE')
 })
 
 test('media engines: malformed audio, key-file failures and Chinese copy fall back locally', async (t) => {

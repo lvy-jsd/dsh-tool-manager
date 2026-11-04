@@ -4,29 +4,48 @@ import { geminiNotice, mediaMessages, NO_GEMINI_KEY } from './messages.js'
 import { redactKey, resolveGeminiKey } from './settings.js'
 
 export function engineParameter(settings: Settings) {
-  return { type: 'string', enum: ['auto', 'local', 'gemini'], default: 'auto', description: mediaMessages(settings.html.lang).engine }
+  return {
+    type: 'string',
+    enum: ['auto', 'local', 'gemini'],
+    default: 'auto',
+    description: mediaMessages(settings.html.lang).engine,
+  }
 }
 
 /** Both tools share selection, privacy notices, redaction and local fallback. */
-export async function runMediaEngine(settings: Settings, engine: unknown, path: string, prompt: string,
-  local: () => Promise<string>, remote: (text: string) => Promise<string>): Promise<string> {
+export async function runMediaEngine(
+  settings: Settings,
+  engine: unknown,
+  path: string,
+  prompt: string,
+  local: () => Promise<string>,
+  remote: (text: string) => Promise<string>,
+  responseJsonSchema?: Record<string, unknown>,
+): Promise<string> {
   const messages = mediaMessages(settings.html.lang)
-  if (engine !== undefined && !['auto', 'local', 'gemini'].includes(engine as string)) throw new Error(messages.badEngine)
-  if (engine === 'local') return local()
+  if (engine !== undefined && !['auto', 'local', 'gemini'].includes(engine as string)) {
+    throw new Error(messages.badEngine)
+  }
+  if (engine === 'local') {
+    return local()
+  }
   let key: string | undefined
   let reason: string | undefined
   try {
     key = await resolveGeminiKey(settings.gemini)
     if (key) {
-      const text = await analyseGemini(path, prompt, settings.gemini.model, key)
+      const text = await analyseGemini(path, prompt, settings.gemini.model, key, { responseJsonSchema })
       const output = await remote(text)
       return redactKey(`${geminiNotice(settings.gemini.model)}\n\n${output}`, key)
     }
-    if (engine === 'gemini') reason = NO_GEMINI_KEY
+    if (engine === 'gemini') {
+      reason = NO_GEMINI_KEY
+    }
   } catch (error) {
-    const detail = error instanceof GeminiError
-      ? error.status ? messages.http(error.status) : messages[error.reason]
-      : key ? messages.invalid : messages.keyFile
+    let detail = key ? messages.invalid : messages.keyFile
+    if (error instanceof GeminiError) {
+      detail = error.status ? messages.http(error.status) : messages[error.reason]
+    }
     reason = messages.fallback(detail)
   }
   try {
@@ -41,10 +60,10 @@ export async function runMediaEngine(settings: Settings, engine: unknown, path: 
 
 export function mediaPrompt(settings: Settings, kind: 'audio' | 'video', args: any): string {
   const content = kind === 'video'
-    ? 'Describe scenes, on-screen text (OCR), actions and motion, speakers and tone with timestamps. '
-    : 'Transcribe the audio as SRT subtitles only, with timestamps (HH:MM:SS,mmm --> HH:MM:SS,mmm). Include tone and meaningful sounds in the subtitle text. '
+    ? 'Write Markdown describing scenes, on-screen text (OCR), actions and motion, speakers and tone with timestamps. '
+    : 'Transcribe the audio into JSON segments. Use start and end times in seconds, positive integer speaker IDs, text and optional tone. Include meaningful sounds in the text. Return an empty segments array for silence. '
   const speech = args.transcript === false ? 'Do not include a speech transcript. ' : 'Include the complete speech transcript with timestamps. '
-  const speakers = args.speakers === false ? 'Do not label speakers. ' : 'Label speakers consistently as Speaker 1, Speaker 2, etc. '
+  const speakers = args.speakers === false ? 'Do not distinguish speakers; use speaker ID 1 for every segment. ' : 'Assign consistent speaker IDs starting at 1. '
   return content + speech + speakers + `Keep spoken words in their original language${args.language ? ` (${args.language})` : ''}. `
     + `Write descriptions in ${settings.html.lang}. Report uncertainty instead of guessing.`
 }

@@ -2,14 +2,13 @@
 import { runProgram, type RunProgram } from '../ffmpeg.js'
 import { resolveInputFile } from '../files.js'
 import { engineParameter, mediaPrompt, runMediaEngine } from '../gemini/engine.js'
-import { GeminiError } from '../gemini/client.js'
 import { mediaMessages } from '../gemini/messages.js'
+import { parseGeminiSegments, TRANSCRIPT_SCHEMA } from '../gemini/transcript.js'
 import { safeBaseName, saveFile } from '../output.js'
 import { NAME_PARAMETER, type Settings, type ToolSpec } from '../settings.js'
 import { decodeToSamples, SPEECH_SAMPLE_RATE } from '../speech/decode.js'
 import { createSpeechEngine, modelTitle, type TranscribeOptions, type Transcriber } from '../speech/engine.js'
 import { clock, timestampedText, toSrt, type Segment } from '../speech/transcript.js'
-import { parseSrt } from '../video/captions.js'
 import { describeMedia, parseProbe, probeArgs } from '../video/probe.js'
 
 export interface TranscribeDeps {
@@ -55,8 +54,10 @@ export function transcribeTool(settings: Settings, deps: TranscribeDeps = {}): T
   }
 
   async function geminiTranscript(text: string, args: any): Promise<string> {
-    const segments = parseSrt(text.replace(/^```(?:srt)?\s*\n?|\n?```\s*$/g, ''))
-    if (!segments.length || segments.some((s) => !Number.isFinite(s.end) || s.start < 0 || s.end <= s.start)) throw new GeminiError('invalid')
+    const segments = parseGeminiSegments(text, args.speakers !== false)
+    if (!segments.length) {
+      return mediaMessages(settings.html.lang).noSpeech
+    }
     const srt = await saveFile(settings.outputDir, safeBaseName(args.name, 'transcript'), 'srt', Buffer.from(toSrt(segments), 'utf8'))
     return `${mediaMessages(settings.html.lang).subtitles(srt)}\n\n${timestampedText(segments, settings.speech.maxChars)}`
   }
@@ -68,7 +69,8 @@ export function transcribeTool(settings: Settings, deps: TranscribeDeps = {}): T
     const facts = describeMedia(path, info)
     return runMediaEngine(settings, args.engine, path, mediaPrompt(settings, 'audio', args),
       async () => `${facts}\n\n${await localTranscript(path, language, args)}`,
-      async (text) => `${facts}\n\n${await geminiTranscript(text, args)}`)
+      async (text) => `${facts}\n\n${await geminiTranscript(text, args)}`,
+      TRANSCRIPT_SCHEMA)
   }
 
   return {
