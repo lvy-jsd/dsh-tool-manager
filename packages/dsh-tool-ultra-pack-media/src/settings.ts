@@ -55,7 +55,9 @@ export interface Config {
   modelCacheDir?: string
   /** Longest stretch of audio transcribed per call, in seconds. */
   maxTranscribeSeconds?: number
-  /** Optional Google API key. Setting a key enables media uploads in auto mode. */
+  /** Opt in to uploading audio and video files to Google. Default false. */
+  geminiUploads?: boolean
+  /** Optional Google API key, used only when geminiUploads is true. */
   geminiApiKey?: string
   /** Key file, checked before GEMINI_API_KEY. Default ~/.config/swiftnest/gemini.key. */
   geminiKeyFile?: string
@@ -136,6 +138,7 @@ export function resolveSettings(config: Config): Settings {
     ffmpegTimeoutMs: config.ffmpegTimeoutMs ?? 300_000,
     speech: speechSettings(config),
     gemini: {
+      uploads: config.geminiUploads ?? false,
       apiKey: config.geminiApiKey,
       keyFile: config.geminiKeyFile ?? DEFAULT_GEMINI_KEY_FILE,
       model: config.geminiModel ?? DEFAULT_GEMINI_MODEL,
