@@ -508,6 +508,8 @@ export interface ToolCatalogService {
   find(query: string, path?: string): FoundTool[]
   /** Schema tokens actually sent for an agent: pinned tools plus its loaded set. */
   wireTokens(agent: Agent): number
+  /** Estimated tokens of final tool results delivered to this agent (observe-only). */
+  resultTokens(agent: Agent): number
 }
 
 /** What an extension plugin uses of its context after `inject: ['toolCatalog']`. */
