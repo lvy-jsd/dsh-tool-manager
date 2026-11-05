@@ -143,13 +143,14 @@ export function buildPrompt(group: GroupInput): string {
   ].join('\n')
 }
 
-/** Pull the first category name out of a model answer, or undefined. */
+/** Answer with the single named category, or undefined if absent or ambiguous. */
 export function parseCategory(text: unknown): string | undefined {
   const value = String(text ?? '').toLowerCase()
+  const found: string[] = []
   for (const category of CATEGORIES) {
-    if (new RegExp(`(^|[^a-z])${category}([^a-z]|$)`).test(value)) return category
+    if (new RegExp(`(^|[^a-z])${category}([^a-z]|$)`).test(value)) found.push(category)
   }
-  return undefined
+  return found.length === 1 ? found[0] : undefined
 }
 
 /**
