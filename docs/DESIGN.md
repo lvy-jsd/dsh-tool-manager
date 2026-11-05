@@ -776,6 +776,24 @@ The 36 visible tools: the pinned set, the three entry tools, and `send_message`,
 - The loaded group itself adds ≈ 1.3k prompt tokens per request (12 maps schemas).
 - Net: one load ≈ 6.7k extra uncached tokens once, versus ≈ 29k tokens saved on **every** request. Break-even within the first request after the load. The upstream ordering TODO (§6) would shrink the one-off miss but is low priority.
 
+**What the −71% measures, and the acceptance line for new tool sources.** The saving above is the
+**resident tool-definition** account: the schemas the model is offered on every request (pinned
+tools, the fixed entry tools, and everything loaded for that agent). It is not "all context" —
+tool results, conversation history and the system prompt sit outside it and are unaffected. Quote it
+with that scope, and do not compare it with whole-context figures such as the 85% often cited for
+tool-search setups.
+
+Any change that adds a tool source — a new pack, an MCP connector, a device bundle — reports three
+columns instead of one:
+
+| New tools | Resident schema tokens added at start-up | Recall hit rate (`test/unit/recall-probe.test.mjs`) |
+|---|---|---|
+| how many | must stay near zero: entry tools are pinned, everything else loads on demand | must not fall below `BASELINE` |
+
+A PR that grows the catalogue without holding the middle column near zero, or that lowers the
+probe's hit rate, is not finished no matter how many tools it adds. The probe's `BASELINE` is a
+ratchet: raise it with the number, never lower it to make a change pass.
+
 **Findings outside this plugin**
 
 - The trial surfaced a misplaced credential in a **historical** connector-policy snapshot of the host configuration (not in this plugin). It was rotated and removed; no action needed for users of this plugin.
