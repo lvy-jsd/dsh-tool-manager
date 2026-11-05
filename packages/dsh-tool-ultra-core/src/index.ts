@@ -9,7 +9,7 @@
 // are provided by other plugins through the `toolCatalog` service.
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { buildCatalog, resolveTarget, toolsUnder, UNCATEGORIZED } from './catalog.js'
+import { buildCatalog, resolveTarget, toolsUnder, estimateTokens, UNCATEGORIZED } from './catalog.js'
 import { createMetadataStore, defaultMetadataFile } from './metadata.js'
 import { createExemptStore, defaultExemptFile } from './exempt.js'
 import { defaultManifestFile, syncManifest } from './manifest.js'
@@ -532,7 +532,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       let tokens = 0
       for (const schema of ctx.tools.schemas(agent)) {
         if (!visible.has(schema.name)) continue
-        tokens += cat.tools.get(schema.name)?.tokens ?? 0
+        tokens += cat.tools.get(schema.name)?.tokens ?? estimateTokens(schema)
       }
       return tokens
     },
