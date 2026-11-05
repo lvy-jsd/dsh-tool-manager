@@ -239,6 +239,9 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   // live in a preset layer, so a global-only catalog would hide them without
   // listing them. Agents with the same tool set share one cached catalog.
   const catalogs = new Map<string, Catalog>()  // key (sorted names) -> catalog
+  // Estimated tokens of final tool results delivered to each agent. A WeakMap
+  // keeps the ledger tied to agent lifetime; `tools/result` is observe-only.
+  const resultTokensByAgent = new WeakMap<Agent, number>()
   let manifestAnnotations: Annotation[] | null = null
   const invalidate = () => { catalogs.clear() }
   const registries = createRegistries(() => {
@@ -330,6 +333,15 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     if (refusal !== undefined) return { kind: 'deny', reason: refusal }
     return next()
   }), 'tool-manager.rescue-hidden-call()')
+
+  // `tools/result` carries the deep-frozen final result after post-execute
+  // policies. Observe it only: never mutate the result, never change the call.
+  ctx.effect(() => ctx.on('tools/result', (exec: { agent?: Agent }, result: { content?: unknown }) => {
+    const agent = exec?.agent
+    if (!agent) return
+    const cost = estimateTokens(result?.content ?? null)
+    resultTokensByAgent.set(agent, (resultTokensByAgent.get(agent) ?? 0) + cost)
+  }), 'tool-manager.result-tokens()')
 
   // DSH 0.2.2+ fixes the callable tools when a step starts (`exec.toolSet`), so
   // a tool loaded during the step only becomes callable from the next one.
@@ -536,6 +548,8 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       }
       return tokens
     },
+    /** Estimated tokens of final tool results delivered to this agent (not schema tokens). */
+    resultTokens: (agent: Agent) => resultTokensByAgent.get(agent) ?? 0,
   } satisfies ToolCatalogService
   // `pack:<id>` in tools_load / tools_unload resolves to the pack's current tools.
   ctx.effect(() => registries.registerTargetResolver({

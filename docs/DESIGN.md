@@ -653,8 +653,9 @@ edit the settings lists, and let a file replace the config `exemptProviders`.
   entry, so a blank field falls back to the declaration. The panel edits only
   what the core already exposes: **not** `parameters` or `description`. DSH has
   no public interception point for the schema sent to the model (`dsh-tools`
-  exposes only the execution-time `tools/pre-execute`, `tools/execute`,
-  `tools/post-execute` hooks, and `view`/`schemaOf` are host-private), so
+  exposes the execution-time `tools/pre-execute`, `tools/execute` and
+  `tools/post-execute` hooks plus the observe-only `tools/result` emit event;
+  `view`/`schemaOf` are host-private), so
   touching it would break across versions.
 - **Exemption file (item 4).** `<DSH_HOME>/tool-manager/exempt.json` replaces
   `exemptProviders` the same way `settings.json` does: present → file wins as a
