@@ -73,6 +73,14 @@ test('parse: accepts a bare word, punctuation and prose, rejects nonsense', () =
   assert.equal(parseCategory(''), undefined)
   // A word merely containing a category name is not a match.
   assert.equal(parseCategory('devices'), undefined)
+  assert.equal(parseCategory('**code**'), 'code')
+  assert.equal(parseCategory('I would say: maps.'), 'maps')
+  assert.equal(parseCategory('media or code?'), undefined)
+  assert.equal(parseCategory('code and media'), undefined)
+  assert.equal(parseCategory(CATEGORIES.join(' ')), undefined)
+  assert.equal(parseCategory(null), undefined)
+  assert.equal(parseCategory(undefined), undefined)
+  assert.equal(parseCategory(42), undefined)
 })
 
 // --- the classifier -----------------------------------------------------------

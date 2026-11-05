@@ -27,6 +27,14 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 - **License: Apache-2.0** from this release on. Releases up to 0.4.1 stay MIT.
 - The core also provides its service as `toolUltra`; `toolCatalog` stays.
 
+### Fixed
+
+- `classifier-llm`: `parseCategory` accepts an answer only when it names exactly
+  one category. Small/local models often answer with Markdown, prose or a
+  restated category list; the old code returned the first category in
+  declaration order and cached that guess forever. Ambiguous answers now leave
+  the group uncategorized instead of a wrong permanent classification.
+
 ### Compatibility
 
 - Unchanged: plugin name `tool-manager`, loader id, config keys, entry tools
