@@ -794,6 +794,28 @@ A PR that grows the catalogue without holding the middle column near zero, or th
 probe's hit rate, is not finished no matter how many tools it adds. The probe's `BASELINE` is a
 ratchet: raise it with the number, never lower it to make a change pass.
 
+**Retrieval in three steps.** A directory is only as good as the way a person asks for a tool. The
+probe's 30 samples are half keyword-style ("install apk") and half how people really talk
+("is my phone charged"). The retrieval path answers in three steps, cheapest first:
+
+1. **Keyword** — every word of the query appears in the tool's name, group, category or description.
+   This is what `tools_ls({query})` always did, and it needs nothing but the catalog.
+2. **Ranked index** — when the keyword match found nothing, an in-process BM25 index over the same
+   catalog scores the words instead of requiring all of them. It is built per catalog rebuild, costs
+   memory and not tokens, and needs no model and no network. It closed four of the six
+   plain-language misses: **29/30 = 96.7%** (measured 2026-11-06, up from 80.0%).
+3. **Model fallback** — a request the keyword match could not read at all is worth one small-model
+   call. `classifier-llm` registers a fallback with the core; the core asks it **only** when the
+   keyword match was empty, so a clear query never reaches a model and a matched one never pays for
+   it. With a model that understands the last sample, the probe measures **30/30 = 100%**.
+
+The model step is off unless a model is configured, and the plugin that provides it is optional, so
+the default product behaviour is step 1 plus step 2: ranked retrieval with no model at all.
+
+For a change that adds retrieval rather than tools, the middle column is unchanged by construction:
+the ranked index and the model fallback add **no** schema and **no** always-on tool. The probe
+reports both numbers — `keyword recall` (steps 1 and 2) and `model recall` (all three).
+
 **Findings outside this plugin**
 
 - The trial surfaced a misplaced credential in a **historical** connector-policy snapshot of the host configuration (not in this plugin). It was rotated and removed; no action needed for users of this plugin.

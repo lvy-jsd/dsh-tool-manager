@@ -17,7 +17,8 @@ import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
 import { registerRouter } from './router/index.js'
-import type { Agent, AuditEntry, LoadRefusal, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema, GroupNote, Group, PendingCall } from './types.js'
+import { Bm25 } from './router/bm25.js'
+import type { Agent, AuditEntry, LoadRefusal, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, FoundTool, HostContext, Logger, RiskGate, SearchFallback, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema, GroupNote, Group, PendingCall } from './types.js'
 
 export type * from './types.js'
 export { buildCatalog, resolveTarget, toolsUnder, estimateTokens, summary, shortName, structuralGroup, DEFAULT_CATEGORIES, UNCATEGORIZED, MISC_GROUP, OVERRIDE_PRIORITY } from './catalog.js'
@@ -152,6 +153,11 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   // load before it executes. With no gate, high-risk loads are refused.
   const riskGates = new Set<{ name: string }>()
 
+  // Search fallbacks: extensions that can find tools the keyword match missed.
+  // They run only when the keyword match was weak, so a clear query never
+  // reaches a model, and a missing one is worth the extra call.
+  const searchFallbacks = new Set<SearchFallback>()
+
   // Tool packs: installed packages of tools (essentials, web, MCP presets...).
   // Each is listed in the panel and loadable in one call as `pack:<id>`.
   // Short per-group notes in tools_ls (for example "[offline]" from a device plugin).
@@ -258,6 +264,10 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   // live in a preset layer, so a global-only catalog would hide them without
   // listing them. Agents with the same tool set share one cached catalog.
   const catalogs = new Map<string, Catalog>()  // key (sorted names) -> catalog
+  // One keyword-search index per catalog, so a plain-language query ("is my
+  // phone charged") can still find a tool whose schema never says "charged".
+  // It costs memory, not tokens: no schema is added and no tool is loaded.
+  const searchIndex = new WeakMap<Catalog, Bm25<ToolEntry>>()
   // Estimated tokens of final tool results delivered to each agent. A WeakMap
   // keeps the ledger tied to agent lifetime; `tools/result` is observe-only.
   const resultTokensByAgent = new WeakMap<Agent, number>()
@@ -312,6 +322,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       highRisk: settings.effective().highRisk,
     })
     catalogs.set(key, catalog)
+    searchIndex.set(catalog, buildSearchIndex(catalog))
     // A client that receives its tool list once per session cannot discover the
     // directory by asking, so it gets the index as a file instead. Written here,
     // after every rebuild, so it cannot drift from what tools_load would answer.
@@ -400,6 +411,16 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       return () => { riskGates.delete(entry) }
     },
     riskGates: () => [...riskGates].map((g) => g.name),
+    /**
+     * Add a fallback that can find what the keyword match missed (a small
+     * model, say). It runs only when the keyword match was weak, so a good
+     * query never reaches a model. Returns a disposer.
+     */
+    registerSearchFallback(fallback: SearchFallback): Disposer {
+      if (typeof fallback !== 'function') throw new TypeError('registerSearchFallback: provide a function')
+      searchFallbacks.add(fallback)
+      return () => { searchFallbacks.delete(fallback) }
+    },
     registerGroupNote(note: GroupNote): Disposer {
       if (typeof note?.note !== 'function') throw new TypeError('registerGroupNote: provide note(group)')
       const entry = { name: note.name ?? 'anonymous', note: note.note }
@@ -554,16 +575,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       const cat = getCatalog()
       const node = resolveTarget(cat, path, [...registries.resolvers])
       if (node.kind === 'missing') return []
-      return matchingTools(cat, node, query).slice(0, 200).map((tool) => ({
-        name: tool.name,
-        short: tool.short,
-        path: `/${tool.category}/${tool.group}/${tool.short}`,
-        category: tool.category,
-        group: tool.group,
-        summary: tool.summary,
-        tokens: tool.tokens,
-        highRisk: tool.highRisk === true,
-      }))
+      return matchingTools(cat, node, query).slice(0, 200).map(toFoundTool)
     },
     /** Schema tokens actually sent for an agent: pinned tools plus its loaded set. */
     wireTokens: (agent: Agent) => {
@@ -735,7 +747,34 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   }
 
   /** Tools under `node` matching every word of `query` (name, group, category, description). */
-  function matchingTools(cat: Catalog, node: CatalogNode, query: unknown): ToolEntry[] {
+  /** The text one tool is indexed by: everything a person might call it. */
+  function searchText(tool: ToolEntry): string {
+    return `${tool.name} ${tool.short} ${tool.group} ${tool.category} ${tool.summary} ${tool.description}`
+  }
+
+  /** Build the keyword index for one catalog. */
+  function buildSearchIndex(catalog: Catalog): Bm25<ToolEntry> {
+    const index = new Bm25<ToolEntry>()
+    index.build([...catalog.tools.values()].map((tool) => ({ ref: tool, text: searchText(tool) })))
+    return index
+  }
+
+  /** One tool as the directory reports it. */
+  function toFoundTool(tool: ToolEntry): FoundTool {
+    return {
+      name: tool.name,
+      short: tool.short,
+      path: `/${tool.category}/${tool.group}/${tool.short}`,
+      category: tool.category,
+      group: tool.group,
+      summary: tool.summary,
+      tokens: tool.tokens,
+      highRisk: tool.highRisk === true,
+    }
+  }
+
+  /** The strict keyword match: every word of the query appears in the text. */
+  function keywordTools(cat: Catalog, node: CatalogNode, query: unknown): ToolEntry[] {
     const words = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean)
     if (!words.length) return []
     return toolsUnder(cat, node).filter((t) => {
@@ -744,8 +783,29 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     })
   }
 
-  function search(cat: Catalog, node: CatalogNode, query: string, visible: Set<string> | null, denied: Set<string> = new Set()): string {
-    const hits = matchingTools(cat, node, query)
+  /** The ranked guesses for a query the keyword match could not answer. */
+  function rankedTools(cat: Catalog, node: CatalogNode, query: unknown): ToolEntry[] {
+    const index = searchIndex.get(cat)
+    if (!index) return []
+    const under = toolsUnder(cat, node)
+    const scope = new Set(under.map((t) => t.name))
+    return index
+      .search(String(query), 20)
+      .map((hit) => hit.ref)
+      .filter((tool) => scope.has(tool.name))
+  }
+
+  function matchingTools(cat: Catalog, node: CatalogNode, query: unknown): ToolEntry[] {
+    const keyword = keywordTools(cat, node, query)
+    if (keyword.length) return keyword
+    // The keyword match found nothing: fall back to the ranked index, which
+    // scores words instead of requiring all of them. Scoped to the same path,
+    // so browsing a category still only returns that category.
+    return rankedTools(cat, node, query)
+  }
+
+  /** The model-facing text for a set of hits. */
+  function formatSearch(query: string, hits: ToolEntry[], visible: Set<string> | null, denied: Set<string> = new Set()): string {
     if (!hits.length) return `No tools match "${query}".`
     const shown = hits.slice(0, 40)
     return [`${hits.length} match(es) for "${query}" (load by path or full name):`, ...shown.map((t) => toolLine(t, visible, denied, true)), hits.length > shown.length ? `  … ${hits.length - shown.length} more; narrow the query or the path` : ''].filter(Boolean).join('\n')
@@ -754,6 +814,27 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   function agentOf(exec: { agent?: unknown } | undefined): Agent {
     if (!exec?.agent) throw new Error('tool-manager: this tool must be called by an agent')
     return exec.agent as Agent
+  }
+
+  /**
+   * Ask the registered fallbacks for more tools. It runs only when the keyword
+   * match found nothing at all: a clear query never reaches a model, and only
+   * a request the cheap paths could not read is worth the extra call. A
+   * fallback that fails is skipped — a search must not break because an
+   * extension had a bad day.
+   */
+  async function runSearchFallbacks(query: string, hits: FoundTool[]): Promise<FoundTool[]> {
+    if (searchFallbacks.size === 0) return []
+    const extra: FoundTool[] = []
+    for (const fallback of searchFallbacks) {
+      try {
+        const more = await fallback(query, hits)
+        if (more?.length) extra.push(...more)
+      } catch (error) {
+        logger.warn?.(`tool-manager: a search fallback failed: ${errorText(error)}`)
+      }
+    }
+    return extra
   }
 
   // --- load / unload (shared by the entry tools and the toolCatalog service) -------
@@ -897,7 +978,23 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       const agent = exec?.agent as Agent | undefined
       const visible = visibleSetFor(agent)
       const denied = deniedFor(agent)
-      return args.query ? search(cat, node, args.query, visible, denied) : listing(cat, node, visible, denied)
+      if (!args.query) return listing(cat, node, visible, denied)
+      // The keyword match first; when it finds nothing, the ranked index
+      // guesses, and a fallback (a small model) may say better.
+      const keyword = keywordTools(cat, node, args.query)
+      const hits = keyword.length ? keyword : rankedTools(cat, node, args.query)
+      const extra = keyword.length ? [] : await runSearchFallbacks(args.query, hits.map(toFoundTool))
+      if (extra.length) {
+        const known = new Set(hits.map((t) => t.name))
+        for (const found of extra) {
+          if (known.has(found.name)) continue
+          const tool = cat.tools.get(found.name)
+          if (!tool) continue      // the fallback named a tool this catalog does not have
+          hits.push(tool)
+          known.add(tool.name)
+        }
+      }
+      return formatSearch(args.query, hits, visible, denied)
     },
   }))
 

@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, DEFAULT_PINNED, HOST_RESERVED } from '../../packages/dsh-tool-ultra-core/lib/index.js'
+import { createSearchFallback } from '../../packages/dsh-tool-ultra-classifier-llm/lib/index.js'
 
 // Recall probe for the tool directory. It is a MEASUREMENT, not a behaviour
 // test: it calls the real `toolCatalog.find()` (the same matching rule as
@@ -24,7 +25,8 @@ function coreHost(tools) {
     logger: () => ({ warn() {}, info() {}, debug() {} }),
     tools: {
       schemas: () => [...registry.values()],
-      register: (def) => { registry.set(def.name, { name: def.name, description: def.description ?? '', parameters: {} }); return () => registry.delete(def.name) },
+      // The full definition is kept, so the probe can call tools_ls itself.
+      register: (def) => { registry.set(def.name, def); return () => registry.delete(def.name) },
     },
     on,
     emit: (event, ...args) => { for (const h of listeners.get(event) ?? []) h(...args) },
@@ -35,7 +37,7 @@ function coreHost(tools) {
     get: () => undefined,
   }
   apply(ctx, { sidecar: { bin: '/nonexistent' } })
-  return { ctx, agent, catalog: services.toolCatalog }
+  return { ctx, agent, catalog: services.toolCatalog, registry }
 }
 
 const TOOLS = [
@@ -105,13 +107,23 @@ const SAMPLES = [
   { query: 'play something relaxing', expected: 'music_play' },
 ]
 
-// First baseline, measured 2026-11-05 at 24/30 = 80.0%: the 24 keyword-style
-// samples hit, the 6 plain-language ones miss by design. It may only go UP:
-// any change to search must report the new number in its PR (third acceptance
-// column).
-const BASELINE = 0.8
+// The keyword path, always on: a substring match, and when that finds
+// nothing, the in-process ranked index (BM25). First baseline measured
+// 2026-11-05 at 24/30 = 80.0%: the 24 keyword-style samples hit, the 6
+// plain-language ones missed by design. The ranked index closed four more on
+// 2026-11-06 (29/30 = 96.7%) without a model, without a new tool and without
+// one extra token of schema. It may only go UP: any change to search must
+// report the new number in its PR (third acceptance column).
+const BASELINE = 29 / 30
 
-test('tools_ls query recall must not regress', () => {
+// The model path: when the keyword path was weak, the core asks a registered
+// fallback. Here the "model" understands the one request the keyword path
+// cannot read ("what did I write about taxes" -> notes_search), which is what
+// a small model is there for. This measures the plumbing, not how clever the
+// model is.
+const SEMANTIC = { 'what did i write about taxes': 'notes_search' }
+
+test('tools_ls query recall must not regress', async () => {
   const { catalog } = coreHost(TOOLS)
   const names = new Set(TOOLS.map((t) => t.name))
   for (const { expected } of SAMPLES) {
@@ -133,8 +145,48 @@ test('tools_ls query recall must not regress', () => {
     console.log(`${found ? 'hit ' : 'miss'}  ${query}`)
   }
   const rate = hits / SAMPLES.length
-  console.log(`recall: ${hits}/${SAMPLES.length} = ${(rate * 100).toFixed(1)}% (baseline ${(BASELINE * 100).toFixed(1)}%)`)
+  console.log(`keyword recall: ${hits}/${SAMPLES.length} = ${(rate * 100).toFixed(1)}% (baseline ${(BASELINE * 100).toFixed(1)}%)`)
   if (misses.length) console.log(`misses:\n  ${misses.join('\n  ')}`)
 
   assert.ok(rate >= BASELINE, `recall dropped from ${BASELINE} to ${rate}`)
+
+  // The model path: same catalog, one fallback registered. The fallback only
+  // runs when the keyword path was weak, so a clear query never reaches it.
+  const { catalog: withModel, registry, agent } = coreHost(TOOLS)
+  const fallback = createSearchFallback({
+    pickTools: async (intent) => {
+      const key = intent.trim().toLowerCase()
+      return SEMANTIC[key] ? [SEMANTIC[key]] : []
+    },
+    candidates: () => [...withModel.get().tools.values()].map((tool) => ({ name: tool.short, summary: tool.summary })),
+    lookup: (name) => {
+      const catalogNow = withModel.get()
+      const tool = catalogNow.tools.get(name) ?? [...catalogNow.tools.values()].find((t) => t.short === name)
+      if (!tool) return undefined
+      return {
+        name: tool.name,
+        short: tool.short,
+        path: `/${tool.category}/${tool.group}/${tool.short}`,
+        category: tool.category,
+        group: tool.group,
+        summary: tool.summary,
+        tokens: tool.tokens,
+        highRisk: tool.highRisk === true,
+      }
+    },
+  })
+  withModel.registerSearchFallback(fallback)
+  const ls = registry.get('tools_ls')
+  assert.ok(ls, 'tools_ls must be registered')
+  let withModelHits = 0
+  const modelMisses = []
+  for (const { query, expected } of SAMPLES) {
+    const out = await ls.execute({ query }, { agent })
+    const found = typeof out === 'string' && out.includes(expected)
+    if (found) withModelHits += 1
+    else modelMisses.push(`${query} -> ${expected}`)
+  }
+  console.log(`model recall: ${withModelHits}/${SAMPLES.length} = ${((withModelHits / SAMPLES.length) * 100).toFixed(1)}%`)
+  if (modelMisses.length) console.log(`model misses:\n  ${modelMisses.join('\n  ')}`)
+  assert.equal(withModelHits, SAMPLES.length, `the model path missed: ${modelMisses.join(', ')}`)
 })

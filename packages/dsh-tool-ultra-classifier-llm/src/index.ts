@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import type { GenerateOptions, LlmRuntime } from '@deepseek-ai/dsh-llm'
-import type { Classifier, ExtensionContext, HostContext, Logger } from '@lvy-jsd/dsh-tool-ultra-core'
+import type { Classifier, ExtensionContext, FoundTool, HostContext, Logger, SearchFallback } from '@lvy-jsd/dsh-tool-ultra-core'
 
 /** What the classifier needs of a group (a catalog Group or a GroupProbe both fit). */
 export interface GroupInput {
@@ -70,6 +70,17 @@ export interface ClassifierLlmConfig {
   batchSize?: number
   /** Replaces the model call (tests, custom pipelines). */
   classify?: ClassifyGroup
+  /**
+   * Match a plain-language request to a tool when the keyword search found
+   * little. On by default when a model is configured; off without one.
+   */
+  retrieval?: boolean
+  /** Replaces the retrieval model call (tests, custom pipelines). */
+  pickTools?: PickTools
+  /** How many tools the model may name for one request. */
+  maxRetrievalTools?: number
+  /** How many tools the model sees. */
+  maxRetrievalCandidates?: number
 }
 
 export const name = 'tool-manager-classifier-llm'
@@ -280,6 +291,147 @@ export function createLlmCaller(llm: Pick<LlmRuntime, 'stream'>, { provider, mod
   }
 }
 
+// --- retrieval: matching a plain-language request to a tool --------------------
+//
+// The keyword search finds a tool when the request uses the words in its
+// schema. A person rarely does ("what did I write about taxes" vs "search
+// personal notes by keyword"), so the last step is a small model that reads
+// the request and the tool list and names the tools that fit.
+//
+// It runs only when the keyword search was weak, so a clear request never
+// reaches a model, and a request that matched never pays for this one.
+
+/** One tool as the model sees it: a name and one line of what it does. */
+export interface RetrievalCandidate {
+  name: string
+  summary: string
+}
+
+/** The model answers with the names of the tools that fit. */
+export type PickTools = (intent: string, candidates: RetrievalCandidate[]) => Promise<string[] | undefined> | string[] | undefined
+
+export interface RetrievalOptions {
+  /** The model call. Injected in tests; the real one needs a configured model. */
+  pickTools?: PickTools
+  /** Every tool that could match, as the model sees it. */
+  candidates?: () => RetrievalCandidate[]
+  /** Where a named tool is looked up. */
+  lookup?: (name: string) => FoundTool | undefined
+  logger?: Logger
+  /** Answers per request, so the same question is not paid for twice. */
+  cache?: Map<string, FoundTool[]>
+  /** How many tools the model may name. */
+  maxTools?: number
+  /** How many candidates the model sees. */
+  maxCandidates?: number
+}
+
+/** The prompt: the request, then the tool list, then the answer format. */
+export function buildRetrievalPrompt(intent: string, candidates: RetrievalCandidate[]): string {
+  const lines = candidates.map((tool) => `- ${tool.name}: ${String(tool.summary ?? '').split('\n')[0].trim().slice(0, 120)}`)
+  return [
+    'You match a request to the tools of a coding agent.',
+    '',
+    `Request: ${intent}`,
+    '',
+    'Tools:',
+    ...lines,
+    '',
+    'Answer with the names of the tools that best match the request, comma separated, at most three.',
+    'If no tool fits, answer with none.',
+  ].join('\n')
+}
+
+/**
+ * Read the model's answer: known tool names only, in the order it named them.
+ * Anything else is dropped, so a chatty model cannot smuggle in a tool that
+ * does not exist.
+ */
+export function parseToolNames(text: unknown, known: Iterable<string>, max = 3): string[] {
+  const names = new Map([...known].map((name) => [name.toLowerCase(), name]))
+  const found: string[] = []
+  for (const part of String(text ?? '').split(/[\s,;]+/)) {
+    const name = names.get(part.trim().toLowerCase().replace(/[.:;]+$/, ''))
+    if (name && !found.includes(name)) found.push(name)
+    if (found.length >= max) break
+  }
+  return found
+}
+
+/** Build the fallback the core's search calls when the keyword match was weak. */
+export function createSearchFallback({
+  pickTools,
+  candidates,
+  lookup,
+  logger,
+  cache = new Map<string, FoundTool[]>(),
+  maxTools = 3,
+  maxCandidates = 120,
+}: RetrievalOptions = {}): SearchFallback {
+  const limit = cache.size > 50 ? 50 : cache.size
+  return async function fallback(query: string, hits: FoundTool[]): Promise<FoundTool[] | undefined> {
+    if (typeof pickTools !== 'function' || typeof candidates !== 'function') return undefined
+    const key = query.trim().toLowerCase()
+    if (!key) return undefined
+    const cached = cache.get(key)
+    if (cached) return cached
+    const list = candidates().slice(0, maxCandidates)
+    if (!list.length) return undefined
+    let names: string[] | undefined
+    try {
+      names = await pickTools(query, list)
+    } catch (error) {
+      logger?.warn?.(`classifier-llm: picking tools for "${query}" failed: ${(error as Error).message}`)
+      return undefined
+    }
+    const picked = parseToolNames((names ?? []).join(', '), list.map((c) => c.name), maxTools)
+    const found: FoundTool[] = []
+    for (const name of picked) {
+      const tool = lookup?.(name)
+      if (tool && !found.some((t) => t.name === tool.name)) found.push(tool)
+    }
+    if (cache.size >= limit) {
+      const oldest = cache.keys().next().value
+      if (oldest !== undefined) cache.delete(oldest)
+    }
+    cache.set(key, found)
+    return found
+  }
+}
+
+/**
+ * One small-model call for retrieval: the request and the tool list go in,
+ * the names of the matching tools come out.
+ */
+export function createToolPicker(llm: Pick<LlmRuntime, 'stream'>, { provider, model, maxTokens = 48, temperature = 0 }: { provider: string, model: string, maxTokens?: number, temperature?: number }): PickTools {
+  return async function pickTools(intent: string, candidates: RetrievalCandidate[]): Promise<string[] | undefined> {
+    let text = ''
+    let finished = false
+    const options: GenerateOptions = {
+      provider,
+      model,
+      system: 'You are a strict tool matcher. You answer with tool names, comma separated.',
+      messages: [{ role: 'user', content: [{ type: 'text', text: buildRetrievalPrompt(intent, candidates) }] }],
+      maxTokens,
+      temperature,
+    }
+    for await (const chunk of llm.stream(options)) {
+      if (finished) throw new Error('the model emitted data after its finish')
+      if (chunk.type === 'text-delta') text += chunk.text ?? ''
+      else if (chunk.type === 'finish') {
+        finished = true
+        if (chunk.reason.kind === 'error' || chunk.reason.kind === 'aborted') {
+          const { code, message } = chunk.reason.failure
+          throw new Error(`${chunk.reason.kind} ${code}: ${message}`)
+        }
+        if (chunk.reason.kind !== 'stop') throw new Error(`ended with ${chunk.reason.kind}`)
+      }
+    }
+    if (!finished) throw new Error('the model emitted no finish chunk')
+    return parseToolNames(text.trim(), candidates.map((c) => c.name))
+  }
+}
+
 export function apply(ctx: ExtensionContext & Pick<HostContext, 'get'> & { llm?: Pick<LlmRuntime, 'stream'> }, config: ClassifierLlmConfig = {}) {
   const logger = (typeof ctx.logger === 'function' ? ctx.logger('tool-manager-classifier-llm') : ctx.logger) ?? console
   if (config.enabled === false) return
@@ -324,6 +476,46 @@ export function apply(ctx: ExtensionContext & Pick<HostContext, 'get'> & { llm?:
   })
 
   ctx.effect(() => ctx.toolCatalog.registerClassifier(classifier), 'tool-manager-classifier-llm.classifier()')
+
+  // --- retrieval: a plain-language request that the keyword search missed ------
+  //
+  // The core calls this only when the keyword search was weak, so a clear
+  // request never reaches the model. Without a configured model there is no
+  // fallback at all, and the keyword search answers on its own.
+  let pickTools: PickTools | undefined
+  if (typeof config.pickTools === 'function') {
+    pickTools = config.pickTools
+  } else if (llm !== undefined && target.provider && target.model) {
+    pickTools = createToolPicker(llm, { provider: target.provider, model: target.model, maxTokens: config.maxTokens })
+  }
+  if (pickTools && config.retrieval !== false) {
+    const fallback = createSearchFallback({
+      pickTools,
+      maxTools: config.maxRetrievalTools,
+      maxCandidates: config.maxRetrievalCandidates,
+      logger,
+      candidates: () => {
+        const catalog = ctx.toolCatalog.get()
+        return [...catalog.tools.values()].map((tool) => ({ name: tool.short, summary: tool.summary }))
+      },
+      lookup: (name) => {
+        const catalog = ctx.toolCatalog.get()
+        const tool = catalog.tools.get(name) ?? [...catalog.tools.values()].find((t) => t.short === name)
+        if (!tool) return undefined
+        return {
+          name: tool.name,
+          short: tool.short,
+          path: `/${tool.category}/${tool.group}/${tool.short}`,
+          category: tool.category,
+          group: tool.group,
+          summary: tool.summary,
+          tokens: tool.tokens,
+          highRisk: tool.highRisk === true,
+        }
+      },
+    })
+    ctx.effect(() => ctx.toolCatalog.registerSearchFallback(fallback), 'tool-manager-classifier-llm.retrieval()')
+  }
 
   // Misses are collected while catalogs are built; pump after the build so a
   // rebuild never waits on the network.
