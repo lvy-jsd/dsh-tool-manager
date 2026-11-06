@@ -199,10 +199,14 @@ export function createLlmClassifier({
     try {
       while (pending.size > 0) {
         const batch = [...pending.entries()].slice(0, batchSize)
-        for (const [key] of batch) pending.delete(key)
+        // Reserve the entire batch before yielding to the first model request.
+        // A catalog refresh must not queue a later member of this batch again.
+        for (const [key] of batch) {
+          pending.delete(key)
+          inFlight.add(key)
+        }
         let changed = false
         for (const [key, group] of batch) {
-          inFlight.add(key)
           try {
             const category = await classifyGroup!(group)
             if (typeof category === 'string' && CATEGORIES.includes(category)) {
