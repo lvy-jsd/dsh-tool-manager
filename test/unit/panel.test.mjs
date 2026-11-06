@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { coreHost } from './panel-core-host.mjs'
 import { createServer } from 'node:http'
 import { isTrustedWebRequest, createApi, mountWebRoutes } from '../../packages/dsh-tool-ultra-panel/lib/index.js'
 
@@ -42,6 +43,8 @@ function makeCatalog() {
   const catalog = { tools: byName, groups, categories }
   const agent = { id: 'sess-1' }
   const state = { loaded: new Set(['adb_install']), groups: new Set(['adb']), handoffGroups: new Set(), handoffTools: new Set() }
+  let paused = false
+  let entries = [{ at: 123, kind: 'load', agentId: agent.id, summary: 'adb_install', ok: true }]
   const service = {
     get: () => catalog,
     resolve: (target) => {
@@ -67,14 +70,20 @@ function makeCatalog() {
     stateOf: () => state,
     allowFor: () => ['tools_ls', 'tools_load', 'adb_install'],
     wireTokens: () => 1234,
+    resultTokens: () => 567,
+    toolCounts: () => ({ installed: 8, visible: 3 }),
+    audit: () => entries,
+    clearAudit: () => { entries = [] },
     load: async (a, targets) => `Loaded ${targets.length} target(s)`,
     unload: async (a, targets) => `Unloaded ${targets.length} target(s)`,
     config: () => ({
+      paused,
       pinned: ['bash'], entryTools: ['tools_ls'], extraPinned: [], unpinned: [], highRisk: [],
       exemptProviders: ['claude-code'], exemptSessions: [], exemptFile: '/tmp/dsh/tool-manager/exempt.json',
       hasExemptFile: false, defaults: ['bash'], settingsFile: '/tmp/dsh/tool-manager/config.json', hasSettings: false,
     }),
     updateConfig: (patch) => ({
+      paused: typeof patch.paused === 'boolean' ? (paused = patch.paused) : paused,
       pinned: ['bash', ...(patch.pinned ?? [])], entryTools: ['tools_ls'],
       extraPinned: patch.pinned ?? [], unpinned: patch.unpin ?? [], highRisk: patch.highRisk ?? [],
       exemptProviders: [], exemptSessions: [], exemptFile: '/tmp/dsh/tool-manager/exempt.json', hasExemptFile: false,
@@ -149,6 +158,9 @@ test('api: sessions report loaded state and real token usage', () => {
   assert.deepEqual(session.loadedTools, ['adb_install'])
   assert.equal(session.visible, 3)
   assert.equal(session.wireTokens, 1234)
+  assert.equal(session.resultTokens, 567)
+  assert.equal(session.installed, 8)
+  assert.equal(session.visibleNow, 3)
 })
 
 test('api: an exempt session is flagged instead of showing 0 visible tools', () => {
@@ -230,6 +242,20 @@ test('api: updateConfig is reachable through the whitelist', async () => {
     const reloaded = await call('reloadConfig', {})
     assert.equal(reloaded.ok, true)
     assert.deepEqual(reloaded.config.highRisk, [])
+    const timeline = await call('audit', {})
+    assert.equal(timeline.ok, true)
+    assert.deepEqual(timeline.entries.map((entry) => entry.summary), ['adb_install'])
+    const paused = await call('setPaused', { paused: true })
+    assert.equal(paused.ok, true)
+    assert.equal(paused.config.paused, true)
+    assert.equal((await call('config', {})).config.paused, true)
+    assert.equal((await call('setPaused', { paused: false })).config.paused, false)
+    assert.equal((await call('setPaused', { paused: 'true' })).ok, false)
+    assert.equal((await call('setPaused', {})).ok, false)
+    assert.deepEqual((await call('clearAudit', {})).entries, [])
+    assert.deepEqual((await call('audit', {})).entries, [])
+    const sessions = await call('sessions', {})
+    assert.equal(sessions.sessions[0].resultTokens, 567)
     // An unknown method stays a 400, not a silent no-op.
     const unknown = await call('updateEverything', {})
     assert.equal(unknown.ok, false)
@@ -560,4 +586,31 @@ test('tidy: apply with nothing confirmed writes nothing', () => {
   const result = api.tidyApply({ suggestions: [] })
   assert.equal(result.ok, false)
   assert.deepEqual(written, [])
+})
+
+
+test('api: paused load is a refusal, not a successful message', async () => {
+  const refusal = { ok: false, message: 'tool loading is paused; turn it back on in the tool panel' }
+  const api = createApi({ ...makeCatalog(), load: async () => refusal })
+  assert.deepEqual(await api.load({ sessionId: 'sess-1', targets: ['adb_install'] }), refusal)
+})
+
+
+test('api: overview counts actual visible schemas, installed hidden tools and ancestor tools without changing exemption counts', async (t) => {
+  const { catalog, agent, ctx } = coreHost(t)
+  const api = createApi(catalog)
+  const [before] = api.sessions().sessions
+  assert.ok(before.installed > before.visibleNow)
+  assert.equal(before.visibleNow, before.visible)
+  ctx.tools.register({ name: 'run_code', description: 'transport', parameters: {} })
+  assert.equal(api.sessions().sessions[0].installed, before.installed, 'host transport is not an installed capability')
+  ctx.tools.layers = { chainLayers: () => [{ tools: new Map([['ancestor_tool', { name: 'ancestor_tool', description: 'ancestor', parameters: {} }]]) }] }
+  assert.equal(api.sessions().sessions[0].installed, before.installed + 1)
+  await catalog.load(agent, ['alpha_tool'])
+  assert.equal(api.sessions().sessions[0].visibleNow, before.visibleNow + 1)
+  assert.equal(api.sessions().sessions[0].installed, before.installed + 1)
+  catalog.setExemptSession(agent.id, true)
+  const [exempt] = api.sessions().sessions
+  assert.equal(exempt.visible, null, 'existing exemption presentation is unchanged')
+  assert.ok(exempt.visibleNow > 0, 'overview still has a real count for an unrestricted session')
 })

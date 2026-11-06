@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSettingsStore, defaultSettingsFile, pickSettings, readSettingsFile, writeSettingsFile } from '../../packages/dsh-tool-ultra-core/lib/settings.js'
@@ -29,7 +29,7 @@ test('settings: a corrupt file is ignored with a warning', () => {
 
 test('settings: the store falls back to the plugin config per key', () => {
   const store = createSettingsStore({ file: tempFile(), base: { pinned: ['from-config'], highRisk: ['risky'] } })
-  assert.deepEqual(store.effective(), { pinned: ['from-config'], unpin: [], highRisk: ['risky'] })
+  assert.deepEqual(store.effective(), { paused: false, pinned: ['from-config'], unpin: [], highRisk: ['risky'] })
   assert.equal(store.stored().pinned, undefined)
 })
 
@@ -39,7 +39,7 @@ test('settings: update merges per key and persists to disk', () => {
   store.update({ pinned: ['mine'] })
   store.update({ highRisk: ['merge_pull_request'] })
   // The second update must not drop the first key.
-  assert.deepEqual(store.effective(), { pinned: ['mine'], unpin: [], highRisk: ['merge_pull_request'] })
+  assert.deepEqual(store.effective(), { paused: false, pinned: ['mine'], unpin: [], highRisk: ['merge_pull_request'] })
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { pinned: ['mine'], highRisk: ['merge_pull_request'] })
   assert.equal(store.file, file)
 })
@@ -78,4 +78,27 @@ test('settings: defaultSettingsFile follows DSH_HOME', () => {
     if (before === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = before
   }
+})
+
+
+test('settings: paused accepts only booleans, persists false and survives unrelated list edits', () => {
+  const file = tempFile()
+  const store = createSettingsStore({ file })
+  assert.deepEqual(pickSettings({ paused: 'true' }), {})
+  assert.equal(store.effective().paused, false)
+  store.update({ paused: true })
+  store.update({ pinned: ['mine'] })
+  assert.equal(createSettingsStore({ file }).effective().paused, true)
+  store.update({ paused: false })
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { paused: false, pinned: ['mine'] })
+})
+
+
+test('settings: a failed save leaves the effective pause value unchanged', () => {
+  const file = tempFile()
+  const store = createSettingsStore({ file })
+  mkdirSync(file)
+  assert.throws(() => store.update({ paused: true }))
+  assert.equal(store.effective().paused, false)
+  assert.deepEqual(store.stored(), {})
 })

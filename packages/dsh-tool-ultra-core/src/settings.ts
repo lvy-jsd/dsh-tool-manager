@@ -23,7 +23,7 @@ export function defaultSettingsFile(): string {
 }
 
 /**
- * Keep only known keys holding arrays of non-empty strings. Unknown keys and
+ * Keep known string-list keys and the boolean pause switch. Unknown keys and
  * wrong types are dropped rather than trusted: the file may have been hand
  * edited, and a bad value must not reach the catalog.
  */
@@ -35,6 +35,7 @@ export function pickSettings(raw: unknown): ToolManagerSettings {
     // Non-string entries are dropped, not coerced: a number is a typo, not a name.
     if (Array.isArray(value)) out[key] = value.filter((name): name is string => typeof name === 'string' && name.length > 0)
   }
+  if (typeof (raw as Record<string, unknown>).paused === 'boolean') out.paused = (raw as { paused: boolean }).paused
   return out
 }
 
@@ -80,12 +81,14 @@ export interface SettingsStore {
 /** Settings store over one file, with the plugin config as the fallback layer. */
 export function createSettingsStore({ file, base, logger }: { file: string, base?: ToolManagerSettings, logger?: Logger }): SettingsStore {
   const fallback: Required<ToolManagerSettings> = {
+    paused: base?.paused ?? false,
     pinned: base?.pinned ?? [],
     unpin: base?.unpin ?? [],
     highRisk: base?.highRisk ?? [],
   }
   let stored = readSettingsFile(file, logger)
   const effective = (): Required<ToolManagerSettings> => ({
+    paused: stored.paused ?? fallback.paused,
     pinned: stored.pinned ?? fallback.pinned,
     unpin: stored.unpin ?? fallback.unpin,
     highRisk: stored.highRisk ?? fallback.highRisk,
@@ -96,8 +99,9 @@ export function createSettingsStore({ file, base, logger }: { file: string, base
     effective,
     update(patch) {
       // Merged, not replaced: a UI saving one list must not drop the others.
-      stored = { ...stored, ...pickSettings(patch) }
-      writeSettingsFile(file, stored, logger)
+      const next = { ...stored, ...pickSettings(patch) }
+      writeSettingsFile(file, next, logger)
+      stored = next
       return effective()
     },
     reload() {

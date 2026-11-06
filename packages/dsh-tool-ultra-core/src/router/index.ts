@@ -376,7 +376,8 @@ export function registerRouter(ctx: HostContext, config: RouterConfig = {}, cata
       if (args.load === false || !cat) return formatFind(ranked as Hit<ToolRef>[])
       if (!agent) return formatFind(ranked as Hit<ToolRef>[])
       const targets = (ranked as Hit<ToolRef>[]).map((h) => h.ref.name)
-      const result = await cat.load(agent, targets)
+      const loaded = await cat.load(agent, targets)
+      const result = typeof loaded === 'string' ? loaded : loaded.message
       const budget = budgetReport(agent)
       return budget ? `${result}\n${budget}` : result
     },

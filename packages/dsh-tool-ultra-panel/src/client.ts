@@ -68,11 +68,24 @@ interface ClientContext {
       /** 'file:provider' | 'file:session' | 'config:provider' | '' */
       exemptSource?: string
       visible: number | null
+      installed: number
+      visibleNow: number
+      resultTokens: number
+      handoffGroups: string[]
+      handoffTools: string[]
       wireTokens: number
       loadedTools: string[]
       groups: string[]
     }
+    interface AuditRow {
+      at: number
+      kind: 'load' | 'unload' | 'config' | 'paused'
+      agentId: string
+      summary: string
+      ok: boolean
+    }
     interface ConfigJson {
+      paused?: boolean
       pinned?: string[]
       entryTools?: string[]
       extraPinned?: string[]
@@ -180,7 +193,7 @@ interface ClientContext {
       'tidy.col.group': 'Group',
       'tidy.col.move': 'Move',
       'tidy.col.tools': 'Tools',
-      stat: '{n} live session(s) · {tokens} in context',
+      'stat': '{n} live sessions · descriptions sent per request: {tokens}',
       offline: 'Panel service offline',
       loading: 'Loading…',
       error: 'Panel error: {message}',
@@ -209,20 +222,20 @@ interface ClientContext {
       noSessions: 'No live sessions right now. Open a conversation, then come back.',
       subagentOf: 'subagent of {id}',
       visible: '{n} visible',
-      exempt: 'exempt',
-      exemptHint: 'This session is never narrowed: its model route is listed in the exemption list.',
-      exemptSessionHint: 'This one session is listed in the exemption file; it is never narrowed.',
-      exemptNote: 'Exempt session: every tool is visible; nothing is narrowed.',
-      exemptOn: 'Exempt session',
-      exemptOff: 'Narrow it',
-      'config.exemptFile': 'Exemption file',
-      'config.hasExemptFile': 'The exemption file is in effect: its providers and sessions replace exemptProviders from the plugin config.',
-      'config.noExemptFile': 'No exemption file yet; exemptProviders from the plugin config is in effect. Exempting a session here creates the file.',
-      'config.exemptProviders': 'Exempt routes',
-      'config.exemptSessions': 'Exempt sessions',
-      'config.exemptSaved': 'Exemptions saved.',
-      'config.exemptFailed': 'Saving the exemption failed: {message}',
-      sent: '{tokens} sent',
+      'exempt': 'not restricted',
+      'exemptHint': 'Tools are not restricted for sessions using this model route.',
+      'exemptSessionHint': 'This session is listed in the file of sessions whose tools are not restricted.',
+      'exemptNote': 'Tools are not restricted in this session; every tool is visible.',
+      'exemptOn': 'Do not restrict this session',
+      'exemptOff': 'Restrict this session',
+      'config.exemptFile': 'Unrestricted sessions file',
+      'config.hasExemptFile': 'The file sets which model routes and sessions are not restricted.',
+      'config.noExemptFile': 'No file yet; model routes from the plugin settings are in effect. Removing restrictions for a session here creates the file.',
+      'config.exemptProviders': 'Routes that are not restricted',
+      'config.exemptSessions': 'Sessions that are not restricted',
+      'config.exemptSaved': 'Restriction settings saved.',
+      'config.exemptFailed': 'Saving restriction settings failed: {message}',
+      'sent': 'descriptions sent per request: {tokens}',
       groups: 'Groups',
       loadedTools: 'Tools',
       nothingLoaded: 'Nothing loaded: only the always-on tools are visible.',
@@ -288,6 +301,35 @@ interface ClientContext {
       'category.system': 'System',
       'category.uncategorized': 'Uncategorized',
       'category.capabilities': 'Capability packs',
+      'tab.overview': 'Overview',
+      'tab.audit': 'Audit',
+      'overview.pause': 'Pause new tool loading',
+      'overview.pauseHint': 'Stop loading new tools. Tools already loaded keep working.',
+      'overview.firstRun': 'Tools load on demand. Nothing is missing — ask for what you need and it appears.',
+      'overview.session': 'Session',
+      'overview.visible': 'Tools the model can see right now',
+      'overview.installed': 'out of {n} installed',
+      'overview.groups': 'Groups loaded for this session',
+      'overview.groupsHint': 'These groups make their tools available in this session.',
+      'overview.wire': 'Tool descriptions sent every request',
+      'overview.wireHint': 'this is what the model is told about its tools, not the whole conversation',
+      'overview.result': 'Tool output received',
+      'overview.resultHint': 'Estimated tokens in tool output received by this session.',
+      'unavailable': 'unavailable',
+      'tokenUnit': 'tokens',
+      'audit.clear': 'Clear',
+      'audit.empty': 'This timeline is per-process, kept only in memory, and clears on restart. No activity yet.',
+      'audit.load': 'Loaded',
+      'audit.unload': 'Unloaded',
+      'audit.config': 'Settings changed',
+      'audit.paused': 'Loading blocked by pause',
+      'permissions.title': 'What tool permissions mean',
+      'permissions.read': 'Read: look at a file',
+      'permissions.write': 'Write: change or create a file',
+      'permissions.exec': 'Exec: run a command on this machine',
+      'permissions.sensitive': 'Sensitive: access a secret, such as an API key',
+      'output': 'tool output (estimate): {tokens}',
+      'handoff': 'carried over to subagents',
     }
     const zh: Record<string, string> = {
       nav: '工具管理',
@@ -332,7 +374,7 @@ interface ClientContext {
       'tidy.col.group': '分组',
       'tidy.col.move': '改为',
       'tidy.col.tools': '工具数',
-      stat: '{n} 个活动会话 · 上下文中 {tokens}',
+      'stat': '{n} 个活动会话 · 每次请求发送的工具描述：{tokens}',
       offline: '面板服务离线',
       loading: '加载中…',
       error: '面板出错：{message}',
@@ -361,20 +403,20 @@ interface ClientContext {
       noSessions: '当前没有活动会话。先开一个对话，再回到这里。',
       subagentOf: '{id} 的子 agent',
       visible: '可见 {n} 个',
-      exempt: '豁免',
-      exemptHint: '该会话不做收窄：它的模型路线在豁免名单中。',
-      exemptSessionHint: '该会话单独列在豁免文件里，不做收窄。',
-      exemptNote: '豁免会话：所有工具都可见，不做收窄。',
-      exemptOn: '豁免此会话',
-      exemptOff: '恢复收窄',
-      'config.exemptFile': '豁免文件',
-      'config.hasExemptFile': '豁免文件正在生效：其中的 providers 和 sessions 取代插件配置里的 exemptProviders。',
-      'config.noExemptFile': '尚未生成豁免文件；当前使用插件配置里的 exemptProviders。在这里豁免某个会话会创建该文件。',
-      'config.exemptProviders': '豁免路线',
-      'config.exemptSessions': '豁免会话',
-      'config.exemptSaved': '已保存豁免设置。',
-      'config.exemptFailed': '保存豁免设置失败：{message}',
-      sent: '已发送 {tokens}',
+      'exempt': '不受限制',
+      'exemptHint': '使用此模型路线的会话不限制工具。',
+      'exemptSessionHint': '此会话列在配置文件中，其工具不受限制。',
+      'exemptNote': '此会话的工具不受限制，所有工具均可见。',
+      'exemptOn': '不限制此会话',
+      'exemptOff': '限制此会话',
+      'config.exemptFile': '不受限制的会话配置文件',
+      'config.hasExemptFile': '此文件指定哪些模型路线和会话不受限制。',
+      'config.noExemptFile': '尚无此文件；当前使用插件设置中的模型路线。在这里取消某个会话的限制会创建该文件。',
+      'config.exemptProviders': '不受限制的模型路线',
+      'config.exemptSessions': '不受限制的会话',
+      'config.exemptSaved': '已保存限制设置。',
+      'config.exemptFailed': '保存限制设置失败：{message}',
+      'sent': '每次请求发送的工具描述：{tokens}',
       groups: '组',
       loadedTools: '工具',
       nothingLoaded: '尚未加载任何内容：只有常驻工具可见。',
@@ -453,13 +495,42 @@ interface ClientContext {
       'categoryDesc.system': '主机、系统与密钥',
       'categoryDesc.uncategorized': '尚未被任何分类器归类的工具',
       'categoryDesc.capabilities': '按能力包整体加载的工具组合',
+      'tab.overview': '概览',
+      'tab.audit': '审计记录',
+      'overview.pause': '暂停加载新工具',
+      'overview.pauseHint': '停止加载新工具。已加载的工具仍可正常使用。',
+      'overview.firstRun': '工具会按需加载。没有缺少任何功能——说出你的需求，相应工具就会出现。',
+      'overview.session': '会话',
+      'overview.visible': '模型现在能看到的工具',
+      'overview.installed': '共安装了 {n} 个工具',
+      'overview.groups': '本次会话已加载的工具组',
+      'overview.groupsHint': '这些工具组让本次会话可以使用其中的工具。',
+      'overview.wire': '每次请求发送的工具描述',
+      'overview.wireHint': '这是模型收到的工具说明，不是整段对话。',
+      'overview.result': '已收到的工具输出',
+      'overview.resultHint': '估算本次会话收到的工具输出所占的 token 数。',
+      'unavailable': '不可用',
+      'tokenUnit': 'token',
+      'audit.clear': '清空',
+      'audit.empty': '活动记录仅保留在当前进程的内存中，重启后会清空。目前没有记录。',
+      'audit.load': '加载',
+      'audit.unload': '卸载',
+      'audit.config': '设置变更',
+      'audit.paused': '因暂停而未加载',
+      'permissions.title': '工具权限的含义',
+      'permissions.read': '读取：查看一个文件',
+      'permissions.write': '写入：修改或创建一个文件',
+      'permissions.exec': '执行：在这台机器上运行命令',
+      'permissions.sensitive': '敏感：访问 API 密钥等秘密信息',
+      'output': '工具输出（估算）：{tokens}',
+      'handoff': '传递给子智能体',
     }
 
     const CSS = `
 .tmp-section{max-width:860px;color:var(--dsw-alias-label-primary);display:flex;flex-direction:column;gap:12px}
 .tmp-heading{margin:0;font-size:18px;font-weight:600}
 .tmp-intro,.tmp-muted{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}
-.tmp-tabs{display:flex;gap:22px;align-items:flex-end;border-bottom:.5px solid var(--dsw-alias-border-l2)}
+.tmp-tabs{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-end;border-bottom:.5px solid var(--dsw-alias-border-l2)}
 .tmp-tab{background:none;border:0;padding:7px 1px 9px;font:inherit;font-size:13px;line-height:20px;color:var(--dsw-alias-label-tertiary);cursor:pointer;position:relative}
 .tmp-tab:hover,.tmp-tab[data-active=true]{color:var(--dsw-alias-label-primary)}
 .tmp-tab[data-active=true]:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px 2px 0 0;background:var(--dsw-alias-label-primary)}
@@ -495,6 +566,17 @@ interface ClientContext {
 .tmp-textarea::placeholder{color:var(--dsw-alias-label-tertiary)}
 .tmp-textarea:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}
 .tmp-mono{font-family:var(--dsw-font-family-mono,ui-monospace,monospace);font-size:12px;color:var(--dsw-alias-label-secondary);margin:0;word-break:break-all}
+.tmp-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.tmp-number{font-size:28px;font-weight:600;line-height:1.2}
+.tmp-audit{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.tmp-audit li{padding:10px 12px;border-left:3px solid var(--dsw-alias-border-l2);overflow-wrap:anywhere;background:var(--dsw-alias-bg-layer-1)}
+.tmp-audit li[data-tone=warn]{border-color:var(--dsw-alias-state-warn-primary);color:var(--dsw-alias-state-warn-label,var(--dsw-alias-state-warn-primary))}
+.tmp-switch{appearance:none;position:relative;width:34px;height:20px;flex:none;margin:0;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-bg-layer-2);cursor:pointer}
+.tmp-switch:before{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-label-secondary)}
+.tmp-switch:checked{background:var(--dsw-alias-state-business-primary);border-color:var(--dsw-alias-state-business-primary)}
+.tmp-switch:checked:before{left:16px;background:var(--dsw-alias-bg-layer-1)}
+.tmp-switch:disabled{opacity:.6;cursor:default}
+.tmp-switch:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 .tmp-row input[type=checkbox]{flex:none;margin:0;accent-color:var(--dsw-alias-state-business-primary)}
 `
     const CSS_ID = '@lvy-jsd/dsh-tool-ultra-panel/section.css'
@@ -653,13 +735,14 @@ interface ClientContext {
             h('span', { className: 'tmp-name' }, s.id.replace(/^session-/, '').slice(0, 8)),
             s.parentId ? h(Chip, null, format(t, 'subagentOf', { id: s.parentId.replace(/^session-/, '').slice(0, 8) })) : null,
             s.exempt
-              ? h(Chip, { tone: 'warn', title: s.exemptSource === 'file:session' ? t('exemptSessionHint') : t('exemptHint') }, t('exempt'))
+              ? h(Chip, { tone: 'warn', title: `exempt · ${s.exemptSource === 'file:session' ? t('exemptSessionHint') : t('exemptHint')}` }, t('exempt'))
               : h(Chip, null, format(t, 'visible', { n: s.visible ?? 0 })),
-            h(Chip, { tone: 'ok' }, format(t, 'sent', { tokens: format(t, 'tokens', { n: tokNumber(s.wireTokens) }) })),
+            h(Chip, { tone: 'ok', title: 'wireTokens' }, format(t, 'sent', { tokens: format(t, 'tokens', { n: tokNumber(s.wireTokens) }) })),
+            h(Chip, { title: 'resultTokens' }, format(t, 'output', { tokens: format(t, 'tokens', { n: tokNumber(s.resultTokens) }) })),
             h('span', { className: 'tmp-grow' }),
             // Per-session exemption is reversible from here: an emptied file
             // restores the plugin config list.
-            h(Button, { ghost: !s.exempt, onClick: () => setExempt(s.id, !s.exempt) }, s.exempt ? t('exemptOff') : t('exemptOn')),
+            h(Button, { title: 'exempt', ghost: !s.exempt, onClick: () => setExempt(s.id, !s.exempt) }, s.exempt ? t('exemptOff') : t('exemptOn')),
             h(Button, { ghost: s.id !== selected, onClick: () => setSelected(s.id) }, s.id === selected ? t('selected') : t('select')),
           ),
           s.groups.length
@@ -672,8 +755,10 @@ interface ClientContext {
               ...s.loadedTools.map((name) => h('span', { key: name, className: 'tmp-bar' }, h(Chip, null, name),
                 h(Button, { ghost: true, onClick: () => unload(s.id, [name]) }, t('unload')))))
             : null,
+          (s.handoffGroups?.length || s.handoffTools?.length)
+            ? h('p', { className: 'tmp-muted', title: 'handoff' }, `${t('handoff')}: ${[...(s.handoffGroups ?? []), ...(s.handoffTools ?? [])].join(', ')}`) : null,
           s.exempt
-            ? h('p', { className: 'tmp-muted' }, t('exemptNote'))
+            ? h('p', { className: 'tmp-muted', title: 'exempt' }, t('exemptNote'))
             : !s.groups.length && !s.loadedTools.length ? h('p', { className: 'tmp-muted' }, t('nothingLoaded')) : null,
         )))
     }
@@ -709,7 +794,7 @@ interface ClientContext {
       if (!data) return h('div', { className: 'tmp-empty' }, t('loading'))
       const { config, ext } = data
       const list = (xs: string[] | undefined) => (xs && xs.length ? xs.join(', ') : t('none'))
-      const row = (k: string, v: ReactNode, key?: string) => h('tr', { key: key ?? k }, h('th', null, k), h('td', null, v))
+      const row = (k: string, v: ReactNode, key?: string) => h('tr', { key: key ?? k }, h('th', { title: [t('config.exemptProviders'), t('config.exemptSessions')].includes(k) ? 'exempt' : undefined }, k), h('td', null, v))
 
       // Names may be typed one per line or comma-separated; duplicates and
       // blanks are dropped so the saved list matches what the core expects.
@@ -738,6 +823,8 @@ interface ClientContext {
       )
 
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+        h('div', { className: 'tmp-card' }, h('h3', null, t('permissions.title')),
+          ...['read', 'write', 'exec', 'sensitive'].map((risk) => h('p', { key: risk, className: 'tmp-muted', title: risk }, t(`permissions.${risk}`)))),
         h('div', { className: 'tmp-card' }, h('h3', null, t('config.title')),
           h('table', { className: 'tmp-table' }, h('tbody', null,
             row(t('config.pinned'), format(t, 'config.pinnedValue', { n: (config.pinned ?? []).length, entry: (config.entryTools ?? []).length })),
@@ -751,7 +838,7 @@ interface ClientContext {
           h('p', { className: 'tmp-muted' }, config.hasSettings ? t('config.hasSettings') : t('config.noSettings'))),
         // The exemption list lives in its own file, edited per session from the
         // Sessions tab; this card only shows what is in force and where from.
-        h('div', { className: 'tmp-card' }, h('h3', null, t('config.exemptFile')),
+        h('div', { className: 'tmp-card' }, h('h3', { title: 'exempt' }, t('config.exemptFile')),
           h('table', { className: 'tmp-table' }, h('tbody', null,
             row(t('config.exemptProviders'), list(config.exemptProviders)),
             row(t('config.exemptSessions'), list(config.exemptSessions)),
@@ -1048,11 +1135,60 @@ interface ClientContext {
       )
     }
 
+    function Overview({ t, sessions, selected, setSelected, config, audit, pause, busy }: {
+      t: Translate, sessions: SessionRow[] | null, selected: string | null, setSelected: (id: string) => void,
+      config: ConfigJson | null, audit: AuditRow[] | null, pause: (value: boolean) => Promise<void>, busy: boolean,
+    }) {
+      const session = sessions?.find((s) => s.id === selected)
+      const number = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) ? String(value) : '—'
+      const metric = (key: string, value: number | null | undefined, sentence: string, title?: string) =>
+        h('div', { key, className: 'tmp-card', title },
+          h('h3', null, t(`overview.${key}`)),
+          h('div', { className: 'tmp-number' }, number(value),
+            (key === 'wire' || key === 'result') && number(value) !== '—' ? h('span', { className: 'tmp-stat' }, ` ${t('tokenUnit')}`) : null),
+          h('p', { className: 'tmp-muted' }, number(value) === '—' ? t('unavailable') : sentence))
+      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+        h('div', { className: 'tmp-card' },
+          h('label', { className: 'tmp-bar' },
+            h('input', { className: 'tmp-switch', type: 'checkbox', role: 'switch', checked: config?.paused === true,
+              disabled: !config || busy, onChange: (e: import('react').ChangeEvent<HTMLInputElement>) => { void pause(e.target.checked) } }),
+            t('overview.pause')),
+          h('p', { className: 'tmp-muted' }, t('overview.pauseHint')),
+          !config ? h('p', { className: 'tmp-muted' }, t('unavailable')) : null),
+        audit?.length === 0 ? h('p', { className: 'tmp-intro' }, t('overview.firstRun')) : null,
+        sessions?.length ? h('label', { className: 'tmp-bar' }, t('overview.session'),
+          h('select', { className: 'tmp-input', value: selected ?? '', onChange: (e: import('react').ChangeEvent<HTMLSelectElement>) => setSelected(e.target.value) },
+            ...sessions.map((s) => h('option', { key: s.id, value: s.id }, s.id)))) : null,
+        sessions?.length === 0 ? h('p', { className: 'tmp-muted' }, t('noSessions')) : null,
+        h('div', { className: 'tmp-metrics' },
+          metric('visible', session?.visibleNow, session && Number.isFinite(session.installed) ? format(t, 'overview.installed', { n: session.installed }) : t('unavailable')),
+          metric('groups', session?.groups.length, t('overview.groupsHint')),
+          metric('wire', session?.wireTokens, t('overview.wireHint'), 'wireTokens'),
+          metric('result', session?.resultTokens, t('overview.resultHint'), 'resultTokens')))
+    }
+
+    function Audit({ t, entries, clear }: { t: Translate, entries: AuditRow[] | null, clear: () => Promise<void> }) {
+      const [busy, setBusy] = useState(false)
+      return h('div', { className: 'tmp-card' },
+        h('div', { className: 'tmp-bar' }, h('h3', null, t('tab.audit')), h('span', { className: 'tmp-grow' }),
+          h('button', { type: 'button', className: 'tmp-btn', disabled: busy || !entries?.length,
+            onClick: async () => { setBusy(true); try { await clear() } finally { setBusy(false) } } }, t('audit.clear'))),
+        entries === null ? h('p', { className: 'tmp-muted' }, t('unavailable'))
+          : entries.length === 0 ? h('p', { className: 'tmp-muted' }, t('audit.empty'))
+            : h('ol', { className: 'tmp-audit' }, ...entries.map((entry, i) =>
+              h('li', { key: `${entry.at}:${i}`, 'data-tone': entry.kind === 'paused' && !entry.ok ? 'warn' : undefined, title: entry.agentId },
+                h('time', { dateTime: new Date(entry.at).toISOString() }, new Date(entry.at).toLocaleTimeString()),
+                ` · ${t(`audit.${entry.kind}`)} · ${entry.summary}`))))
+    }
+
     function ToolManagerSection({ t }: { t: Translate }) {
       ensureCss()
-      const [tab, setTab] = useState('directory')
+      const [tab, setTab] = useState('overview')
       const [path, setPath] = useState('/')
       const [sessions, setSessions] = useState<SessionRow[] | null>(null)
+      const [config, setConfig] = useState<ConfigJson | null>(null)
+      const [audit, setAudit] = useState<AuditRow[] | null>(null)
+      const [pauseBusy, setPauseBusy] = useState(false)
       const [selected, setSelected] = useState<string | null>(null)
       const [version, setVersion] = useState(0)
       const [settingsVersion, setSettingsVersion] = useState(0)
@@ -1076,8 +1212,34 @@ interface ClientContext {
       const refreshSessions = useCallback(() => {
         api<{ sessions: SessionRow[] }>('sessions')
           .then((body) => { setSessions(body.sessions); setOffline(false) })
-          .catch(() => setOffline(true))
+          .catch(() => { setSessions(null); setOffline(true) })
       }, [])
+
+      const refreshAudit = useCallback(() => {
+        api<{ entries: AuditRow[] }>('audit').then((body) => setAudit(body.entries)).catch(() => setAudit(null))
+      }, [])
+      const refreshConfig = useCallback(() => {
+        api<{ config: ConfigJson }>('config').then((body) => setConfig(body.config)).catch(() => setConfig(null))
+      }, [])
+      useEffect(() => { refreshConfig() }, [refreshConfig, settingsVersion])
+      const pause = async (paused: boolean) => {
+        setPauseBusy(true)
+        try {
+          const body = await api<{ config: ConfigJson }>('updateConfig', { settings: { paused } })
+          setConfig(body.config)
+          setSettingsVersion((v) => v + 1)
+          refreshAudit()
+        } catch (e) {
+          say(format(t, 'config.saveFailed', { label: t('overview.pause'), message: (e as Error).message }))
+          refreshConfig()
+        } finally { setPauseBusy(false) }
+      }
+      const clearAudit = async () => {
+        try {
+          const body = await api<{ entries: AuditRow[] }>('clearAudit')
+          setAudit(body.entries)
+        } catch (e) { say(format(t, 'error', { message: (e as Error).message })) }
+      }
 
       // The name picker is filled from the catalog rather than from the current
       // directory listing, so a tool can be inspected from any tab.
@@ -1089,11 +1251,13 @@ interface ClientContext {
 
       useEffect(() => {
         refreshSessions()
-        const interval = setInterval(refreshSessions, 15000)
+        refreshAudit()
+        const interval = setInterval(() => { refreshSessions(); refreshAudit(); refreshConfig() }, 15000)
         let events: EventSource | undefined
         try {
           events = new EventSource(EVENTS)
           events.addEventListener('state', refreshSessions)
+          events.addEventListener('audit', refreshAudit)
           events.addEventListener('catalog', () => setVersion((v) => v + 1))
           events.addEventListener('config', () => setSettingsVersion((v) => v + 1))
           events.addEventListener('packs', () => setVersion((v) => v + 1))
@@ -1104,9 +1268,9 @@ interface ClientContext {
           // No event stream: the interval still refreshes.
         }
         return () => { clearInterval(interval); events?.close(); clearTimeout(timer.current) }
-      }, [refreshSessions, refreshTools])
+      }, [refreshSessions, refreshTools, refreshAudit, refreshConfig])
 
-      const target = selected ?? sessions?.[0]?.id ?? null
+      const target = sessions?.some((s) => s.id === selected) ? selected : sessions?.[0]?.id ?? null
       const load: Load = async (targets) => {
         if (!target) return say(t('noSession'))
         try {
@@ -1174,7 +1338,7 @@ interface ClientContext {
       const inspect = (name: string) => { setInspectName(name); setInspectTick((v) => v + 1); setTab('meta') }
 
       const totalTokens = (sessions ?? []).reduce((n, s) => n + (s.wireTokens ?? 0), 0)
-      const tabs = ['directory', 'packs', 'sessions', 'config', 'meta', 'tidy']
+      const tabs = ['overview', 'directory', 'packs', 'sessions', 'config', 'meta', 'tidy', 'audit']
       return h('div', { className: 'tmp-section' },
         h('h2', { className: 'tmp-heading' }, t('title')),
         h('p', { className: 'tmp-intro' }, t('intro')),
@@ -1185,9 +1349,11 @@ interface ClientContext {
           }, t(`tab.${id}`))),
           h('span', { className: 'tmp-grow' }),
           h('span', { className: 'tmp-stat', style: { paddingBottom: 9 } },
-            offline ? t('offline') : format(t, 'stat', { n: (sessions ?? []).length, tokens: format(t, 'tokens', { n: tokNumber(totalTokens) }) }))),
+            offline ? t('offline') : !sessions ? t('loading') : format(t, 'stat', { n: (sessions ?? []).length, tokens: format(t, 'tokens', { n: tokNumber(totalTokens) }) }))),
         h('div', { className: 'tmp-flash', role: 'status', title: flash?.detail }, flash?.message ?? ''),
-        tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, inspect, version })
+        tab === 'overview' ? h(Overview, { t, sessions, selected: target, setSelected, config, audit, pause, busy: pauseBusy })
+          : tab === 'audit' ? h(Audit, { t, entries: audit, clear: clearAudit })
+          : tab === 'directory' ? h(Directory, { t, path, setPath, load, unload: unloadInDirectory, inspect, version })
           : tab === 'sessions' ? h(Sessions, { t, sessions, selected: target, setSelected, unload, setExempt })
             : tab === 'meta' ? h(MetaEditor, { key: inspectTick, t, initial: inspectName, tools, save: saveMeta, drop: dropMeta })
               : tab === 'packs' ? h(Packs, { t, load, version })

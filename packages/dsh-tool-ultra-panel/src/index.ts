@@ -66,6 +66,7 @@ export interface NodeJson {
 /** Parameters of the API methods (untrusted JSON from the browser). */
 export interface ApiParams {
   path?: string
+  paused?: unknown
   query?: string
   sessionId?: unknown
   targets?: string[]
@@ -269,6 +270,7 @@ export function createApi(catalog: ToolCatalogService, tidy: TidyRuntime = {}) {
       const rows = []
       for (const { agent, id, parentId } of catalog.agents()) {
         const state = catalog.stateOf(agent)
+        const counts = catalog.toolCounts(agent)
         // An exempt route is never narrowed, so it has no allowlist to count.
         const exemption = catalog.exemptionOf?.(agent) ?? { exempt: catalog.isExempt?.(agent) === true, source: '' }
         const exempt = exemption.exempt
@@ -278,7 +280,10 @@ export function createApi(catalog: ToolCatalogService, tidy: TidyRuntime = {}) {
           exempt,
           exemptSource: exemption.source,
           visible: exempt ? null : (catalog.allowFor(agent) ?? []).length,
+          installed: counts.installed,
+          visibleNow: counts.visible,
           wireTokens: catalog.wireTokens(agent),
+          resultTokens: catalog.resultTokens(agent),
           loadedTools: [...state.loaded].sort(),
           groups: [...state.groups].sort(),
           handoffGroups: [...state.handoffGroups].sort(),
@@ -292,7 +297,7 @@ export function createApi(catalog: ToolCatalogService, tidy: TidyRuntime = {}) {
       const agent = findAgent(catalog, sessionId)
       if (!agent) return { ok: false, message: `no live session ${sessionId}` }
       const message = await catalog.load(agent, targets ?? [], { forSubagents: forSubagents === true })
-      return { ok: true, message }
+      return typeof message === 'string' ? { ok: true, message } : message
     },
     /** Unload for one agent through the core. */
     async unload({ sessionId, targets }: ApiParams = {}) {
@@ -311,6 +316,17 @@ export function createApi(catalog: ToolCatalogService, tidy: TidyRuntime = {}) {
      */
     updateConfig({ settings }: ApiParams = {}) {
       return { config: catalog.updateConfig(settings ?? {}) }
+    },
+    audit() {
+      return { entries: catalog.audit() }
+    },
+    clearAudit() {
+      catalog.clearAudit()
+      return { entries: catalog.audit() }
+    },
+    setPaused({ paused }: ApiParams = {}) {
+      if (typeof paused !== 'boolean') return { ok: false, message: 'paused must be a boolean' }
+      return { config: catalog.updateConfig({ paused }) }
     },
     /** Re-read the settings file after an external edit. */
     reloadConfig() {
@@ -499,6 +515,7 @@ export function mountWebRoutes(wctx: WebContext, catalog: ToolCatalogService, { 
     wctx.on?.('tool-catalog/settings-changed', ({ config }) => broadcast(clients, 'config', { config })),
     // Edited metadata moves a tool in the tree, so the Directory tab reloads.
     wctx.on?.('tool-catalog/metadata-changed', ({ name }) => broadcast(clients, 'metadata', { name: String(name ?? '') })),
+    wctx.on?.('tool-catalog/audit', () => broadcast(clients, 'audit', { at: Date.now() })),
     wctx.on?.('tool-catalog/packs-changed', ({ id }) => broadcast(clients, 'packs', { id: String(id ?? '') })),
   ]
 
@@ -517,6 +534,9 @@ type PanelApi = ReturnType<typeof createApi>
 const API_WHITELIST = new Map<unknown, (api: PanelApi, params: ApiParams) => object | Promise<object>>([
   ['tree', (api, params) => api.tree(params)],
   ['sessions', (api) => api.sessions()],
+  ['audit', (api) => api.audit()],
+  ['clearAudit', (api) => api.clearAudit()],
+  ['setPaused', (api, params) => api.setPaused(params)],
   ['load', (api, params) => api.load(params)],
   ['unload', (api, params) => api.unload(params)],
   ['config', (api) => api.config()],

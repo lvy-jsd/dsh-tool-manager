@@ -62,7 +62,7 @@ export interface CatalogToolEntry {
 /** The toolCatalog service surface this plugin uses. */
 export interface ToolCatalogService {
   get(): { tools: Map<string, CatalogToolEntry> }
-  load(agent: unknown, targets: string[]): Promise<string>
+  load(agent: unknown, targets: string[]): Promise<string | { ok: false, message: string }>
   wireTokens?(agent: unknown): number
 }
 
