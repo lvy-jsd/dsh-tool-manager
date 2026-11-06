@@ -227,9 +227,12 @@ export function buildCatalog(schemas: readonly ToolSchema[], { classifiers = [],
 const findCI = <T extends { name: string }>(map: Map<string, T>, key: string): T | undefined =>
   map.get(key) ?? [...map.values()].find((v) => v.name.toLowerCase() === key)
 
-export function resolveTarget(catalog: Catalog, raw: unknown, resolvers: readonly Pick<RegisteredResolver, 'prefix' | 'resolve'>[] = [], agent?: Agent): CatalogNode {
+// An optional caller-only fallback runs last. Alias expansions deliberately use
+// only the registered resolvers, preserving their existing target semantics.
+export function resolveTarget(catalog: Catalog, raw: unknown, resolvers: readonly Pick<RegisteredResolver, 'prefix' | 'resolve'>[] = [], agent?: Agent, fallback?: Pick<RegisteredResolver, 'prefix' | 'resolve'>): CatalogNode {
   const target = String(raw ?? '').trim()
-  for (const { prefix, resolve } of resolvers) {
+  for (const resolver of fallback ? [...resolvers, fallback] : resolvers) {
+    const { prefix, resolve } = resolver
     if (prefix && !target.startsWith(prefix)) continue
     let expanded: string | string[] | undefined | null
     try {
@@ -240,6 +243,9 @@ export function resolveTarget(catalog: Catalog, raw: unknown, resolvers: readonl
     if (expanded === undefined || expanded === null) continue
     const list = Array.isArray(expanded) ? expanded : [expanded]
     const nodes = list.map((one) => resolveTarget(catalog, one, resolvers, agent))
+    // A stale/empty namespace alias must not hide a working directory target
+    // or turn an unknown name into a successful load of zero tools.
+    if (resolver === fallback && !nodes.some((node) => node.kind !== 'root' && toolsUnder(catalog, node).length > 0)) continue
     if (nodes.length === 0) return { kind: 'missing', target }
     if (nodes.length === 1) return nodes[0]!
     // Several targets behind one alias: expose them as a synthetic category so

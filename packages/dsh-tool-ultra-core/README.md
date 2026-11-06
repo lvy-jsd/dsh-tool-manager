@@ -13,6 +13,7 @@ tools_ls("/code/github")            # tools, with a one-line summary and schema 
 tools_ls({ query: "pull request" }) # search the whole tree in one step
 tools_load(["/code/github"])        # callable from the next step, for the rest of the session
 tools_load(["mcp__github__get_me"]) # or one tool by exact name
+tools_load(["web"])                 # bare pack/cap/device name, first match
 tools_unload(["/code/github"])
 tools_find("send an email")         # ranked matches by intent (BM25), no loading
 tools_route("send an email")        # retrieve, re-rank with the model, then load
@@ -20,6 +21,8 @@ tools_route("send an email")        # retrieve, re-rank with the model, then loa
 
 Loaded tools are **native**: the model receives their full parameter schema
 and calls them directly. Nothing is proxied.
+
+Bare names try registered `pack:` → `cap:` → `device:` resolvers, stopping at the first non-empty expansion before normal directory lookup; paths and explicit prefixes keep their existing behavior and plugin ownership.
 
 The core ships **no placement rules**. Without an extension every group is
 listed under `uncategorized/` — still fully browsable and loadable. Install
