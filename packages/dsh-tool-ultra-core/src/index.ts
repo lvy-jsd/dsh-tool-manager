@@ -17,7 +17,7 @@ import { createSettingsStore, defaultSettingsFile } from './settings.js'
 import { createVisibilityController } from './visibility.js'
 import { createRegistries, readManifestAnnotations, listPluginPackages } from './service.js'
 import { registerRouter } from './router/index.js'
-import type { Agent, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema, GroupNote, Group, PendingCall } from './types.js'
+import type { Agent, AuditEntry, LoadRefusal, Annotation, Catalog, CatalogNode, CoreConfig, Disposer, HostContext, Logger, RiskGate, SerializedState, ToolCatalogService, ToolEntry, ToolMeta, ToolPack, ToolPackItem, ToolSchema, GroupNote, Group, PendingCall } from './types.js'
 
 export type * from './types.js'
 export { buildCatalog, resolveTarget, toolsUnder, estimateTokens, summary, shortName, structuralGroup, DEFAULT_CATEGORIES, UNCATEGORIZED, MISC_GROUP, OVERRIDE_PRIORITY } from './catalog.js'
@@ -96,6 +96,24 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     configProviders: config.exemptProviders ?? ['claude-code'],
     logger,
   })
+
+  // Audit is deliberately process-local and bounded; no state provider persists it.
+  const auditEntries: AuditEntry[] = []
+  function recordAudit(entry: Omit<AuditEntry, 'at'>) {
+    const row = { at: Date.now(), ...entry }
+    auditEntries.push(row)
+    if (auditEntries.length > 200) auditEntries.shift()
+    ctx.emit('tool-catalog/audit', { entry: { ...row } })
+  }
+  function recordPauseChange(before: boolean) {
+    const paused = settings.effective().paused
+    if (paused !== before) recordAudit({ kind: 'config', agentId: '', summary: paused ? 'paused loading' : 'resumed loading', ok: true })
+  }
+  function pausedRefusal(agent: Agent, targets: readonly string[]): LoadRefusal | undefined {
+    if (!settings.effective().paused) return undefined
+    recordAudit({ kind: 'paused', agentId: String(agent.id), summary: `paused loading: ${targets.join(', ')}`, ok: false })
+    return { ok: false, message: 'tool loading is paused; turn it back on in the tool panel' }
+  }
 
   /** Session id used to match a per-session exemption, with the agent id as fallback. */
   function sessionIdOf(agent: Agent): string | undefined {
@@ -179,6 +197,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   function configSnapshot() {
     const current = settings.effective()
     return {
+      paused: current.paused,
       pinned: [...pinnedSet()],
       entryTools: [...ENTRY_TOOLS],
       extraPinned: [...current.pinned],
@@ -435,6 +454,11 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
      */
     load: (agent: Agent, targets: readonly string[], options?: LoadOptions) => loadTargets(agent, targets, options),
     unload: (agent: Agent, targets: readonly string[]) => unloadTargets(agent, targets),
+    audit: () => auditEntries.slice().reverse().map((entry) => ({ ...entry })),
+    clearAudit() {
+      auditEntries.length = 0
+      ctx.emit('tool-catalog/audit', {})
+    },
     /** Live agents, each with its parent when it is a subagent. */
     agents: () => {
       // The parent lookup goes through the injected agents API: the plugin ctx
@@ -451,7 +475,9 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
      * because a changed always-on or high-risk list changes every directory.
      */
     updateConfig(patch) {
+      const wasPaused = settings.effective().paused
       settings.update(patch)
+      recordPauseChange(wasPaused)
       invalidate()
       visibility.refresh()
       ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
@@ -459,7 +485,9 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     },
     /** Re-read the settings file, for after an external edit. */
     reloadConfig() {
+      const wasPaused = settings.effective().paused
       settings.reload()
+      recordPauseChange(wasPaused)
       invalidate()
       visibility.refresh()
       ctx.emit('tool-catalog/settings-changed', { config: configSnapshot() })
@@ -548,6 +576,11 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       }
       return tokens
     },
+    /** Registered tools, including always-on and entry tools, excluding host transports. */
+    toolCounts: (agent: Agent) => ({
+      installed: new Set([...ctx.tools.schemas(), ...inheritedSchemas(agent)].filter((s) => !HOST_RESERVED.includes(s.name)).map((s) => s.name)).size,
+      visible: new Set(ctx.tools.schemas(agent).filter((s) => !HOST_RESERVED.includes(s.name)).map((s) => s.name)).size,
+    }),
     /** Estimated tokens of final tool results delivered to this agent (not schema tokens). */
     resultTokens: (agent: Agent) => resultTokensByAgent.get(agent) ?? 0,
   } satisfies ToolCatalogService
@@ -600,6 +633,10 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     const catalog = getCatalog(agent)
     const tool = catalog.tools.get(name)
     if (!tool) return undefined
+    // Group-loaded tools are already callable even when absent from state.loaded.
+    if (settings.effective().paused && visibility.allowFor(agent)?.includes(name)) return undefined
+    const paused = pausedRefusal(agent, [name])
+    if (paused) return paused.message
     if (tool.highRisk) {
       return `"${name}" is high risk and is not loaded. Load it first with tools_load(["${name}"]), which asks for approval.`
     }
@@ -609,6 +646,8 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     } catch (error) {
       return `Load of "${name}" refused: ${errorText(error)}`
     }
+    const pausedAfterHook = pausedRefusal(agent, [name])
+    if (pausedAfterHook) return pausedAfterHook.message
     visibility.update(agent, (next) => {
       next.loaded.add(name)
       next.excluded.delete(name)
@@ -621,6 +660,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
       visibility.update(agent, (next) => { next.loaded.delete(name) })
       return `"${name}" is not available in this session. Use tools_ls to see what is.`
     }
+    recordAudit({ kind: 'load', agentId: String(agent.id), summary: name, ok: true })
     ctx.emit('tool-catalog/auto-loaded', { agent, name })
     return undefined
   }
@@ -724,7 +764,9 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
    * apply identically; risk-gate approval does not, since a panel click is
    * itself the user's consent.
    */
-  async function loadTargets(agent: Agent, targets: readonly string[], { forSubagents = false }: LoadOptions = {}): Promise<string> {
+  async function loadTargets(agent: Agent, targets: readonly string[], { forSubagents = false }: LoadOptions = {}): Promise<string | LoadRefusal> {
+    const paused = pausedRefusal(agent, targets)
+    if (paused) return paused
     const cat = getCatalog(agent)
     const nodes = targets.map((raw) => ({ raw, node: resolveTarget(cat, raw, [...registries.resolvers], agent) }))
     const names = nodes.flatMap(({ node }) => (node.kind === 'root' || node.kind === 'missing' ? [] : toolsUnder(cat, node).map((t) => t.name)))
@@ -733,6 +775,8 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     } catch (error) {
       return `Load refused: ${errorText(error)}`
     }
+    const pausedAfterHook = pausedRefusal(agent, targets)
+    if (pausedAfterHook) return pausedAfterHook
     const before = new Set(visibility.allowFor(agent) ?? [])
     const notes: string[] = []
     visibility.update(agent, (state) => {
@@ -776,6 +820,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     })
     const after = visibility.allowFor(agent) ?? []
     const added = after.filter((n) => !before.has(n))
+    recordAudit({ kind: 'load', agentId: String(agent.id), summary: targets.join(', '), ok: true })
     ctx.emit('tool-catalog/after-load', { agent, targets, added })
     const denied = deniedFor(agent)
     const blocked = added.filter((n) => denied.has(n))
@@ -796,6 +841,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     try {
       await ctx.serial('tool-catalog/before-unload', { agent, targets })
     } catch (error) {
+      recordAudit({ kind: 'unload', agentId: String(agent.id), summary: targets.join(', '), ok: false })
       return `Unload refused: ${errorText(error)}`
     }
     const before = new Set(visibility.allowFor(agent) ?? [])
@@ -828,6 +874,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     })
     const after = new Set(visibility.allowFor(agent) ?? [])
     const removed = [...before].filter((n) => !after.has(n))
+    recordAudit({ kind: 'unload', agentId: String(agent.id), summary: targets.join(', '), ok: true })
     ctx.emit('tool-catalog/after-unload', { agent, targets, removed })
     return removed.length ? `Unloaded ${removed.length} tool(s):\n${removed.map((n) => `  ${n}`).join('\n')}` : 'Nothing was unloaded.'
   }
@@ -864,7 +911,8 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     },
     output: TEXT_OUTPUT,
     async execute(args, exec) {
-      return loadTargets(agentOf(exec), args.targets ?? [], { forSubagents: args.forSubagents === true })
+      const result = await loadTargets(agentOf(exec), args.targets ?? [], { forSubagents: args.forSubagents === true })
+      return typeof result === 'string' ? result : result.message
     },
   }))
 

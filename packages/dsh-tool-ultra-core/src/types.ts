@@ -262,7 +262,19 @@ export interface HostContext {
  * Settings a UI may edit at runtime. Each key is an independent list, so two
  * writers editing different keys cannot clobber each other.
  */
+export interface AuditEntry {
+  at: number
+  kind: 'load' | 'unload' | 'config' | 'paused'
+  agentId: string
+  summary: string
+  ok: boolean
+}
+
+export interface LoadRefusal { ok: false, message: string }
+
 export interface ToolManagerSettings {
+  /** Stop loading new tools; already-loaded tools remain usable. */
+  paused?: boolean
   /** Extra always-on tools. */
   pinned?: string[]
   /** Tools removed from the default always-on list. */
@@ -422,13 +434,17 @@ export interface ToolCatalogService {
    * 'config:provider' | ''.
    */
   exemptionOf(agent: Agent): { exempt: boolean, source: string }
-  /** Load through the same path as tools_load; returns the model-facing text. */
-  load(agent: Agent, targets: readonly string[], options?: { forSubagents?: boolean }): Promise<string>
+  /** Load through tools_load; pause refusals are structured for UI callers. */
+  load(agent: Agent, targets: readonly string[], options?: { forSubagents?: boolean }): Promise<string | LoadRefusal>
   unload(agent: Agent, targets: readonly string[]): Promise<string>
+  /** Process-local timeline, newest first. */
+  audit(): AuditEntry[]
+  clearAudit(): void
   /** Live agents, each with its parent when it is a subagent. */
   agents(): { agent: Agent, id: string, parentId: string | null }[]
   /** Effective configuration, for UI display. */
   config(): {
+    paused: boolean
     pinned: string[]
     entryTools: string[]
     extraPinned: string[]
@@ -508,6 +524,8 @@ export interface ToolCatalogService {
   find(query: string, path?: string): FoundTool[]
   /** Schema tokens actually sent for an agent: pinned tools plus its loaded set. */
   wireTokens(agent: Agent): number
+  /** Registered tools including always-on and entry tools, excluding host transports. */
+  toolCounts(agent: Agent): { installed: number, visible: number }
   /** Estimated tokens of final tool results delivered to this agent (observe-only). */
   resultTokens(agent: Agent): number
 }
