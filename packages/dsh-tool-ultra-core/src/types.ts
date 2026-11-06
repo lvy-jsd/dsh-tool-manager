@@ -353,6 +353,13 @@ export interface FoundTool {
   highRisk: boolean
 }
 
+/**
+ * A search fallback: the keyword match found too little, so an extension (a
+ * small model, say) gets a chance to find more. It returns extra hits or
+ * nothing; the core never lets it break a search.
+ */
+export type SearchFallback = (query: string, hits: FoundTool[]) => Promise<FoundTool[] | undefined>
+
 /** Status of one part of a tool pack (an MCP preset, say). */
 export interface ToolPackItem {
   id: string
@@ -522,6 +529,11 @@ export interface ToolCatalogService {
   }
   /** Structured cross-directory search (same matching as tools_ls with a query). */
   find(query: string, path?: string): FoundTool[]
+  /**
+   * Add a fallback that can find what the keyword match missed. It runs only
+   * when the keyword match was weak, so a good query never reaches a model.
+   */
+  registerSearchFallback(fallback: SearchFallback): Disposer
   /** Schema tokens actually sent for an agent: pinned tools plus its loaded set. */
   wireTokens(agent: Agent): number
   /** Registered tools including always-on and entry tools, excluding host transports. */
