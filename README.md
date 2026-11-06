@@ -16,7 +16,11 @@
 
 ## What It Is
 
-On-demand tool loading for DeepSeek Harness: every tool is browsable as a directory (category → group → tool) and only what an agent loads reaches the model's context. Built as a small core plus replaceable extension plugins.
+Tool Ultra is an All-in-One tool-plugin product for DeepSeek Harness, and an important component of [Swiftnest](https://github.com/lvy-jsd/swiftnest). Its goal is one coherent tool product across everyday tasks, web/MCP services, media and device capabilities. The small core and replaceable extension packages are its internal architecture; the product is more than a tool-directory browser.
+
+Tools are browsable as a directory (category → group → tool), searchable by intent and loaded on demand, keeping unneeded schemas out of the model's context. Savings depend on catalog size, discovery/load steps and provider caching: compare per-request schemas, total task tokens and task success separately. Broad capability does not mean every external service or upload is enabled by default.
+
+The current preview is distributed as source and modular packages; Swiftnest builds a pinned source commit. An AI can install and configure the required modules. The published-package quick-start syntax below applies when those package versions are available on npm; it is not a claim that the renamed 0.5.0 packages have already been published.
 
 > **Renamed.** This project was `dsh-tool-manager`. Version 0.5.0 renames every
 > package from `@lvy-jsd/dsh-tool-manager-<name>` to `@lvy-jsd/dsh-tool-ultra-<name>`
