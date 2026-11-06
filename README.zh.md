@@ -43,6 +43,8 @@ dsh plugin --profile web add @lvy-jsd/dsh-tool-ultra-panel
 工具本身仍然可以浏览和加载，只是缺了分类。想自己写分类器见
 [扩展](#extending)。
 
+`tools_load(["web"])` 也接受裸名：按已注册的 `pack:` → `cap:` → `device:` 命名空间依次尝试，只取第一个非空匹配，未命中则按原目录逻辑查找；显式前缀的行为与插件归属不变。
+
 ## 包
 
 | 包 | 作用 |

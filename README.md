@@ -47,6 +47,8 @@ On a fresh install every group is `uncategorized` until a classifier is
 installed — the tools are still browsable and loadable, only the categories are
 missing. See [Extending](#extending) to write your own classifier.
 
+`tools_load(["web"])` also accepts bare names: try registered `pack:` → `cap:` → `device:` namespaces, first non-empty match only, then normal directory lookup; explicit prefixes keep their behavior and plugin ownership.
+
 ## Packages
 
 | Package | What it does |

@@ -10,6 +10,7 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
 
 ### Added
 
+- Core: bare load/unload targets (for example `web`) fall back through registered `pack:` → `cap:` → `device:` namespaces, taking the first non-empty match before normal directory lookup. All three explicit prefixes retain their existing semantics and plugin ownership.
 - Media: optional Gemini engine for `video_understand` and `audio_transcribe`, enabled by `geminiUploads: true` and a configured key. Uploads to Google are disclosed in each Gemini reply; failures fall back to local speech recognition with a short reason. Both tools retain ffprobe facts, video keeps its local storyboard, and audio saves SRT subtitles. Supports config/key-file/environment credentials and `engine: auto | local | gemini`.
 - `@lvy-jsd/dsh-tool-ultra-pack-essentials`: the first native tool pack, with no API keys: `time_now`, `time_convert`, `date_diff`, `math_eval` (mathjs, with units), `weather_forecast` (Open-Meteo), `geo_search` (Nominatim) and `wiki_search` / `wiki_summary` (Wikimedia).
 - `@lvy-jsd/dsh-tool-ultra-pack-web`: `web_read` (main article as Markdown via Readability + turndown) and `web_links`. Private, loopback and link-local targets are refused by default, and the check runs again on every redirect hop.

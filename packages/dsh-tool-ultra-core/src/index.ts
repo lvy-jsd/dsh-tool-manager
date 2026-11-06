@@ -278,6 +278,31 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     visibility?.refresh()
   })
 
+  // Keep the fallback outside the registry: plugins may register at any time,
+  // but every registered resolver must get its original target before it does.
+  const bareTargetResolver = {
+    prefix: '',
+    resolve(target: string, agent?: Agent) {
+      if (!target || /[/:]/.test(target)) return undefined
+      for (const prefix of ['pack:', 'cap:', 'device:']) {
+        for (const resolver of registries.resolvers) {
+          if (resolver.prefix !== prefix) continue
+          try {
+            const expanded = resolver.resolve(`${prefix}${target}`, agent)
+            // Devices use [] for an unknown target; let normal lookup proceed.
+            if (expanded == null || (Array.isArray(expanded) && !expanded.length)) continue
+            return expanded
+          } catch {
+            // A failing resolver passes, just as in resolveTarget.
+          }
+        }
+      }
+      return undefined
+    },
+  }
+  const resolveCatalogTarget = (catalog: Catalog, target: string, agent?: Agent) =>
+    resolveTarget(catalog, target, [...registries.resolvers], agent, bareTargetResolver)
+
   function schemaOf(definition: { description?: string, parameters?: unknown }, name: string): ToolSchema {
     try {
       if (typeof ctx.tools.schemaOf === 'function') return ctx.tools.schemaOf(definition, false)
@@ -454,7 +479,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     },
     /** Catalog as one agent sees it, or the union over live agents. */
     get: (agent?: Agent) => getCatalog(agent),
-    resolve: (target: string, agent?: Agent) => resolveTarget(getCatalog(agent), target, [...registries.resolvers], agent),
+    resolve: (target: string, agent?: Agent) => resolveCatalogTarget(getCatalog(agent), target, agent),
     /** Loaded state of one agent: { loaded, groups, excluded, handoffGroups, handoffTools } (Sets). */
     stateOf: (agent: Agent) => visibility.stateOf(agent),
     /** Plain JSON of an agent's loaded state, for persistence plugins. */
@@ -573,7 +598,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
      */
     find: (query: string, path = '/') => {
       const cat = getCatalog()
-      const node = resolveTarget(cat, path, [...registries.resolvers])
+      const node = resolveCatalogTarget(cat, path)
       if (node.kind === 'missing') return []
       return matchingTools(cat, node, query).slice(0, 200).map(toFoundTool)
     },
@@ -849,7 +874,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     const paused = pausedRefusal(agent, targets)
     if (paused) return paused
     const cat = getCatalog(agent)
-    const nodes = targets.map((raw) => ({ raw, node: resolveTarget(cat, raw, [...registries.resolvers], agent) }))
+    const nodes = targets.map((raw) => ({ raw, node: resolveCatalogTarget(cat, raw, agent) }))
     const names = nodes.flatMap(({ node }) => (node.kind === 'root' || node.kind === 'missing' ? [] : toolsUnder(cat, node).map((t) => t.name)))
     try {
       await ctx.serial('tool-catalog/before-load', { agent, targets, names })
@@ -932,7 +957,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
           for (const set of Object.values(state)) set.clear()
           continue
         }
-        const node = resolveTarget(cat, raw, [...registries.resolvers], agent)
+        const node = resolveCatalogTarget(cat, raw, agent)
         if (node.kind === 'category' && node.category.aliasTools) {
           for (const tool of node.category.aliasTools) {
             state.loaded.delete(tool.name)
@@ -973,7 +998,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const cat = getCatalog(exec?.agent as Agent | undefined)
-      const node = resolveTarget(cat, args.path ?? '/', [...registries.resolvers], exec?.agent as Agent | undefined)
+      const node = resolveCatalogTarget(cat, args.path ?? '/', exec?.agent as Agent | undefined)
       if (node.kind === 'missing') return `No such path: ${node.target}. Start from tools_ls("/") or search with tools_ls({query}).`
       const agent = exec?.agent as Agent | undefined
       const visible = visibleSetFor(agent)
@@ -1001,7 +1026,7 @@ export function apply(ctx: HostContext, config: CoreConfig = {}) {
   ctx.tools.register(defineTool({
     name: 'tools_load',
     description:
-      'Make tools callable for the rest of this session. Each target is a group path ("/code/github"), a category ("/maps"), one tool by path or exact name ("mcp__github__get_file_contents"), or a whole tool pack ("pack:web"). Loading a group also includes tools the group gains later. Prefer one group load over many single tools. Loaded tools are available from your next step. Set forSubagents to also hand these targets to subagents you start afterwards.',
+      'Make tools callable for the rest of this session. Each target is a group path ("/code/github"), a category ("/maps"), one tool by path or exact name ("mcp__github__get_file_contents"), or a whole tool pack ("pack:web"). Bare names try pack: → cap: → device:, first match only. Loading a group also includes tools the group gains later. Prefer one group load over many single tools. Loaded tools are available from your next step. Set forSubagents to also hand these targets to subagents you start afterwards.',
     parameters: {
       targets: { type: 'array', items: { type: 'string' }, required: true, description: 'Paths, group names or exact tool names.' },
       forSubagents: { type: 'boolean', description: 'Also give these targets to subagents started from now on.' },

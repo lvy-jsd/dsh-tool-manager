@@ -154,6 +154,8 @@ One line per entry. Root and category lines show tool count, loaded count and es
 
 Targets: category, group, or one tool by path, exact full name (`mcp__github__get_me`) or unique short name — no tree walk needed when the name is known. Loading a category/group **subscribes** (future tools of that group are included). High-risk tools are never included in group/category loads. Returns the newly visible names and their token cost; usable from the next step.
 
+Bare names such as `web` also try registered `pack:` → `cap:` → `device:` resolvers, stopping at the first non-empty expansion before normal directory lookup; paths and explicit prefixes keep their existing behavior and plugin ownership.
+
 ### `tools_unload(targets[] | "all")`
 
 Same addressing. Unloading one tool inside a subscribed group excludes it. `all` returns to the pinned set. Pinned tools cannot be unloaded.
