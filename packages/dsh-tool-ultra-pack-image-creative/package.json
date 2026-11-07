@@ -41,7 +41,7 @@
     "edit"
   ],
   "dependencies": {
-    "sharp": "^0.33.5"
+    "sharp": "^0.35.5"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2 <0.3.0-0"
