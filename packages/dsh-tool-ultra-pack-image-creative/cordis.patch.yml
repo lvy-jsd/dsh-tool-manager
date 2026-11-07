@@ -1,0 +1,7 @@
+# @lvy-jsd/dsh-tool-ultra-pack-image-creative bundle patch
+- insert:
+    - id: tool-ultra-pack-image-creative
+      name: '@lvy-jsd/dsh-tool-ultra-pack-image-creative'
+      config:
+        # Default generation endpoint (e.g. OpenAI compatible or ComfyUI bridge)
+        defaultEndpoint: 'http://127.0.0.1:8188'
