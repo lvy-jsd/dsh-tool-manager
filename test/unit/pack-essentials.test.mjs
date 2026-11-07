@@ -58,6 +58,23 @@ test('essentials: math_eval with units and multiple lines', async () => {
   await assert.rejects(m.execute({ expression: '2 +' }))
 })
 
+test('essentials: math_eval keeps percentages and rejects the mathjs 15 ambiguity', async () => {
+  const m = tool(createTools(), 'math_eval')
+  // A trailing percentage still means "of the left operand", as it did on mathjs 14.
+  assert.equal(await m.execute({ expression: '100 - 20%' }), '80')
+  assert.equal(await m.execute({ expression: '0.5 + 10%' }), '0.55')
+  assert.equal(await m.execute({ expression: '50% * 3400' }), '1700')
+  // Parentheses keep the old meaning, and an explicit modulo is untouched.
+  assert.equal(await m.execute({ expression: '(50%) + 10' }), '10.5')
+  assert.equal(await m.execute({ expression: '100 - (20%) + 5' }), '104.8')
+  assert.equal(await m.execute({ expression: '5 % 2' }), '1')
+  assert.equal(await m.execute({ expression: '2 % 3 + 1' }), '3')
+  // mathjs 15 reads these as modulo, silently changing the answer; refuse and name the fix.
+  for (const expression of ['50% + 10', '10%+5', '100 - 20% + 5', '50% + 10 - 5', 'x = 10% + 5'])
+    await assert.rejects(m.execute({ expression }), /mathjs 15/, expression)
+  await assert.rejects(m.execute({ expression: '50% + 10' }), /\(50%\) \+ 10/)
+})
+
 test('essentials: weather_forecast geocodes then formats Open-Meteo data', async () => {
   const { fetch, calls } = mockFetch([
     ['geocoding-api.open-meteo.com', { results: [{ name: 'Shenzhen', admin1: 'Guangdong', country: 'China', latitude: 22.5, longitude: 114.1, timezone: 'Asia/Shanghai' }] }],
