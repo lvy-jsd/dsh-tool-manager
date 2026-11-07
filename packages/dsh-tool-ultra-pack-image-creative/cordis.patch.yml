@@ -1,0 +1,5 @@
+# Offline editing only; no generation endpoint or external upload.
+- insert:
+    - id: tool-ultra-pack-image-creative
+      name: '@lvy-jsd/dsh-tool-ultra-pack-image-creative'
+      config: {}
