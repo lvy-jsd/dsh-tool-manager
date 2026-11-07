@@ -25,47 +25,49 @@ const TEXT_OUTPUT = {
   render: (_args: unknown, value: string) => [{ type: 'text' as const, text: String(value) }],
 } as const
 
-// Managed connection instance with auto-initialization and error boundaries
-let instance: duckdb.Database | null = null
-
-function getDatabase(): duckdb.Database {
-  if (!instance) {
-    instance = new duckdb.Database(':memory:')
-  }
-  return instance
-}
-
-/** Safely runs a query with connection lifecycle handling and truncation */
+/** Each query owns its database; completion includes both asynchronous close callbacks. */
 export async function runQuery(sql: string, maxRows = DEFAULTS.maxRows): Promise<string> {
-  const db = getDatabase()
-  const conn = db.connect()
+  let db!: duckdb.Database
+  const opened = new Promise<void>((resolve, reject) => {
+    db = new duckdb.Database(':memory:', (err) => err ? reject(err) : resolve())
+  })
 
   try {
-    return await new Promise<string>((resolve, reject) => {
-      conn.all(sql, (err: Error | null, rows: any[]) => {
-        if (err) {
-          return reject(new Error(`[DuckDB Execution Error] ${err.message}`))
-        }
-        if (!rows || rows.length === 0) {
-          return resolve('Query returned 0 rows.')
-        }
+    try {
+      await opened
+      const conn = db.connect()
+      try {
+        // Keep serialization outside the native callback: JS errors must reject,
+        // not escape through N-API and terminate the process.
+        const rows = await new Promise<duckdb.TableData>((resolve, reject) => {
+          conn.all(sql, (err: Error | null, rows: duckdb.TableData) => {
+            if (err) reject(err)
+            else resolve(rows)
+          })
+        })
+        if (!rows?.length) return 'Query returned 0 rows.'
 
         const count = rows.length
-        const truncated = count > maxRows ? rows.slice(0, maxRows) : rows
+        const truncated = rows.slice(0, maxRows)
         const summary = count > maxRows ? `\n[Showing ${maxRows} of ${count} total rows]` : ''
-
-        // Handle BigInt serialization from DuckDB aggregations safely
-        const replacer = (_key: string, value: any) => (typeof value === 'bigint' ? Number(value) : value)
-        resolve(JSON.stringify(truncated, replacer, 2) + summary)
-      })
-    })
-  } finally {
-    // Explicit handle cleanup to prevent resource leaks
-    try {
-      conn.close()
-    } catch {
-      // Ignore closing errors
+        const replacer = (_key: string, value: unknown) => (typeof value === 'bigint' ? Number(value) : value)
+        return JSON.stringify(truncated, replacer, 2) + summary
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          conn.close((err) => err ? reject(err) : resolve())
+        })
+      }
+    } finally {
+      // Closing just the connection leaves the database's external-file cache
+      // alive. Always close the database too, even if connection cleanup fails.
+      if (db) {
+        await new Promise<void>((resolve, reject) => {
+          db.close((err) => err ? reject(err) : resolve())
+        })
+      }
     }
+  } catch (err) {
+    throw new Error(`[DuckDB Execution Error] ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 

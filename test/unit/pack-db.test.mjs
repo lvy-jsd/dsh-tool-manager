@@ -2,7 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, writeFile, rm, unlink } from 'node:fs/promises'
+import duckdb from 'duckdb'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -11,6 +12,70 @@ import {
   TOOL_NAMES,
   runQuery,
 } from '../../packages/dsh-tool-ultra-pack-db/lib/index.js'
+
+test('db: query settlement awaits connection and database close on success and error', async (t) => {
+  const events = []
+  const Database = duckdb.Database
+  t.mock.method(duckdb, 'Database', function (...args) {
+    const db = new Database(...args)
+    return {
+      connect() {
+        const conn = db.connect()
+        return {
+          all: conn.all.bind(conn),
+          close(callback) {
+            events.push('connection:start')
+            conn.close((err) => setImmediate(() => {
+              events.push('connection:done')
+              callback(err)
+            }))
+          },
+        }
+      },
+      close(callback) {
+        events.push('database:start')
+        db.close((err) => setImmediate(() => {
+          events.push('database:done')
+          callback(err)
+        }))
+      },
+    }
+  })
+
+  for (const sql of ['SELECT 1 AS ok', 'SELECT FROM SYNTAX ERROR']) {
+    events.length = 0
+    if (sql.includes('SYNTAX')) await assert.rejects(runQuery(sql), /DuckDB Execution Error/)
+    else assert.match(await runQuery(sql), /"ok": 1/)
+    assert.deepEqual(events, ['connection:start', 'connection:done', 'database:start', 'database:done'])
+  }
+})
+
+test('db: database closes even if connection cleanup reports an error', async (t) => {
+  const Database = duckdb.Database
+  let databaseClosed = false
+  t.mock.method(duckdb, 'Database', function (...args) {
+    const db = new Database(...args)
+    return {
+      connect() {
+        const conn = db.connect()
+        return {
+          all: conn.all.bind(conn),
+          close(callback) {
+            conn.close(() => callback(new Error('injected close failure')))
+          },
+        }
+      },
+      close(callback) {
+        db.close((err) => {
+          databaseClosed = !err
+          callback(err)
+        })
+      },
+    }
+  })
+  await assert.rejects(runQuery('SELECT 1'), /DuckDB Execution Error.*injected close failure/)
+  assert.equal(databaseClosed, true)
+})
 
 test('db: every tool is declared in package.json toolCatalog', () => {
   const pkg = JSON.parse(readFileSync(new URL('../../packages/dsh-tool-ultra-pack-db/package.json', import.meta.url), 'utf8'))
@@ -74,6 +139,19 @@ test('db: db_load_file inspects and queries CSV files directly', async () => {
       query: `SELECT avg(score) AS avg_score FROM read_csv_auto('${csvFile}')`,
     })
     assert.match(avgScore, /"avg_score": 91\.666/)
+
+    // No retry, GC request, or sleep: tool completion must release Windows locks.
+    await unlink(csvFile)
+    await writeFile(csvFile, csvContent.replace('Alice', 'Diana'))
+    assert.match(await loadTool.execute({ path: csvFile }), /Diana/)
+    await unlink(csvFile)
+
+    // A query that opens a dataset and then fails must release it as well.
+    await writeFile(csvFile, 'value\nnot_an_integer\n')
+    await assert.rejects(queryTool.execute({
+      query: `SELECT CAST(value AS INTEGER) FROM read_csv_auto('${csvFile}')`,
+    }), /DuckDB Execution Error/)
+    await unlink(csvFile)
   } finally {
     await rm(temp, { recursive: true, force: true })
   }
