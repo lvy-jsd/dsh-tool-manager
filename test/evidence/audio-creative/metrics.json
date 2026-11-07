@@ -1,0 +1,13 @@
+{
+  "environment": "Linux, Node 24.21.0, host ffmpeg/ffprobe 9.0.2",
+  "backend": "Microsoft Edge online TTS via msedge-tts 2.1.1",
+  "voice": "en-US-JennyNeural",
+  "text": "Hello. This is a public speech synthesis acceptance test for Tool Ultra.",
+  "output": "speech.wav",
+  "codec_name": "pcm_s16le",
+  "sample_rate": 24000,
+  "channels": 1,
+  "duration_seconds": 5.928,
+  "bytes": 284622,
+  "validation": "node test/audio-creative-live.mjs <new-evidence-directory>; real synthesis, ffprobe checks passed"
+}

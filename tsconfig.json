@@ -56,6 +56,9 @@
       "path": "packages/dsh-tool-ultra-pack-image-creative"
     },
     {
+      "path": "packages/dsh-tool-ultra-pack-audio-creative"
+    },
+    {
       "path": "packages/dsh-tool-ultra-panel"
     },
     {

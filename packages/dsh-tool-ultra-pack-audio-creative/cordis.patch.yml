@@ -1,0 +1,6 @@
+# @lvy-jsd/dsh-tool-ultra-pack-audio-creative bundle patch
+- insert:
+    - id: tool-ultra-pack-audio-creative
+      name: '@lvy-jsd/dsh-tool-ultra-pack-audio-creative'
+      config:
+        defaultVoice: 'zh-CN-XiaoxiaoNeural'
