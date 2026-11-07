@@ -128,6 +128,31 @@ const UNIT_MS: Record<string, number> = {
   weeks: 604800000,
 }
 
+// --- math --------------------------------------------------------------------------
+
+/**
+ * mathjs 15 raised the precedence of the unary percentage operator, so `50% + 10`
+ * now parses as `50 % (+10)` (modulo) instead of `0.5 + 10`. That changes the answer
+ * without any error, which is worse than refusing: find the changed nodes so the
+ * tool can name the fix. A percentage that ends a term (`100 - 20%`) keeps its
+ * meaning, and parentheses always restore it.
+ */
+function findChangedPercent(node: unknown, hits: string[] = []): string[] {
+  if (!node || typeof node !== 'object') return hits
+  if (Array.isArray(node)) {
+    for (const child of node) findChangedPercent(child, hits)
+    return hits
+  }
+  const n = node as { type?: string; op?: string; args?: unknown[]; toString?(): string }
+  if (n.type === 'OperatorNode' && n.op === '%' && Array.isArray(n.args) && n.args.length === 2) {
+    const right = n.args[1] as { type?: string; op?: string; args?: unknown[] }
+    const signed = right?.type === 'OperatorNode' && (right.op === '+' || right.op === '-') && Array.isArray(right.args) && right.args.length === 1
+    if (signed) hits.push(n.toString?.() ?? 'expression')
+  }
+  for (const child of Object.values(n)) findChangedPercent(child, hits)
+  return hits
+}
+
 // --- weather -----------------------------------------------------------------------
 
 const WMO: Record<number, string> = {
@@ -162,6 +187,21 @@ export function createTools(opts: CreateOptions = {}): ToolSpec[] {
   const doFetch: FetchLike = opts.fetch ?? ((url, init) => fetch(url, init as RequestInit))
   const math = create(all, {})
   const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+
+  /** Refuse the expressions mathjs 15 would silently reinterpret; see findChangedPercent. */
+  function rejectChangedPercent(expression: string): void {
+    let tree: unknown
+    try {
+      tree = math.parse(expression)
+    } catch {
+      return // evaluate() reports syntax errors with its own wording.
+    }
+    const [hit] = findChangedPercent(tree)
+    if (!hit) return
+    throw new Error(
+      `The % in "${hit}" is parsed as modulo since mathjs 15, not as a percentage. Write the percentage in parentheses — (50%) + 10 — or as a decimal, 0.5 + 10. For modulo with a signed operand, write 5 % (+2).`,
+    )
+  }
 
   async function getJson(url: string): Promise<any> {
     const signal = AbortSignal.timeout(timeoutMs)
@@ -243,6 +283,7 @@ export function createTools(opts: CreateOptions = {}): ToolSpec[] {
       async execute(args) {
         const expr = String(args.expression)
         if (expr.length > 4000) throw new Error('Expression too long (max 4000 characters).')
+        rejectChangedPercent(expr)
         const scope = new Map()
         const out = math.evaluate(expr, scope)
         const fmt = (v: unknown) => math.format(v as any, { precision: 14 })

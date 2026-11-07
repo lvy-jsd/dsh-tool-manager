@@ -35,6 +35,19 @@ Every package is renamed from `@lvy-jsd/dsh-tool-manager-<name>` to
   restated category list; the old code returned the first category in
   declaration order and cached that guess forever. Ambiguous answers now leave
   the group uncategorized instead of a wrong permanent classification.
+- `pack-essentials`: `math_eval` refuses expressions whose meaning mathjs 15
+  changed instead of returning a different answer: a unary percentage followed
+  by `+` or `-` (`50% + 10` was `0.5 + 10` on mathjs 14 and is `50 % (+10)` on
+  15). The error names the parenthesized form, `(50%) + 10`, and the tests pin
+  the changed forms, the unchanged ones (`100 - 20%`, `50% * 3400`, `5 % 2`)
+  and the parenthesized ones.
+
+### Security
+
+- `pack-essentials`: mathjs 15.2.0 replaces 14.9.1, which two high-severity
+  advisories affect with no 14.x fix: `GHSA-29qv-4j9f-fjw5` (CVE-2026-40897,
+  unsafe object property setter, from 13.1.1) and `GHSA-jvff-x2qm-6286`
+  (CVE-2026-41139, prototype pollution, from 13.1.0). Both are fixed in 15.2.0.
 
 ### Compatibility
 
