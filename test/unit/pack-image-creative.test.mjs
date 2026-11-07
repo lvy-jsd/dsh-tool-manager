@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
@@ -66,19 +66,23 @@ test('image-creative: metadata and image_edit transformations via sharp', async 
     assert.match(editRes, /output\.jpg/)
 
     // Verify output file geometry
-    const outMeta = await sharp(outJpeg).metadata()
+    const outMeta = await sharp(await readFile(outJpeg)).metadata()
     assert.equal(outMeta.format, 'jpeg')
     // Rotation precedes resizing: the requested final box is 100 x 50.
     assert.equal(outMeta.width, 100)
     assert.equal(outMeta.height, 50)
     await assert.rejects(editTool.execute({ input: srcPng, output: outJpeg }), /EEXIST/)
-    assert.equal((await sharp(outJpeg).metadata()).format, 'jpeg')
+    assert.equal((await sharp(await readFile(outJpeg)).metadata()).format, 'jpeg')
     for (const invalid of [{ width: 0 }, { height: 8193 }, { quality: -1 }, { format: 'exe' }, { fit: 'bogus' }]) {
       await assert.rejects(editTool.execute({ input: srcPng, ...invalid }), /Image Creative Error/)
     }
     const webp = join(temp, 'gray.webp')
     await editTool.execute({ input: srcPng, output: webp, format: 'webp', grayscale: true })
-    assert.equal((await sharp(webp).metadata()).format, 'webp')
+    assert.equal((await sharp(await readFile(webp)).metadata()).format, 'webp')
+    assert.match(await metaTool.execute({ path: webp }), /webp/)
+    await unlink(webp)
+    await unlink(srcPng)
+    await unlink(outJpeg)
   } finally {
     await rm(temp, { recursive: true, force: true })
   }

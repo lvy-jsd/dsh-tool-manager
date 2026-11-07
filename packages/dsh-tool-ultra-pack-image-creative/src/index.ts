@@ -5,7 +5,7 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import sharp from 'sharp'
 import { existsSync } from 'node:fs'
-import { writeFile, mkdir } from 'node:fs/promises'
+import { writeFile, mkdir, open } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 
@@ -37,6 +37,17 @@ function defaultArtifactPath(ext: string, artifactsDir: string): string {
   return join(folder, filename)
 }
 
+async function imageBytes(path: string): Promise<Buffer> {
+  const file = await open(path, 'r')
+  try {
+    const info = await file.stat()
+    if (!info.isFile() || info.size > 32_000_000) throw new Error('Expected a regular image file up to 32 MB.')
+    return await file.readFile()
+  } finally {
+    await file.close()
+  }
+}
+
 export function createTools(config: Config = {}) {
   const artifactsDir = config.artifactsDir || DEFAULTS.artifactsDir
 
@@ -61,7 +72,7 @@ export function createTools(config: Config = {}) {
         }
 
         try {
-          const meta = await sharp(args.path, { limitInputPixels: 40_000_000 }).metadata()
+          const meta = await sharp(await imageBytes(args.path), { limitInputPixels: 40_000_000 }).metadata()
           return [
             `Image: "${args.path}"`,
             `- Format: ${meta.format ?? 'unknown'}`,
@@ -152,7 +163,7 @@ export function createTools(config: Config = {}) {
           }
           if (args.quality !== undefined && (!Number.isInteger(args.quality) || args.quality < 1 || args.quality > 100)) throw new Error('Quality must be an integer between 1 and 100.')
           if (args.fit && !['cover', 'contain', 'fill', 'inside', 'outside'].includes(args.fit)) throw new Error('Unsupported resize fit.')
-          let pipeline = sharp(args.input, { limitInputPixels: 40_000_000 })
+          let pipeline = sharp(await imageBytes(args.input), { limitInputPixels: 40_000_000 })
 
           if (args.rotate) pipeline = pipeline.rotate(args.rotate)
           if (args.flip) pipeline = pipeline.flip()
@@ -185,8 +196,8 @@ export function createTools(config: Config = {}) {
           const outPath = args.output || defaultArtifactPath(targetFormat, artifactsDir)
           await mkdir(dirname(outPath), { recursive: true })
 
-          await writeFile(outPath, await pipeline.toBuffer(), { flag: 'wx' })
-          const resultMeta = await sharp(outPath).metadata()
+          const { data, info: resultMeta } = await pipeline.toBuffer({ resolveWithObject: true })
+          await writeFile(outPath, data, { flag: 'wx' })
 
           return [
             `Image edited successfully: "${outPath}"`,
