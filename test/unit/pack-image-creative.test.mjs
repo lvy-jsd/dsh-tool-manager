@@ -20,9 +20,10 @@ test('image-creative: every tool is declared in package.json toolCatalog', () =>
 
 test('image-creative: apply registers tools minus disabled ones', () => {
   const registered = []
-  apply({ tools: { register: (d) => registered.push(d.name ?? d.schema?.name) } }, { disable: ['image_generate'] })
+  apply({ tools: { register: (d) => registered.push(d.name ?? d.schema?.name) } }, { disable: ['image_edit'] })
   assert.equal(registered.length, TOOL_NAMES.length - 1)
-  assert.ok(!registered.includes('image_generate'))
+  assert.ok(!registered.includes('image_edit'))
+  assert.ok(!TOOL_NAMES.includes('image_generate'))
 })
 
 test('image-creative: metadata and image_edit transformations via sharp', async () => {
@@ -67,9 +68,17 @@ test('image-creative: metadata and image_edit transformations via sharp', async 
     // Verify output file geometry
     const outMeta = await sharp(outJpeg).metadata()
     assert.equal(outMeta.format, 'jpeg')
-    // In sharp, resize takes effect, then rotate 90 swaps width and height: 50 -> 100 x 50
+    // Rotation precedes resizing: the requested final box is 100 x 50.
     assert.equal(outMeta.width, 100)
     assert.equal(outMeta.height, 50)
+    await assert.rejects(editTool.execute({ input: srcPng, output: outJpeg }), /EEXIST/)
+    assert.equal((await sharp(outJpeg).metadata()).format, 'jpeg')
+    for (const invalid of [{ width: 0 }, { height: 8193 }, { quality: -1 }, { format: 'exe' }, { fit: 'bogus' }]) {
+      await assert.rejects(editTool.execute({ input: srcPng, ...invalid }), /Image Creative Error/)
+    }
+    const webp = join(temp, 'gray.webp')
+    await editTool.execute({ input: srcPng, output: webp, format: 'webp', grayscale: true })
+    assert.equal((await sharp(webp).metadata()).format, 'webp')
   } finally {
     await rm(temp, { recursive: true, force: true })
   }

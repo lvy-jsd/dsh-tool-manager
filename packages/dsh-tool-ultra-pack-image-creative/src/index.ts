@@ -1,6 +1,6 @@
 /**
  * Tool Ultra Image Creative pack:
- * High-performance image manipulation using sharp, image inspection, and generation adapter.
+ * High-performance image manipulation using sharp, and image inspection; no network generation backend.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import sharp from 'sharp'
@@ -14,14 +14,12 @@ export const inject = ['tools']
 
 export interface Config {
   disable?: string[]
-  defaultEndpoint?: string
   artifactsDir?: string
 }
 
-export const TOOL_NAMES = ['image_edit', 'image_metadata', 'image_generate'] as const
+export const TOOL_NAMES = ['image_edit', 'image_metadata'] as const
 
 const DEFAULTS = {
-  endpoint: 'http://127.0.0.1:8188',
   artifactsDir: process.env.SWIFTNEST_ARTIFACTS_DIR || join(homedir(), 'dsh-artifacts'),
 }
 
@@ -63,7 +61,7 @@ export function createTools(config: Config = {}) {
         }
 
         try {
-          const meta = await sharp(args.path).metadata()
+          const meta = await sharp(args.path, { limitInputPixels: 40_000_000 }).metadata()
           return [
             `Image: "${args.path}"`,
             `- Format: ${meta.format ?? 'unknown'}`,
@@ -149,7 +147,12 @@ export function createTools(config: Config = {}) {
         }
 
         try {
-          let pipeline = sharp(args.input)
+          for (const value of [args.width, args.height]) {
+            if (value !== undefined && (!Number.isInteger(value) || value < 1 || value > 8192)) throw new Error('Dimensions must be integers between 1 and 8192.')
+          }
+          if (args.quality !== undefined && (!Number.isInteger(args.quality) || args.quality < 1 || args.quality > 100)) throw new Error('Quality must be an integer between 1 and 100.')
+          if (args.fit && !['cover', 'contain', 'fill', 'inside', 'outside'].includes(args.fit)) throw new Error('Unsupported resize fit.')
+          let pipeline = sharp(args.input, { limitInputPixels: 40_000_000 })
 
           if (args.rotate) pipeline = pipeline.rotate(args.rotate)
           if (args.flip) pipeline = pipeline.flip()
@@ -166,6 +169,7 @@ export function createTools(config: Config = {}) {
           }
 
           const targetFormat = args.format?.toLowerCase() || 'png'
+          if (!['png', 'jpeg', 'jpg', 'webp', 'avif'].includes(targetFormat)) throw new Error('Unsupported image format.')
           const quality = args.quality ? Math.min(100, Math.max(1, args.quality)) : 85
 
           if (targetFormat === 'jpeg' || targetFormat === 'jpg') {
@@ -181,7 +185,7 @@ export function createTools(config: Config = {}) {
           const outPath = args.output || defaultArtifactPath(targetFormat, artifactsDir)
           await mkdir(dirname(outPath), { recursive: true })
 
-          await pipeline.toFile(outPath)
+          await writeFile(outPath, await pipeline.toBuffer(), { flag: 'wx' })
           const resultMeta = await sharp(outPath).metadata()
 
           return [
@@ -194,75 +198,7 @@ export function createTools(config: Config = {}) {
         }
       },
     },
-    {
-      name: 'image_generate' as const,
-      description:
-        'Generate an image from a descriptive prompt using a local ComfyUI/SD endpoint or OpenAI-compatible image endpoint.',
-      parameters: {
-        prompt: {
-          type: 'string',
-          required: true,
-          description: 'Text description of the image to generate.',
-        },
-        size: {
-          type: 'string',
-          description: 'Image dimensions e.g. "1024x1024", "512x512" (default "1024x1024").',
-        },
-        endpoint: {
-          type: 'string',
-          description: 'Optional custom generation endpoint URL.',
-        },
-        output: {
-          type: 'string',
-          description: 'Optional file path to save the generated image.',
-        },
-      },
-      async execute(args: {
-        prompt: string
-        size?: string
-        endpoint?: string
-        output?: string
-      }): Promise<string> {
-        if (!args.prompt || !args.prompt.trim()) {
-          throw new Error('Prompt cannot be empty.')
-        }
 
-        const endpoint = args.endpoint || config.defaultEndpoint || DEFAULTS.endpoint
-        const size = args.size || '1024x1024'
-
-        try {
-          const res = await fetch(`${endpoint.replace(/\/$/, '')}/v1/images/generations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: args.prompt,
-              size,
-              response_format: 'b64_json',
-            }),
-            signal: AbortSignal.timeout(60_000),
-          })
-
-          if (!res.ok) {
-            throw new Error(`Generation endpoint returned HTTP ${res.status}: ${await res.text()}`)
-          }
-
-          const data = (await res.json()) as any
-          const b64 = data.data?.[0]?.b64_json
-          if (!b64) {
-            throw new Error('Invalid endpoint response: no image b64_json returned.')
-          }
-
-          const buffer = Buffer.from(b64, 'base64')
-          const outPath = args.output || defaultArtifactPath('png', artifactsDir)
-          await mkdir(dirname(outPath), { recursive: true })
-          await writeFile(outPath, buffer)
-
-          return `Image generated successfully and saved to "${outPath}" (${size}).`
-        } catch (e: any) {
-          throw new Error(`[Image Generation Error] Failed generating image: ${e.message}`)
-        }
-      },
-    },
   ]
 }
 
@@ -276,7 +212,7 @@ export function apply(ctx: any, config: Config = {}) {
         c.toolCatalog.registerToolPack({
           id: 'image-creative',
           title: 'Image Creative & Editing',
-          summary: 'High-performance pixel manipulation (sharp), image inspection, and AI generation adapters.',
+          summary: 'High-performance pixel manipulation (sharp), and image inspection (offline editing only).',
           source: '@lvy-jsd/dsh-tool-ultra-pack-image-creative',
           tools: TOOL_NAMES.filter((n) => !disabled.has(n)),
         }),

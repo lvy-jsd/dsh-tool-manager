@@ -1,7 +1,5 @@
-# @lvy-jsd/dsh-tool-ultra-pack-image-creative bundle patch
+# Offline editing only; no generation endpoint or external upload.
 - insert:
     - id: tool-ultra-pack-image-creative
       name: '@lvy-jsd/dsh-tool-ultra-pack-image-creative'
-      config:
-        # Default generation endpoint (e.g. OpenAI compatible or ComfyUI bridge)
-        defaultEndpoint: 'http://127.0.0.1:8188'
+      config: {}
