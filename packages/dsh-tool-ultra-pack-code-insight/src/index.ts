@@ -1,9 +1,9 @@
 /**
  * Tool Ultra Code Insight pack:
- * Semantic AST outline, symbol extraction, and call graphs for TS/JS, Python, Rust, and Go.
+ * JavaScript / TypeScript structural outlines, symbols and module imports only.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { readFile, stat, readdir } from 'node:fs/promises'
+import { readFile, lstat, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { extractOutline, detectLanguage, type CodeOutlineResult, type SymbolItem } from './parser.js'
@@ -51,6 +51,12 @@ function formatSymbol(sym: SymbolItem, indent = 0, maxDepth = 3): string {
   return out
 }
 
+async function readSource(path: string): Promise<string> {
+  const info = await lstat(path)
+  if (!info.isFile() || info.size > 2_000_000) throw new Error('Expected a regular source file up to 2 MB; symlinks are not followed.')
+  return readFile(path, 'utf8')
+}
+
 export function createTools(config: Config = {}) {
   const defaultDepth = config.maxDepth ?? DEFAULTS.maxDepth
   const defaultMaxSymbols = config.maxSymbols ?? DEFAULTS.maxSymbols
@@ -59,7 +65,7 @@ export function createTools(config: Config = {}) {
     {
       name: 'code_outline' as const,
       description:
-        'Extract a clean structural AST outline of a source code file (classes, functions, methods, interfaces, imports, exports) without loading full bodies, saving 90% of model tokens. Supports TypeScript, JavaScript, Python, Rust, and Go.',
+        'Extract a clean structural AST outline of a source code file (classes, functions, methods, interfaces, imports, exports) omitting function bodies from output. Only JavaScript / TypeScript is supported; not semantic resolution.',
       parameters: {
         path: {
           type: 'string',
@@ -80,8 +86,10 @@ export function createTools(config: Config = {}) {
         }
 
         try {
-          const code = await readFile(args.path, 'utf8')
+          if (detectLanguage(args.path) === 'generic') throw new Error('Only JavaScript / TypeScript files are supported.')
+          const code = await readSource(args.path)
           const depth = args.max_depth ?? defaultDepth
+          if (!Number.isInteger(depth) || depth < 1 || depth > 10) throw new Error('max_depth must be 1–10.')
           const outline = extractOutline(code, args.path)
 
           const lines: string[] = [
@@ -113,7 +121,7 @@ export function createTools(config: Config = {}) {
             lines.push('  (no top-level classes or functions detected)')
           } else {
             for (const sym of outline.symbols) {
-              lines.push(formatSymbol(sym, 1, depth).trimEnd())
+              lines.push(formatSymbol(sym, 0, depth).trimEnd())
             }
           }
 
@@ -126,7 +134,7 @@ export function createTools(config: Config = {}) {
     {
       name: 'code_symbols' as const,
       description:
-        'Search or list definitions (functions, classes, interfaces, structs) in a file or directory without reading file bodies.',
+        'List JavaScript / TypeScript declaration names in a file or directory. Parses source locally; returns signatures, not bodies.',
       parameters: {
         path: {
           type: 'string',
@@ -147,20 +155,25 @@ export function createTools(config: Config = {}) {
         }
 
         const files: string[] = []
-        async function collect(p: string) {
-          const s = await stat(p)
+        async function collect(p: string, depth = 0) {
+          if (depth > 12) throw new Error('Directory depth limit (12) exceeded. Narrow the path.')
+          const s = await lstat(p)
           if (s.isDirectory()) {
-            const entries = await readdir(p)
+            const entries = (await readdir(p)).sort()
             for (const e of entries) {
               if (['node_modules', '.git', 'dist', 'build', '.cache'].includes(e)) continue
-              await collect(join(p, e))
+              await collect(join(p, e), depth + 1)
             }
           } else if (s.isFile()) {
             const lang = detectLanguage(p)
-            if (lang !== 'generic') files.push(p)
+            if (lang !== 'generic') {
+              if (files.length >= 50) throw new Error('File limit (50) exceeded. Narrow the path.')
+              files.push(p)
+            }
           }
         }
 
+        if ((await lstat(args.path)).isFile() && detectLanguage(args.path) === 'generic') throw new Error('Only JavaScript / TypeScript files are supported.')
         await collect(args.path)
 
         const q = args.query?.toLowerCase()
@@ -177,11 +190,11 @@ export function createTools(config: Config = {}) {
 
         for (const f of files.slice(0, 50)) {
           try {
-            const content = await readFile(f, 'utf8')
+            const content = await readSource(f)
             const outline = extractOutline(content, f)
             searchSymbols(f, outline.symbols)
           } catch {
-            // Ignore unparseable files
+            throw new Error(`Cannot parse JavaScript / TypeScript file: ${f}`)
           }
         }
 
@@ -209,7 +222,7 @@ export function createTools(config: Config = {}) {
     {
       name: 'code_callgraph' as const,
       description:
-        'Trace module dependencies and import relationships for a file or directory.',
+        'List static JavaScript / TypeScript module imports. This is NOT a function call graph or resolved cross-file dependency graph.',
       parameters: {
         path: {
           type: 'string',
@@ -225,32 +238,36 @@ export function createTools(config: Config = {}) {
           throw new Error(`[Code Insight Error] Path not found: "${args.path}"`)
         }
 
+        let visitedFiles = 0
         const fileGraph: { file: string; imports: string[] }[] = []
 
-        async function collect(p: string) {
-          const s = await stat(p)
+        async function collect(p: string, depth = 0) {
+          if (depth > 12) throw new Error('Directory depth limit (12) exceeded. Narrow the path.')
+          const s = await lstat(p)
           if (s.isDirectory()) {
-            const entries = await readdir(p)
+            const entries = (await readdir(p)).sort()
             for (const e of entries) {
               if (['node_modules', '.git', 'dist', 'build', '.cache'].includes(e)) continue
-              await collect(join(p, e))
+              await collect(join(p, e), depth + 1)
             }
           } else if (s.isFile()) {
             const lang = detectLanguage(p)
             if (lang !== 'generic') {
+              if (++visitedFiles > 50) throw new Error('File limit (50) exceeded. Narrow the path.')
               try {
-                const code = await readFile(p, 'utf8')
+                const code = await readSource(p)
                 const outline = extractOutline(code, p)
                 if (outline.imports.length > 0) {
                   fileGraph.push({ file: p, imports: outline.imports })
                 }
               } catch {
-                // Ignore parse failures
+                throw new Error(`Cannot parse JavaScript / TypeScript file: ${p}`)
               }
             }
           }
         }
 
+        if ((await lstat(args.path)).isFile() && detectLanguage(args.path) === 'generic') throw new Error('Only JavaScript / TypeScript files are supported.')
         await collect(args.path)
 
         if (fileGraph.length === 0) {
@@ -285,7 +302,7 @@ export function apply(ctx: any, config: Config = {}) {
         c.toolCatalog.registerToolPack({
           id: 'code-insight',
           title: 'Code Insight & Outline',
-          summary: 'Semantic AST outlines, symbol extraction, and module dependency graphs for TS/JS, Python, Rust, and Go.',
+          summary: 'JavaScript / TypeScript structural outlines, symbols and static module imports only.',
           source: '@lvy-jsd/dsh-tool-ultra-pack-code-insight',
           tools: TOOL_NAMES.filter((n) => !disabled.has(n)),
         }),

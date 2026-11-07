@@ -65,34 +65,15 @@ export async function bootstrap(port: number) {
   assert.equal(classSym.children[0].name, 'findUser')
 })
 
-test('code-insight: Python outline extraction', async () => {
-  const pyCode = `
-import os
-from pathlib import Path
-
-class DatabaseConnection:
-    def __init__(self, dsn: str):
-        self.dsn = dsn
-
-    async def execute_query(self, sql: str) -> list:
-        pass
-
-def calculate_metric(x: int, y: int) -> float:
-    return float(x + y)
-`
-  const outline = extractOutline(pyCode, 'db.py')
-  assert.equal(outline.language, 'python')
-  assert.equal(outline.imports.length, 2)
-
-  const classSym = outline.symbols.find((s) => s.name === 'DatabaseConnection')
-  assert.ok(classSym)
-  assert.equal(classSym.children?.length, 2)
-  assert.equal(classSym.children[0].name, '__init__')
-  assert.equal(classSym.children[1].name, 'execute_query')
-
-  const funcSym = outline.symbols.find((s) => s.name === 'calculate_metric')
-  assert.ok(funcSym)
-  assert.equal(funcSym.kind, 'function')
+test('code-insight: rejects unsupported languages and malformed syntax', () => {
+  for (const path of ['db.py', 'lib.rs', 'main.go', 'data.txt']) {
+    assert.equal(detectLanguage(path), 'generic')
+    assert.throws(() => extractOutline('function misleading() {}', path), /Only JavaScript \/ TypeScript/)
+  }
+  assert.throws(() => extractOutline('export function broken( {', 'bad.ts'))
+  assert.equal(extractOutline('export const value: number = 1', 'types.cts').language, 'typescript')
+  assert.equal(extractOutline('const view = <div/>', 'view.JSX').language, 'javascript-react')
+  assert.equal(extractOutline('module.exports = 1', 'module.cjs').language, 'javascript')
 })
 
 test('code-insight: code_symbols search and code_callgraph tools', async () => {
@@ -119,6 +100,7 @@ export class HelperClass {}
 `,
     )
 
+    await writeFile(join(temp, 'ignored.py'), 'def helperPython(): pass')
     const tools = createTools()
     const outlineTool = tools.find((t) => t.name === 'code_outline')
     const symbolsTool = tools.find((t) => t.name === 'code_symbols')
@@ -133,6 +115,8 @@ export class HelperClass {}
     const symbolsText = await symbolsTool.execute({ path: temp, query: 'helper' })
     assert.match(symbolsText, /helperFunction/)
     assert.match(symbolsText, /HelperClass/)
+    assert.doesNotMatch(symbolsText, /helperPython/)
+    await assert.rejects(outlineTool.execute({ path: join(temp, 'ignored.py') }), /Only JavaScript \/ TypeScript/)
 
     // 3. code_callgraph check
     const graphText = await callgraphTool.execute({ path: temp })
