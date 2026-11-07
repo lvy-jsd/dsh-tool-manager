@@ -7,9 +7,9 @@ import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, dirname } from 'node:path'
+import { join, dirname, extname, resolve } from 'node:path'
 
 const execFileAsync = promisify(execFile)
 
@@ -45,6 +45,17 @@ function defaultArtifactPath(ext: string, artifactsDir: string): string {
   return join(folder, filename)
 }
 
+function escapeXml(text: string): string {
+  return text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!)
+}
+
+function seconds(value: string): number {
+  if (!/^(?:\d+:)?(?:\d+:)?\d+(?:\.\d+)?$/.test(value)) throw new Error('Invalid timestamp.')
+  const total = value.split(':').reduce((n, part) => n * 60 + Number(part), 0)
+  if (!Number.isFinite(total) || total < 0 || total > 86400) throw new Error('Timestamp out of range.')
+  return total
+}
+
 export function createTools(config: Config = {}) {
   const defaultVoice = config.defaultVoice || DEFAULTS.voice
   const ffmpegPath = config.ffmpegPath || DEFAULTS.ffmpegPath
@@ -59,7 +70,7 @@ export function createTools(config: Config = {}) {
         text: {
           type: 'string',
           required: true,
-          description: 'Text script to synthesize into audio.',
+          description: 'Text sent to Microsoft Edge online TTS; do not include confidential material.',
         },
         voice: {
           type: 'string',
@@ -75,7 +86,7 @@ export function createTools(config: Config = {}) {
         },
         output: {
           type: 'string',
-          description: 'Optional output destination path (.mp3). Defaults to daily artifact storage.',
+          description: 'Optional output destination path (.wav or .mp3). Defaults to daily artifact storage.',
         },
       },
       async execute(args: {
@@ -89,21 +100,48 @@ export function createTools(config: Config = {}) {
           throw new Error('Text to synthesize cannot be empty.')
         }
 
+        if (args.text.length > 10000) throw new Error('Text limit is 10000 characters.')
         const voice = args.voice || defaultVoice
-        const outPath = args.output || defaultArtifactPath('mp3', artifactsDir)
+        if (!/^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9]+Neural$/.test(voice)) throw new Error('Invalid voice name.')
+        if (args.rate && !/^[+-]?\d{1,3}%$/.test(args.rate)) throw new Error('Invalid rate.')
+        if (args.pitch && !/^[+-]?\d{1,3}Hz$/.test(args.pitch)) throw new Error('Invalid pitch.')
+        const outPath = resolve(args.output || defaultArtifactPath('wav', artifactsDir))
+        if (!['.mp3', '.wav'].includes(extname(outPath).toLowerCase())) throw new Error('Output must be .wav or .mp3.')
+        if (existsSync(outPath)) throw new Error('Output already exists; refusing to overwrite.')
         await mkdir(dirname(outPath), { recursive: true })
-
+        const temp = await mkdtemp(join(dirname(outPath), '.tts-'))
+        const tts = new MsEdgeTTS({ connectionTimeoutMs: 15000, synthesisTimeoutMs: 30000 })
+        let stream: ReturnType<MsEdgeTTS['toStream']>['audioStream'] | undefined
+        const timer = setTimeout(() => {
+          stream?.destroy(new Error('Synthesis deadline exceeded.'))
+          tts.close()
+        }, 45000)
         try {
-          const tts = new MsEdgeTTS()
           await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3)
-          await tts.toFile(outPath, args.text, {
-            rate: args.rate || '0%',
-            pitch: args.pitch || '0Hz',
-          })
-
-          return `Audio synthesized successfully: "${outPath}" (Voice: ${voice}).`
+          stream = tts.toStream(escapeXml(args.text), { rate: args.rate || '0%', pitch: args.pitch || '0Hz' }).audioStream
+          const chunks: Buffer[] = []
+          let bytes = 0
+          for await (const chunk of stream) {
+            bytes += chunk.length
+            if (bytes > 10_000_000) throw new Error('Synthesis exceeded 10 MB.')
+            chunks.push(Buffer.from(chunk))
+          }
+          if (!bytes) throw new Error('TTS returned no audio.')
+          const mp3 = join(temp, 'speech.mp3')
+          await writeFile(mp3, Buffer.concat(chunks), { flag: 'wx' })
+          if (extname(outPath).toLowerCase() === '.mp3') {
+            await writeFile(outPath, Buffer.concat(chunks), { flag: 'wx' })
+          } else {
+            await execFileAsync(ffmpegPath, ['-nostdin', '-n', '-i', mp3, '-vn', '-ar', '24000', '-ac', '1', '-c:a', 'pcm_s16le', outPath], { timeout: 30000, maxBuffer: 256000 })
+          }
+          return `Audio synthesized successfully: "${outPath}" (Voice: ${voice}; online Microsoft Edge TTS).`
         } catch (e: any) {
-          throw new Error(`[Audio Synthesis Error] Failed synthesizing speech: ${e.message}`)
+          throw new Error(`[Audio Synthesis Error] ${e.message}`)
+        } finally {
+          clearTimeout(timer)
+          stream?.destroy()
+          tts.close()
+          await rm(temp, { recursive: true, force: true })
         }
       },
     },
@@ -149,19 +187,20 @@ export function createTools(config: Config = {}) {
           throw new Error(`[Audio Cut Error] Source file not found: "${args.input}"`)
         }
 
-        const outPath = args.output || defaultArtifactPath('mp3', artifactsDir)
+        const outPath = resolve(args.output || defaultArtifactPath('wav', artifactsDir))
+        if (existsSync(outPath)) throw new Error('Output already exists; refusing to overwrite.')
         await mkdir(dirname(outPath), { recursive: true })
 
-        const ffmpegArgs = ['-y', '-ss', args.start, '-i', args.input]
-        if (args.duration) {
-          ffmpegArgs.push('-t', args.duration)
-        } else if (args.to) {
-          ffmpegArgs.push('-to', args.to)
-        }
-        ffmpegArgs.push('-c', 'copy', outPath)
+        const start = seconds(args.start)
+        if (args.duration && args.to) throw new Error('Specify duration or to, not both.')
+        const duration = args.duration ? seconds(args.duration) : args.to ? seconds(args.to) - start : undefined
+        if (duration !== undefined && duration <= 0) throw new Error('Duration must be positive and end must follow start.')
+        const ffmpegArgs = ['-nostdin', '-n', '-ss', String(start), '-i', resolve(args.input)]
+        if (duration !== undefined) ffmpegArgs.push('-t', String(duration))
+        ffmpegArgs.push('-vn', outPath)
 
         try {
-          await execFileAsync(ffmpegPath, ffmpegArgs)
+          await execFileAsync(ffmpegPath, ffmpegArgs, { timeout: 60000, maxBuffer: 256000 })
           return `Audio clipped successfully and saved to "${outPath}".`
         } catch (e: any) {
           throw new Error(`[Audio Cut Error] ffmpeg trimming failed: ${e.message}`)
@@ -210,21 +249,23 @@ export function createTools(config: Config = {}) {
           throw new Error(`[Audio Mix Error] Background track not found: "${args.bgm}"`)
         }
 
-        const outPath = args.output || defaultArtifactPath('mp3', artifactsDir)
+        const outPath = resolve(args.output || defaultArtifactPath('wav', artifactsDir))
+        if (existsSync(outPath)) throw new Error('Output already exists; refusing to overwrite.')
         await mkdir(dirname(outPath), { recursive: true })
 
         const voiceVol = args.voice_volume ?? 1.0
         const bgmVol = args.bgm_volume ?? 0.25
 
+        if (![voiceVol, bgmVol].every(v => Number.isFinite(v) && v >= 0 && v <= 4)) throw new Error('Volumes must be finite numbers between 0 and 4.')
         // amix filter: volume adjustments on each input, mixed down to 2 channels
         const filterStr = `[0:a]volume=${voiceVol}[a1];[1:a]volume=${bgmVol}[a2];[a1][a2]amix=inputs=2:duration=first:dropout_transition=2[out]`
 
         const ffmpegArgs = [
-          '-y',
+          '-nostdin', '-n',
           '-i',
-          args.voice,
+          resolve(args.voice),
           '-i',
-          args.bgm,
+          resolve(args.bgm),
           '-filter_complex',
           filterStr,
           '-map',
@@ -233,7 +274,7 @@ export function createTools(config: Config = {}) {
         ]
 
         try {
-          await execFileAsync(ffmpegPath, ffmpegArgs)
+          await execFileAsync(ffmpegPath, ffmpegArgs, { timeout: 60000, maxBuffer: 256000 })
           return `Audio mixed successfully and saved to "${outPath}".`
         } catch (e: any) {
           throw new Error(`[Audio Mix Error] ffmpeg audio mixing failed: ${e.message}`)
