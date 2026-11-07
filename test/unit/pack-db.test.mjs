@@ -2,8 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mkdtemp, writeFile, rm, unlink } from 'node:fs/promises'
-import duckdb from 'duckdb'
+import { mkdtemp, writeFile, rm, unlink, stat } from 'node:fs/promises'
+import { DuckDBInstance, DuckDBConnection, DuckDBResultReader } from '@duckdb/node-api'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -13,68 +13,53 @@ import {
   runQuery,
 } from '../../packages/dsh-tool-ultra-pack-db/lib/index.js'
 
-test('db: query settlement awaits connection and database close on success and error', async (t) => {
+function trackCleanup(t) {
   const events = []
-  const Database = duckdb.Database
-  t.mock.method(duckdb, 'Database', function (...args) {
-    const db = new Database(...args)
-    return {
-      connect() {
-        const conn = db.connect()
-        return {
-          all: conn.all.bind(conn),
-          close(callback) {
-            events.push('connection:start')
-            conn.close((err) => setImmediate(() => {
-              events.push('connection:done')
-              callback(err)
-            }))
-          },
-        }
-      },
-      close(callback) {
-        events.push('database:start')
-        db.close((err) => setImmediate(() => {
-          events.push('database:done')
-          callback(err)
-        }))
-      },
-    }
-  })
+  for (const [prototype, name] of [
+    [DuckDBResultReader.prototype, 'result'],
+    [DuckDBConnection.prototype, 'connection'],
+    [DuckDBInstance.prototype, 'database'],
+  ]) {
+    const close = prototype.closeSync
+    t.mock.method(prototype, 'closeSync', function () {
+      close.call(this)
+      events.push(name)
+    })
+  }
+  return events
+}
 
-  for (const sql of ['SELECT 1 AS ok', 'SELECT FROM SYNTAX ERROR']) {
+test('db: result, connection and database close before query settles', async (t) => {
+  const events = trackCleanup(t)
+  assert.match(await runQuery('SELECT 1 AS ok'), /"ok": 1/)
+  assert.deepEqual(events, ['result', 'connection', 'database'])
+  events.length = 0
+  await assert.rejects(runQuery('SELECT FROM SYNTAX ERROR'), /DuckDB Execution Error/)
+  assert.deepEqual(events, ['connection', 'database'])
+})
+
+test('db: read and conversion failures still close all resources', async (t) => {
+  const events = trackCleanup(t)
+  for (const method of ['readUntil', 'getRowObjectsJson']) {
+    const failure = t.mock.method(DuckDBResultReader.prototype, method, () => {
+      throw new Error('injected read failure')
+    })
     events.length = 0
-    if (sql.includes('SYNTAX')) await assert.rejects(runQuery(sql), /DuckDB Execution Error/)
-    else assert.match(await runQuery(sql), /"ok": 1/)
-    assert.deepEqual(events, ['connection:start', 'connection:done', 'database:start', 'database:done'])
+    await assert.rejects(runQuery('SELECT 1'), /DuckDB Execution Error.*injected read failure/)
+    assert.deepEqual(events, ['result', 'connection', 'database'])
+    failure.mock.restore()
   }
 })
 
 test('db: database closes even if connection cleanup reports an error', async (t) => {
-  const Database = duckdb.Database
-  let databaseClosed = false
-  t.mock.method(duckdb, 'Database', function (...args) {
-    const db = new Database(...args)
-    return {
-      connect() {
-        const conn = db.connect()
-        return {
-          all: conn.all.bind(conn),
-          close(callback) {
-            conn.close(() => callback(new Error('injected close failure')))
-          },
-        }
-      },
-      close(callback) {
-        db.close((err) => {
-          databaseClosed = !err
-          callback(err)
-        })
-      },
-    }
+  const events = trackCleanup(t)
+  const close = DuckDBConnection.prototype.closeSync
+  t.mock.method(DuckDBConnection.prototype, 'closeSync', function () {
+    close.call(this)
+    throw new Error('injected close failure')
   })
   await assert.rejects(runQuery('SELECT 1'), /DuckDB Execution Error.*injected close failure/)
-  assert.equal(databaseClosed, true)
+  assert.deepEqual(events, ['result', 'connection', 'database'])
 })
 
 test('db: every tool is declared in package.json toolCatalog', () => {
@@ -102,7 +87,7 @@ test('db: db_query runs analytical SQL queries and formats output', async () => 
   const res2 = await queryTool.execute({
     query: 'SELECT x, sum(x) OVER (ORDER BY x) AS running_total FROM range(1, 4) t(x)',
   })
-  assert.match(res2, /"running_total": 6/)
+  assert.equal(JSON.parse(res2)[2].running_total, '6')
 
   // Empty query validation
   await assert.rejects(
@@ -115,6 +100,58 @@ test('db: db_query runs analytical SQL queries and formats output', async () => 
     queryTool.execute({ query: 'SELECT FROM SYNTAX ERROR' }),
     /\[DuckDB Execution Error\]/,
   )
+})
+
+test('db: JSON preserves large integers, decimals and nested values', async () => {
+  const rows = JSON.parse(await runQuery(`SELECT
+    9007199254740993::BIGINT AS n,
+    12345678901234567890.1234::DECIMAL(24,4) AS d,
+    [9007199254740993::BIGINT] AS nested`))
+  assert.equal(rows[0].n, '9007199254740993')
+  assert.equal(rows[0].d, '12345678901234567890.1234')
+  assert.deepEqual(rows[0].nested, ['9007199254740993'])
+})
+
+test('db: reads a large CSV with bounded JS rows and closes a partial stream', async (t) => {
+  const temp = await mkdtemp(join(tmpdir(), 'db-large-test-'))
+  try {
+    const csvFile = join(temp, 'large.csv')
+    const sqlPath = csvFile.replace(/'/g, "''")
+    await runQuery(`COPY (SELECT i AS id, repeat('x', 100) AS payload FROM range(250000) t(i)) TO '${sqlPath}' (HEADER, DELIMITER ',')`)
+    assert.ok((await stat(csvFile)).size > 25_000_000)
+
+    const reads = []
+    const readUntil = DuckDBResultReader.prototype.readUntil
+    t.mock.method(DuckDBResultReader.prototype, 'readUntil', async function (target) {
+      await readUntil.call(this, target)
+      reads.push({ target, rows: this.currentRowCount })
+    })
+    const out = await runQuery(`SELECT * FROM read_csv_auto('${sqlPath}')`, 7)
+    assert.equal(JSON.parse(out.split('\n[Showing')[0]).length, 7)
+    assert.match(out, /additional rows omitted/)
+    assert.ok(reads[0].rows < 250000, 'must not materialize the entire CSV in JS')
+    assert.equal(reads[0].target, 8)
+
+    const inspection = await createTools().find((tool) => tool.name === 'db_load_file').execute({ path: csvFile })
+    assert.match(inspection, /column_name/)
+    assert.ok(inspection.length < 10000)
+    const total = JSON.parse(await runQuery(`SELECT count(*) AS n, sum(id) AS total FROM read_csv_auto('${sqlPath}')`))[0]
+    assert.equal(total.n, '250000')
+    assert.equal(total.total, '31249875000')
+    t.diagnostic(JSON.stringify({ bytes: (await stat(csvFile)).size, reads }))
+    // Also exercises native destruction with an unread streaming result on Windows.
+    await unlink(csvFile)
+  } finally {
+    await rm(temp, { recursive: true, force: true })
+  }
+})
+
+test('db: validates row limits and keeps calls isolated', async () => {
+  for (const limit of [0, -1, NaN, Infinity, 1.5, 10001]) {
+    await assert.rejects(runQuery('SELECT 1', limit), /maxRows must be/)
+  }
+  await runQuery('CREATE TABLE isolated (id INTEGER)')
+  await assert.rejects(runQuery('SELECT * FROM isolated'), /DuckDB Execution Error/)
 })
 
 test('db: db_load_file inspects and queries CSV files directly', async () => {

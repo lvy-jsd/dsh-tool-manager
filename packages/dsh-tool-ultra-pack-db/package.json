@@ -25,7 +25,7 @@
     "prepack": "tsc -b ."
   },
   "dependencies": {
-    "duckdb": "^1.1.0"
+    "@duckdb/node-api": "2.0.0-r.1"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2 <0.3.0-0"

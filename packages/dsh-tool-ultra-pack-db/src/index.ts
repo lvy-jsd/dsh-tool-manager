@@ -1,9 +1,9 @@
 /**
  * Tool Ultra Database pack: DuckDB integration.
- * In-memory OLAP analytics, zero-copy querying of CSV/Parquet files directly via SQL.
+ * Embedded SQL analytics with bounded result reading and explicit native cleanup.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import duckdb from 'duckdb'
+import { DuckDBInstance } from '@duckdb/node-api'
 
 export const name = 'tool-ultra-pack-db'
 export const inject = ['tools']
@@ -25,46 +25,34 @@ const TEXT_OUTPUT = {
   render: (_args: unknown, value: string) => [{ type: 'text' as const, text: String(value) }],
 } as const
 
-/** Each query owns its database; completion includes both asynchronous close callbacks. */
+/** A query owns its result, connection and database, released in that order. */
 export async function runQuery(sql: string, maxRows = DEFAULTS.maxRows): Promise<string> {
-  let db!: duckdb.Database
-  const opened = new Promise<void>((resolve, reject) => {
-    db = new duckdb.Database(':memory:', (err) => err ? reject(err) : resolve())
-  })
-
   try {
+    if (!Number.isSafeInteger(maxRows) || maxRows < 1 || maxRows > 10000) {
+      throw new Error('maxRows must be an integer between 1 and 10000.')
+    }
+    const db = await DuckDBInstance.create(':memory:')
     try {
-      await opened
-      const conn = db.connect()
+      const conn = await db.connect()
       try {
-        // Keep serialization outside the native callback: JS errors must reject,
-        // not escape through N-API and terminate the process.
-        const rows = await new Promise<duckdb.TableData>((resolve, reject) => {
-          conn.all(sql, (err: Error | null, rows: duckdb.TableData) => {
-            if (err) reject(err)
-            else resolve(rows)
-          })
-        })
-        if (!rows?.length) return 'Query returned 0 rows.'
-
-        const count = rows.length
-        const truncated = rows.slice(0, maxRows)
-        const summary = count > maxRows ? `\n[Showing ${maxRows} of ${count} total rows]` : ''
-        const replacer = (_key: string, value: unknown) => (typeof value === 'bigint' ? Number(value) : value)
-        return JSON.stringify(truncated, replacer, 2) + summary
+        // Do not use runAndReadAll: a large CSV must not become a full JS array.
+        // Keep the reader before fetching, so even read/conversion failures close it.
+        const reader = await conn.streamAndRead(sql)
+        try {
+          await reader.readUntil(maxRows + 1)
+          const rows = reader.getRowObjectsJson()
+          if (!rows.length) return 'Query returned 0 rows.'
+          const more = !reader.done || rows.length > maxRows
+          const summary = more ? `\n[Showing first ${maxRows} rows; additional rows omitted]` : ''
+          return JSON.stringify(rows.slice(0, maxRows), null, 2) + summary
+        } finally {
+          reader.closeSync()
+        }
       } finally {
-        await new Promise<void>((resolve, reject) => {
-          conn.close((err) => err ? reject(err) : resolve())
-        })
+        conn.closeSync()
       }
     } finally {
-      // Closing just the connection leaves the database's external-file cache
-      // alive. Always close the database too, even if connection cleanup fails.
-      if (db) {
-        await new Promise<void>((resolve, reject) => {
-          db.close((err) => err ? reject(err) : resolve())
-        })
-      }
+      db.closeSync()
     }
   } catch (err) {
     throw new Error(`[DuckDB Execution Error] ${err instanceof Error ? err.message : String(err)}`)
